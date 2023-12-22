@@ -11,7 +11,7 @@ plugins {
     java
     `maven-publish`
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
-    id("io.papermc.paperweight.core") version "1.5.11"
+    id("io.papermc.paperweight.core") version "2.0-SNAPSHOT"
 }
 
 allprojects {
@@ -67,43 +67,34 @@ repositories {
 }
 
 dependencies {
-    paramMappings("net.fabricmc:yarn:1.20.4+build.1:mergedv2")
-    remapper("net.fabricmc:tiny-remapper:0.8.10:fat")
+    paperclip("io.papermc:paperclip:3.0.3")
+    mache("io.papermc:mache:1.20.4+build.1")
+
+    // only for patch remap
+    paramMappings("net.fabricmc:yarn:1.20.2+build.1:mergedv2")
+    remapper("net.fabricmc:tiny-remapper:0.8.6:fat")
     decompiler("net.minecraftforge:forgeflower:2.0.627.2")
     spigotDecompiler("io.papermc:patched-spigot-fernflower:0.1+build.6")
-    paperclip("io.papermc:paperclip:3.0.3")
 }
 
 paperweight {
-    minecraftVersion = providers.gradleProperty("mcVersion")
-    serverProject = project(":paper-server")
+    softSpoon.set(true)
 
-    paramMappingsRepo = paperMavenPublicUrl
-    remapRepo = paperMavenPublicUrl
-    decompileRepo = paperMavenPublicUrl
+    minecraftVersion.set(providers.gradleProperty("mcVersion"))
+    serverProject.set(project(":paper-server"))
+
+    // only for patch remap
+    paramMappingsRepo.set(paperMavenPublicUrl)
+    remapRepo.set(paperMavenPublicUrl)
+    decompileRepo.set(paperMavenPublicUrl)
 
     craftBukkit {
-        fernFlowerJar = layout.file(spigotDecompiler.elements.map { it.single().asFile })
+        fernFlowerJar.set(layout.file(spigotDecompiler.elements.map { it.single().asFile }))
     }
 
     paper {
-        spigotApiPatchDir = layout.projectDirectory.dir("patches/api")
-        spigotServerPatchDir = layout.projectDirectory.dir("patches/server")
-
-        mappingsPatch = layout.projectDirectory.file("build-data/mappings-patch.tiny")
-        reobfMappingsPatch = layout.projectDirectory.file("build-data/reobf-mappings-patch.tiny")
-
-        reobfPackagesToFix.addAll(
-            "co.aikar.timings",
-            "com.destroystokyo.paper",
-            "com.mojang",
-            "io.papermc.paper",
-            "ca.spottedleaf",
-            "net.kyori.adventure.bossbar",
-            "net.minecraft",
-            "org.bukkit.craftbukkit",
-            "org.spigotmc",
-        )
+        mappingsPatch.set(layout.projectDirectory.file("build-data/mappings-patch.tiny"))
+        reobfMappingsPatch.set(layout.projectDirectory.file("build-data/reobf-mappings-patch.tiny"))
     }
 }
 
@@ -211,7 +202,7 @@ abstract class RebasePatches : BaseTask() {
         val f = redirect(proc.inputStream, out)
 
         val exit = proc.waitFor()
-        f.get()
+        f.join()
 
         if (exit != 0) {
             val outStr = String(out.toByteArray())
@@ -255,7 +246,7 @@ abstract class RebasePatches : BaseTask() {
 
             val f1 = redirect(apply2.inputStream, System.out)
             apply2.waitFor()
-            f1.get()
+            f1.join()
 
             logger.lifecycle(outStr)
             logger.lifecycle("Patch failed at $failed; See Git output above.")
