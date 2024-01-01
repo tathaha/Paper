@@ -70,6 +70,8 @@ dependencies {
     testCompileOnly(checkerQual)
     // Paper end
 
+    api("com.mojang:brigadier:1.0.18")
+
     testImplementation("org.apache.commons:commons-lang3:3.12.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
     testImplementation("org.hamcrest:hamcrest:2.2")

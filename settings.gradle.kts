@@ -34,13 +34,13 @@ if (!file(".git").exists()) {
 
 rootProject.name = "paper"
 
-for (name in listOf("Paper-API", "Paper-Server", "Paper-MojangAPI")) {
+for (name in listOf("paper-api", "paper-server")) {
     val projName = name.lowercase(Locale.ENGLISH)
     include(projName)
     findProject(":$projName")!!.projectDir = file(name)
 }
 
-optionalInclude("test-plugin")
+optionalInclude("paper-test-plugin")
 optionalInclude("paper-api-generator")
 
 fun optionalInclude(name: String, op: (ProjectDescriptor.() -> Unit)? = null) {

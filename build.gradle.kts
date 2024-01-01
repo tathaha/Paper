@@ -80,8 +80,10 @@ dependencies {
 paperweight {
     softSpoon.set(true)
 
+    // todo we shouldn't need this anymore, this should come via mache?
     minecraftVersion.set(providers.gradleProperty("mcVersion"))
     serverProject.set(project(":paper-server"))
+
 
     // only for patch remap
     paramMappingsRepo.set(paperMavenPublicUrl)
@@ -95,6 +97,9 @@ paperweight {
     paper {
         mappingsPatch.set(layout.projectDirectory.file("build-data/mappings-patch.tiny"))
         reobfMappingsPatch.set(layout.projectDirectory.file("build-data/reobf-mappings-patch.tiny"))
+
+        paperApiDir.set(layout.projectDirectory.dir("paper-api"))
+        paperServerDir.set(layout.projectDirectory.dir("paper-server"))
     }
 }
 
