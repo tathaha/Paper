@@ -1,0 +1,158 @@
+--- a/net/minecraft/world/level/block/ComposterBlock.java
++++ b/net/minecraft/world/level/block/ComposterBlock.java
+@@ -40,6 +40,10 @@
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.inventory.CraftBlockInventoryHolder;
++import org.bukkit.craftbukkit.util.DummyGeneratorAccess;
++// CraftBukkit end
+ 
+ public class ComposterBlock extends Block implements WorldlyContainerHolder {
+     public static final MapCodec<ComposterBlock> CODEC = simpleCodec(ComposterBlock::new);
+@@ -251,10 +255,19 @@
+         }
+     }
+ 
+-    public static BlockState insertItem(Entity entity, BlockState state, ServerLevel level, ItemStack stack, BlockPos pos) {
+-        int i = state.getValue(LEVEL);
+-        if (i < 7 && COMPOSTABLES.containsKey(stack.getItem())) {
+-            BlockState blockState = addItem(entity, state, level, pos, stack);
++    public static IBlockData insertItem(Entity entity, IBlockData state, ServerLevel level, ItemStack stack, BlockPos pos) {
++        int i = (Integer) state.getValue(ComposterBlock.LEVEL);
++
++        if (i < 7 && ComposterBlock.COMPOSTABLES.containsKey(stack.getItem())) {
++            // CraftBukkit start
++            double rand = level.getRandom().nextDouble();
++            IBlockData iblockdata1 = addItem(entity, state, DummyGeneratorAccess.INSTANCE, pos, stack, rand);
++            if (state == iblockdata1 || !org.bukkit.craftbukkit.event.CraftEventFactory.callEntityChangeBlockEvent(entity, pos, iblockdata1)) {
++                return state;
++            }
++            iblockdata1 = addItem(entity, state, level, pos, stack, rand);
++            // CraftBukkit end
++
+             stack.shrink(1);
+             return blockState;
+         } else {
+@@ -262,7 +275,15 @@
+         }
+     }
+ 
+-    public static BlockState extractProduce(Entity entity, BlockState state, Level level, BlockPos pos) {
++    public static IBlockData extractProduce(Entity entity, IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        if (entity != null && !(entity instanceof Player)) {
++            IBlockData iblockdata1 = empty(entity, state, DummyGeneratorAccess.INSTANCE, pos);
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.callEntityChangeBlockEvent(entity, pos, iblockdata1)) {
++                return state;
++            }
++        }
++        // CraftBukkit end
+         if (!level.isClientSide) {
+             Vec3 vec3 = Vec3.atLowerCornerWithOffset(pos, 0.5, 1.01, 0.5).offsetRandom(level.random, 0.7F);
+             ItemEntity itemEntity = new ItemEntity(level, vec3.x(), vec3.y(), vec3.z(), new ItemStack(Items.BONE_MEAL));
+@@ -282,11 +306,18 @@
+         return blockState;
+     }
+ 
+-    static BlockState addItem(@Nullable Entity entity, BlockState state, LevelAccessor level, BlockPos pos, ItemStack stack) {
+-        int i = state.getValue(LEVEL);
+-        float _float = COMPOSTABLES.getFloat(stack.getItem());
+-        if ((i != 0 || !(_float > 0.0F)) && !(level.getRandom().nextDouble() < (double)_float)) {
+-            return state;
++    static IBlockData addItem(@Nullable Entity entity, IBlockData state, LevelAccessor level, BlockPos pos, ItemStack stack) {
++        // CraftBukkit start
++        return addItem(entity, state, level, pos, stack, level.getRandom().nextDouble());
++    }
++
++    static IBlockData addItem(@Nullable Entity entity, IBlockData iblockdata, LevelAccessor generatoraccess, BlockPos blockposition, ItemStack itemstack, double rand) {
++        // CraftBukkit end
++        int i = (Integer) iblockdata.getValue(ComposterBlock.LEVEL);
++        float f = ComposterBlock.COMPOSTABLES.getFloat(itemstack.getItem());
++
++        if ((i != 0 || f <= 0.0F) && rand >= (double) f) {
++            return iblockdata;
+         } else {
+             int i1 = i + 1;
+             BlockState blockState = state.setValue(LEVEL, Integer.valueOf(i1));
+@@ -329,18 +362,26 @@
+     }
+ 
+     @Override
+-    public WorldlyContainer getContainer(BlockState state, LevelAccessor level, BlockPos pos) {
+-        int i = state.getValue(LEVEL);
+-        if (i == 8) {
+-            return new ComposterBlock.OutputContainer(state, level, pos, new ItemStack(Items.BONE_MEAL));
+-        } else {
+-            return (WorldlyContainer)(i < 7 ? new ComposterBlock.InputContainer(state, level, pos) : new ComposterBlock.EmptyContainer());
+-        }
++    public WorldlyContainer getContainer(IBlockData state, LevelAccessor level, BlockPos pos) {
++        int i = (Integer) state.getValue(ComposterBlock.LEVEL);
++
++        // CraftBukkit - empty generatoraccess, blockposition
++        return (WorldlyContainer) (i == 8 ? new ComposterBlock.OutputContainer(state, level, pos, new ItemStack(Items.BONE_MEAL)) : (i < 7 ? new ComposterBlock.InputContainer(state, level, pos) : new ComposterBlock.EmptyContainer(level, pos)));
+     }
+ 
+-    static class EmptyContainer extends SimpleContainer implements WorldlyContainer {
+-        public EmptyContainer() {
+-            super(0);
++    public static class OutputContainer extends SimpleContainer implements WorldlyContainer {
++
++        private final IBlockData state;
++        private final LevelAccessor level;
++        private final BlockPos pos;
++        private boolean changed;
++
++        public OutputContainer(IBlockData state, LevelAccessor level, BlockPos pos, ItemStack stack) {
++            super(stack);
++            this.state = state;
++            this.level = level;
++            this.pos = pos;
++            this.bukkitOwner = new CraftBlockInventoryHolder(level, pos, this); // CraftBukkit
+         }
+ 
+         @Override
+@@ -357,6 +403,19 @@
+         public boolean canTakeItemThroughFace(int index, ItemStack stack, Direction direction) {
+             return false;
+         }
++
++        @Override
++        public void setChanged() {
++            // CraftBukkit start - allow putting items back (eg cancelled InventoryMoveItemEvent)
++            if (this.isEmpty()) {
++            ComposterBlock.empty((Entity) null, this.state, this.level, this.pos);
++            this.changed = true;
++            } else {
++                this.level.setBlock(this.pos, this.state, 3);
++                this.changed = false;
++            }
++            // CraftBukkit end
++        }
+     }
+ 
+     static class InputContainer extends SimpleContainer implements WorldlyContainer {
+@@ -367,6 +427,7 @@
+ 
+         public InputContainer(BlockState state, LevelAccessor level, BlockPos pos) {
+             super(1);
++            this.bukkitOwner = new CraftBlockInventoryHolder(level, pos, this); // CraftBukkit
+             this.state = state;
+             this.level = level;
+             this.pos = pos;
+@@ -410,11 +470,9 @@
+         private final BlockPos pos;
+         private boolean changed;
+ 
+-        public OutputContainer(BlockState state, LevelAccessor level, BlockPos pos, ItemStack stack) {
+-            super(stack);
+-            this.state = state;
+-            this.level = level;
+-            this.pos = pos;
++        public EmptyContainer(LevelAccessor generatoraccess, BlockPos blockposition) { // CraftBukkit
++            super(0);
++            this.bukkitOwner = new CraftBlockInventoryHolder(generatoraccess, blockposition, this); // CraftBukkit
+         }
+ 
+         @Override

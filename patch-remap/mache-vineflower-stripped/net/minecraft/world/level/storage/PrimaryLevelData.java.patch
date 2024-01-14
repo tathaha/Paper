@@ -1,0 +1,177 @@
+--- a/net/minecraft/world/level/storage/PrimaryLevelData.java
++++ b/net/minecraft/world/level/storage/PrimaryLevelData.java
+@@ -40,6 +39,20 @@
+ import net.minecraft.world.level.timers.TimerCallbacks;
+ import net.minecraft.world.level.timers.TimerQueue;
+ import org.slf4j.Logger;
++import net.minecraft.core.registries.Registries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.NbtOps;
++import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.StringTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
++import net.minecraft.world.level.levelgen.WorldDimensions;
++import net.minecraft.world.level.levelgen.WorldGenSettings;
++import org.bukkit.Bukkit;
++import org.bukkit.event.weather.ThunderChangeEvent;
++import org.bukkit.event.weather.WeatherChangeEvent;
++// CraftBukkit end
+ 
+ public class PrimaryLevelData implements ServerLevelData, WorldData {
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -78,38 +92,22 @@
+     private boolean wasModded;
+     private final Set<String> removedFeatureFlags;
+     private final TimerQueue<MinecraftServer> scheduledEvents;
++    // CraftBukkit start - Add world and pdc
++    public Registry<LevelStem> customDimensions;
++    private ServerLevel world;
++    protected Tag pdc;
+ 
+-    private PrimaryLevelData(
+-        @Nullable CompoundTag compoundTag,
+-        boolean flag,
+-        int i,
+-        int i1,
+-        int i2,
+-        float f,
+-        long l,
+-        long l1,
+-        int i3,
+-        int i4,
+-        int i5,
+-        boolean flag1,
+-        int i6,
+-        boolean flag2,
+-        boolean flag3,
+-        boolean flag4,
+-        WorldBorder.Settings settings,
+-        int i7,
+-        int i8,
+-        @Nullable UUID uUID,
+-        Set<String> set,
+-        Set<String> set1,
+-        TimerQueue<MinecraftServer> timerQueue,
+-        @Nullable CompoundTag compoundTag1,
+-        EndDragonFight.Data data,
+-        LevelSettings levelSettings,
+-        WorldOptions worldOptions,
+-        PrimaryLevelData.SpecialWorldProperty specialWorldProperty,
+-        Lifecycle lifecycle
+-    ) {
++    public void setWorld(ServerLevel world) {
++        if (this.world != null) {
++            return;
++        }
++        this.world = world;
++        world.getWorld().readBukkitValues(pdc);
++        pdc = null;
++    }
++    // CraftBukkit end
++
++    private PrimaryLevelData(@Nullable CompoundTag nbttagcompound, boolean flag, int i, int j, int k, float f, long l, long i1, int j1, int k1, int l1, boolean flag1, int i2, boolean flag2, boolean flag3, boolean flag4, WorldBorder.Settings worldborder_c, int j2, int k2, @Nullable UUID uuid, Set<String> set, Set<String> set1, TimerQueue<MinecraftServer> customfunctioncallbacktimerqueue, @Nullable CompoundTag nbttagcompound1, EndDragonFight.Data enderdragonbattle_a, LevelSettings worldsettings, WorldOptions worldoptions, PrimaryLevelData.a worlddataserver_a, Lifecycle lifecycle) {
+         this.wasModded = flag;
+         this.xSpawn = i;
+         this.ySpawn = i1;
+@@ -249,10 +206,14 @@
+         compoundTag.putString("Series", SharedConstants.getCurrentVersion().getDataVersion().getSeries());
+         nbt.put("Version", compoundTag);
+         NbtUtils.addCurrentDataVersion(nbt);
+-        DynamicOps<Tag> dynamicOps = RegistryOps.create(NbtOps.INSTANCE, registry);
+-        WorldGenSettings.encode(dynamicOps, this.worldOptions, registry)
+-            .resultOrPartial(Util.prefix("WorldGenSettings: ", LOGGER::error))
+-            .ifPresent(worldOptionsTag -> nbt.put("WorldGenSettings", worldOptionsTag));
++        DynamicOps<Tag> dynamicops = RegistryOps.create(NbtOps.INSTANCE, (HolderLookup.Provider) registry);
++        DataResult<Tag> dataresult = WorldGenSettings.encode(dynamicops, this.worldOptions, new WorldDimensions(this.customDimensions != null ? this.customDimensions : registry.registryOrThrow(Registries.LEVEL_STEM))); // CraftBukkit
++        Logger logger = PrimaryLevelData.LOGGER;
++
++        Objects.requireNonNull(logger);
++        dataresult.resultOrPartial(Util.prefix("WorldGenSettings: ", logger::error)).ifPresent((nbtbase) -> {
++            nbt.put("WorldGenSettings", nbtbase);
++        });
+         nbt.putInt("GameType", this.settings.gameType().getId());
+         nbt.putInt("SpawnX", this.xSpawn);
+         nbt.putInt("SpawnY", this.ySpawn);
+@@ -294,6 +258,9 @@
+         if (this.wanderingTraderId != null) {
+             nbt.putUUID("WanderingTraderId", this.wanderingTraderId);
+         }
++
++        nbt.putString("Bukkit.Version", Bukkit.getName() + "/" + Bukkit.getVersion() + "/" + Bukkit.getBukkitVersion()); // CraftBukkit
++        world.getWorld().storeBukkitValues(nbt); // CraftBukkit - add pdc
+     }
+ 
+     private static ListTag stringCollectionToTag(Set<String> stringCollection) {
+@@ -403,6 +373,20 @@
+ 
+     @Override
+     public void setThundering(boolean thundering) {
++        // CraftBukkit start
++        if (this.thundering == thundering) {
++            return;
++        }
++
++        org.bukkit.World world = Bukkit.getWorld(getLevelName());
++        if (world != null) {
++            ThunderChangeEvent thunder = new ThunderChangeEvent(world, thundering);
++            Bukkit.getServer().getPluginManager().callEvent(thunder);
++            if (thunder.isCancelled()) {
++                return;
++            }
++        }
++        // CraftBukkit end
+         this.thundering = thundering;
+     }
+ 
+@@ -423,6 +407,20 @@
+ 
+     @Override
+     public void setRaining(boolean isRaining) {
++        // CraftBukkit start
++        if (this.raining == isRaining) {
++            return;
++        }
++
++        org.bukkit.World world = Bukkit.getWorld(getLevelName());
++        if (world != null) {
++            WeatherChangeEvent weather = new WeatherChangeEvent(world, isRaining);
++            Bukkit.getServer().getPluginManager().callEvent(weather);
++            if (weather.isCancelled()) {
++                return;
++            }
++        }
++        // CraftBukkit end
+         this.raining = isRaining;
+     }
+ 
+@@ -489,6 +487,12 @@
+     @Override
+     public void setDifficulty(Difficulty difficulty) {
+         this.settings = this.settings.withDifficulty(difficulty);
++        // CraftBukkit start
++        ClientboundChangeDifficultyPacket packet = new ClientboundChangeDifficultyPacket(this.getDifficulty(), this.isDifficultyLocked());
++        for (ServerPlayer player : (java.util.List<ServerPlayer>) (java.util.List) world.players()) {
++            player.connection.send(packet);
++        }
++        // CraftBukkit end
+     }
+ 
+     @Override
+@@ -625,6 +629,15 @@
+         return this.settings.copy();
+     }
+ 
++    // CraftBukkit start - Check if the name stored in NBT is the correct one
++    public void checkName(String name) {
++        if (!this.settings.levelName.equals(name)) {
++            this.settings.levelName = name;
++        }
++    }
++    // CraftBukkit end
++
++    /** @deprecated */
+     @Deprecated
+     public static enum SpecialWorldProperty {
+         NONE,

@@ -1,0 +1,345 @@
+--- a/net/minecraft/network/syncher/SynchedEntityData.java
++++ b/net/minecraft/network/syncher/SynchedEntityData.java
+@@ -7,7 +7,9 @@
+ import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+ import it.unimi.dsi.fastutil.objects.Object2IntMap;
+ import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
++import it.unimi.dsi.fastutil.objects.ObjectIterator;
+ import java.util.ArrayList;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Locale;
+ import java.util.Objects;
+@@ -18,16 +20,19 @@
+ import net.minecraft.CrashReportCategory;
+ import net.minecraft.ReportedException;
+ import net.minecraft.network.FriendlyByteBuf;
++import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.entity.Entity;
+ import org.apache.commons.lang3.ObjectUtils;
+ import org.slf4j.Logger;
+ 
+ public class SynchedEntityData {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    private static final Object2IntMap<Class<? extends Entity>> ENTITY_ID_POOL = new Object2IntOpenHashMap<>();
++    private static final Object2IntMap<Class<? extends Entity>> ENTITY_ID_POOL = new Object2IntOpenHashMap();
+     private static final int MAX_ID_VALUE = 254;
+     private final Entity entity;
+-    private final Int2ObjectMap<SynchedEntityData.DataItem<?>> itemsById = new Int2ObjectOpenHashMap<>();
++    private final Int2ObjectMap<SynchedEntityData.DataItem<?>> itemsById = new Int2ObjectOpenHashMap();
+     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+     private boolean isDirty;
+ 
+@@ -36,59 +41,66 @@
+     }
+ 
+     public static <T> EntityDataAccessor<T> defineId(Class<? extends Entity> clazz, EntityDataSerializer<T> serializer) {
+-        if (LOGGER.isDebugEnabled()) {
++        if (SynchedEntityData.LOGGER.isDebugEnabled()) {
+             try {
+-                Class<?> clazz1 = Class.forName(Thread.currentThread().getStackTrace()[2].getClassName());
+-                if (!clazz1.equals(clazz)) {
+-                    LOGGER.debug("defineId called for: {} from {}", clazz, clazz1, new RuntimeException());
++                Class<?> oclass1 = Class.forName(Thread.currentThread().getStackTrace()[2].getClassName());
++
++                if (!oclass1.equals(clazz)) {
++                    SynchedEntityData.LOGGER.debug("defineId called for: {} from {}", new Object[]{clazz, oclass1, new RuntimeException()});
+                 }
+-            } catch (ClassNotFoundException var5) {
++            } catch (ClassNotFoundException classnotfoundexception) {
++                ;
+             }
+         }
+ 
+         int i;
+-        if (ENTITY_ID_POOL.containsKey(clazz)) {
+-            i = ENTITY_ID_POOL.getInt(clazz) + 1;
++
++        if (SynchedEntityData.ENTITY_ID_POOL.containsKey(clazz)) {
++            i = SynchedEntityData.ENTITY_ID_POOL.getInt(clazz) + 1;
+         } else {
+-            int i1 = 0;
+-            Class<?> clazz2 = clazz;
++            int j = 0;
++            Class oclass2 = clazz;
+ 
+-            while (clazz2 != Entity.class) {
+-                clazz2 = clazz2.getSuperclass();
+-                if (ENTITY_ID_POOL.containsKey(clazz2)) {
+-                    i1 = ENTITY_ID_POOL.getInt(clazz2) + 1;
++            while (oclass2 != Entity.class) {
++                oclass2 = oclass2.getSuperclass();
++                if (SynchedEntityData.ENTITY_ID_POOL.containsKey(oclass2)) {
++                    j = SynchedEntityData.ENTITY_ID_POOL.getInt(oclass2) + 1;
+                     break;
+                 }
+             }
+ 
+-            i = i1;
++            i = j;
+         }
+ 
+         if (i > 254) {
+             throw new IllegalArgumentException("Data value id is too big with " + i + "! (Max is 254)");
+         } else {
+-            ENTITY_ID_POOL.put(clazz, i);
++            SynchedEntityData.ENTITY_ID_POOL.put(clazz, i);
+             return serializer.createAccessor(i);
+         }
+     }
+ 
+     public <T> void define(EntityDataAccessor<T> key, T value) {
+-        int id = key.getId();
+-        if (id > 254) {
+-            throw new IllegalArgumentException("Data value id is too big with " + id + "! (Max is 254)");
+-        } else if (this.itemsById.containsKey(id)) {
+-            throw new IllegalArgumentException("Duplicate id value for " + id + "!");
++        int i = key.getId();
++
++        if (i > 254) {
++            throw new IllegalArgumentException("Data value id is too big with " + i + "! (Max is 254)");
++        } else if (this.itemsById.containsKey(i)) {
++            throw new IllegalArgumentException("Duplicate id value for " + i + "!");
+         } else if (EntityDataSerializers.getSerializedId(key.getSerializer()) < 0) {
+-            throw new IllegalArgumentException("Unregistered serializer " + key.getSerializer() + " for " + id + "!");
++            EntityDataSerializer datawatcherserializer = key.getSerializer();
++
++            throw new IllegalArgumentException("Unregistered serializer " + datawatcherserializer + " for " + i + "!");
+         } else {
+             this.createDataItem(key, value);
+         }
+     }
+ 
+     private <T> void createDataItem(EntityDataAccessor<T> key, T value) {
+-        SynchedEntityData.DataItem<T> dataItem = new SynchedEntityData.DataItem<>(key, value);
++        SynchedEntityData.DataItem<T> datawatcher_item = new SynchedEntityData.DataItem<>(key, value);
++
+         this.lock.writeLock().lock();
+-        this.itemsById.put(key.getId(), dataItem);
++        this.itemsById.put(key.getId(), datawatcher_item);
+         this.lock.writeLock().unlock();
+     }
+ 
+@@ -99,19 +111,21 @@
+     private <T> SynchedEntityData.DataItem<T> getItem(EntityDataAccessor<T> key) {
+         this.lock.readLock().lock();
+ 
+-        SynchedEntityData.DataItem<T> dataItem;
++        SynchedEntityData.DataItem datawatcher_item;
++
+         try {
+-            dataItem = (SynchedEntityData.DataItem<T>)this.itemsById.get(key.getId());
+-        } catch (Throwable var9) {
+-            CrashReport crashReport = CrashReport.forThrowable(var9, "Getting synched entity data");
+-            CrashReportCategory crashReportCategory = crashReport.addCategory("Synched entity data");
+-            crashReportCategory.setDetail("Data ID", key);
+-            throw new ReportedException(crashReport);
++            datawatcher_item = (SynchedEntityData.DataItem) this.itemsById.get(key.getId());
++        } catch (Throwable throwable) {
++            CrashReport crashreport = CrashReport.forThrowable(throwable, "Getting synched entity data");
++            CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Synched entity data");
++
++            crashreportsystemdetails.setDetail("Data ID", (Object) key);
++            throw new ReportedException(crashreport);
+         } finally {
+             this.lock.readLock().unlock();
+         }
+ 
+-        return dataItem;
++        return datawatcher_item;
+     }
+ 
+     public <T> T get(EntityDataAccessor<T> key) {
+@@ -123,15 +137,24 @@
+     }
+ 
+     public <T> void set(EntityDataAccessor<T> key, T value, boolean force) {
+-        SynchedEntityData.DataItem<T> item = this.getItem(key);
+-        if (force || ObjectUtils.notEqual(value, item.getValue())) {
+-            item.setValue(value);
++        SynchedEntityData.DataItem<T> datawatcher_item = this.getItem(key);
++
++        if (force || ObjectUtils.notEqual(value, datawatcher_item.getValue())) {
++            datawatcher_item.setValue(value);
+             this.entity.onSyncedDataUpdated(key);
+-            item.setDirty(true);
++            datawatcher_item.setDirty(true);
+             this.isDirty = true;
+         }
++
+     }
+ 
++    // CraftBukkit start - add method from above
++    public <T> void markDirty(EntityDataAccessor<T> datawatcherobject) {
++        this.getItem(datawatcherobject).setDirty(true);
++        this.isDirty = true;
++    }
++    // CraftBukkit end
++
+     public boolean isDirty() {
+         return this.isDirty;
+     }
+@@ -139,17 +162,21 @@
+     @Nullable
+     public List<SynchedEntityData.DataValue<?>> packDirty() {
+         List<SynchedEntityData.DataValue<?>> list = null;
++
+         if (this.isDirty) {
+             this.lock.readLock().lock();
++            ObjectIterator objectiterator = this.itemsById.values().iterator();
+ 
+-            for (SynchedEntityData.DataItem<?> dataItem : this.itemsById.values()) {
+-                if (dataItem.isDirty()) {
+-                    dataItem.setDirty(false);
++            while (objectiterator.hasNext()) {
++                SynchedEntityData.DataItem<?> datawatcher_item = (SynchedEntityData.DataItem) objectiterator.next();
++
++                if (datawatcher_item.isDirty()) {
++                    datawatcher_item.setDirty(false);
+                     if (list == null) {
+-                        list = new ArrayList<>();
++                        list = new ArrayList();
+                     }
+ 
+-                    list.add(dataItem.value());
++                    list.add(datawatcher_item.value());
+                 }
+             }
+ 
+@@ -163,15 +190,19 @@
+     @Nullable
+     public List<SynchedEntityData.DataValue<?>> getNonDefaultValues() {
+         List<SynchedEntityData.DataValue<?>> list = null;
++
+         this.lock.readLock().lock();
++        ObjectIterator objectiterator = this.itemsById.values().iterator();
+ 
+-        for (SynchedEntityData.DataItem<?> dataItem : this.itemsById.values()) {
+-            if (!dataItem.isSetToDefault()) {
++        while (objectiterator.hasNext()) {
++            SynchedEntityData.DataItem<?> datawatcher_item = (SynchedEntityData.DataItem) objectiterator.next();
++
++            if (!datawatcher_item.isSetToDefault()) {
+                 if (list == null) {
+-                    list = new ArrayList<>();
++                    list = new ArrayList();
+                 }
+ 
+-                list.add(dataItem.value());
++                list.add(datawatcher_item.value());
+             }
+         }
+ 
+@@ -183,11 +214,15 @@
+         this.lock.writeLock().lock();
+ 
+         try {
+-            for (SynchedEntityData.DataValue<?> dataValue : entries) {
+-                SynchedEntityData.DataItem<?> dataItem = this.itemsById.get(dataValue.id);
+-                if (dataItem != null) {
+-                    this.assignValue(dataItem, dataValue);
+-                    this.entity.onSyncedDataUpdated(dataItem.getAccessor());
++            Iterator iterator = entries.iterator();
++
++            while (iterator.hasNext()) {
++                SynchedEntityData.DataValue<?> datawatcher_b = (SynchedEntityData.DataValue) iterator.next();
++                SynchedEntityData.DataItem<?> datawatcher_item = (SynchedEntityData.DataItem) this.itemsById.get(datawatcher_b.id);
++
++                if (datawatcher_item != null) {
++                    this.assignValue(datawatcher_item, datawatcher_b);
++                    this.entity.onSyncedDataUpdated(datawatcher_item.getAccessor());
+                 }
+             }
+         } finally {
+@@ -199,20 +234,9 @@
+ 
+     private <T> void assignValue(SynchedEntityData.DataItem<T> target, SynchedEntityData.DataValue<?> entry) {
+         if (!Objects.equals(entry.serializer(), target.accessor.getSerializer())) {
+-            throw new IllegalStateException(
+-                String.format(
+-                    Locale.ROOT,
+-                    "Invalid entity data item type for field %d on entity %s: old=%s(%s), new=%s(%s)",
+-                    target.accessor.getId(),
+-                    this.entity,
+-                    target.value,
+-                    target.value.getClass(),
+-                    entry.value,
+-                    entry.value.getClass()
+-                )
+-            );
++            throw new IllegalStateException(String.format(Locale.ROOT, "Invalid entity data item type for field %d on entity %s: old=%s(%s), new=%s(%s)", target.accessor.getId(), this.entity, target.value, target.value.getClass(), entry.value, entry.value.getClass()));
+         } else {
+-            target.setValue((T)entry.value);
++            target.setValue((T) entry.value); // CraftBukkit - decompile error
+         }
+     }
+ 
+@@ -220,7 +244,20 @@
+         return this.itemsById.isEmpty();
+     }
+ 
++    // CraftBukkit start
++    public void refresh(ServerPlayer to) {
++        if (!this.isEmpty()) {
++            List<SynchedEntityData.DataValue<?>> list = this.getNonDefaultValues();
++
++            if (list != null) {
++                to.connection.send(new ClientboundSetEntityDataPacket(this.entity.getId(), list));
++            }
++        }
++    }
++    // CraftBukkit end
++
+     public static class DataItem<T> {
++
+         final EntityDataAccessor<T> accessor;
+         T value;
+         private final T initialValue;
+@@ -261,30 +298,34 @@
+         }
+     }
+ 
+-    public static record DataValue<T>(int id, EntityDataSerializer<T> serializer, T value) {
++    public static record DataValue<T>(int id, EntityDataSerializer<T> serializer, T value) { // CraftBukkit - decompile error
++
+         public static <T> SynchedEntityData.DataValue<T> create(EntityDataAccessor<T> dataAccessor, T value) {
+-            EntityDataSerializer<T> serializer = dataAccessor.getSerializer();
+-            return new SynchedEntityData.DataValue<>(dataAccessor.getId(), serializer, serializer.copy(value));
++            EntityDataSerializer<T> datawatcherserializer = dataAccessor.getSerializer();
++
++            return new SynchedEntityData.DataValue<>(dataAccessor.getId(), datawatcherserializer, datawatcherserializer.copy(value));
+         }
+ 
+         public void write(FriendlyByteBuf buffer) {
+-            int serializedId = EntityDataSerializers.getSerializedId(this.serializer);
+-            if (serializedId < 0) {
++            int i = EntityDataSerializers.getSerializedId(this.serializer);
++
++            if (i < 0) {
+                 throw new EncoderException("Unknown serializer type " + this.serializer);
+             } else {
+                 buffer.writeByte(this.id);
+-                buffer.writeVarInt(serializedId);
++                buffer.writeVarInt(i);
+                 this.serializer.write(buffer, this.value);
+             }
+         }
+ 
+         public static SynchedEntityData.DataValue<?> read(FriendlyByteBuf buffer, int id) {
+-            int varInt = buffer.readVarInt();
+-            EntityDataSerializer<?> serializer = EntityDataSerializers.getSerializer(varInt);
+-            if (serializer == null) {
+-                throw new DecoderException("Unknown serializer type " + varInt);
++            int j = buffer.readVarInt();
++            EntityDataSerializer<?> datawatcherserializer = EntityDataSerializers.getSerializer(j);
++
++            if (datawatcherserializer == null) {
++                throw new DecoderException("Unknown serializer type " + j);
+             } else {
+-                return read(buffer, id, serializer);
++                return read(buffer, id, datawatcherserializer);
+             }
+         }
+ 

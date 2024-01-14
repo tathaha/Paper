@@ -1,0 +1,141 @@
+--- a/net/minecraft/world/item/BoatItem.java
++++ b/net/minecraft/world/item/BoatItem.java
+@@ -1,10 +1,11 @@
+ package net.minecraft.world.item;
+ 
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.function.Predicate;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.stats.Stats;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResultHolder;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntitySelector;
+@@ -16,10 +17,12 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
+ 
+ public class BoatItem extends Item {
++
+     private static final Predicate<Entity> ENTITY_PREDICATE = EntitySelector.NO_SPECTATORS.and(Entity::isPickable);
+     private final Boat.Type type;
+     private final boolean hasChest;
+@@ -31,57 +34,81 @@
+     }
+ 
+     @Override
+-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+-        ItemStack itemInHand = player.getItemInHand(hand);
+-        HitResult playerPOVHitResult = getPlayerPOVHitResult(level, player, ClipContext.Fluid.ANY);
+-        if (playerPOVHitResult.getType() == HitResult.Type.MISS) {
+-            return InteractionResultHolder.pass(itemInHand);
++    public InteractionResultHolder<ItemStack> use(Level level, Player player, EnumHand hand) {
++        ItemStack itemstack = player.getItemInHand(hand);
++        BlockHitResult movingobjectpositionblock = getPlayerPOVHitResult(level, player, ClipContext.Fluid.ANY);
++
++        if (movingobjectpositionblock.getType() == HitResult.EnumMovingObjectType.MISS) {
++            return InteractionResultHolder.pass(itemstack);
+         } else {
+-            Vec3 viewVector = player.getViewVector(1.0F);
+-            double d = 5.0;
+-            List<Entity> entities = level.getEntities(player, player.getBoundingBox().expandTowards(viewVector.scale(5.0)).inflate(1.0), ENTITY_PREDICATE);
+-            if (!entities.isEmpty()) {
+-                Vec3 eyePosition = player.getEyePosition();
++            Vec3 vec3d = player.getViewVector(1.0F);
++            double d0 = 5.0D;
++            List<Entity> list = level.getEntities((Entity) player, player.getBoundingBox().expandTowards(vec3d.scale(5.0D)).inflate(1.0D), BoatItem.ENTITY_PREDICATE);
+ 
+-                for (Entity entity : entities) {
+-                    AABB aABB = entity.getBoundingBox().inflate((double)entity.getPickRadius());
+-                    if (aABB.contains(eyePosition)) {
+-                        return InteractionResultHolder.pass(itemInHand);
++            if (!list.isEmpty()) {
++                Vec3 vec3d1 = player.getEyePosition();
++                Iterator iterator = list.iterator();
++
++                while (iterator.hasNext()) {
++                    Entity entity = (Entity) iterator.next();
++                    AABB axisalignedbb = entity.getBoundingBox().inflate((double) entity.getPickRadius());
++
++                    if (axisalignedbb.contains(vec3d1)) {
++                        return InteractionResultHolder.pass(itemstack);
+                     }
+                 }
+             }
+ 
+-            if (playerPOVHitResult.getType() == HitResult.Type.BLOCK) {
+-                Boat boat = this.getBoat(level, playerPOVHitResult, itemInHand, player);
+-                boat.setVariant(this.type);
+-                boat.setYRot(player.getYRot());
+-                if (!level.noCollision(boat, boat.getBoundingBox())) {
+-                    return InteractionResultHolder.fail(itemInHand);
++            if (movingobjectpositionblock.getType() == HitResult.EnumMovingObjectType.BLOCK) {
++                // CraftBukkit start - Boat placement
++                org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent(player, org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK, movingobjectpositionblock.getBlockPos(), movingobjectpositionblock.getDirection(), itemstack, false, hand, movingobjectpositionblock.getLocation());
++
++                if (event.isCancelled()) {
++                    return InteractionResultHolder.pass(itemstack);
++                }
++                // CraftBukkit end
++                Boat entityboat = this.getBoat(level, movingobjectpositionblock, itemstack, player);
++
++                entityboat.setVariant(this.type);
++                entityboat.setYRot(player.getYRot());
++                if (!level.noCollision(entityboat, entityboat.getBoundingBox())) {
++                    return InteractionResultHolder.fail(itemstack);
+                 } else {
+                     if (!level.isClientSide) {
+-                        level.addFreshEntity(boat);
+-                        level.gameEvent(player, GameEvent.ENTITY_PLACE, playerPOVHitResult.getLocation());
++                        // CraftBukkit start
++                        if (org.bukkit.craftbukkit.event.CraftEventFactory.callEntityPlaceEvent(level, movingobjectpositionblock.getBlockPos(), movingobjectpositionblock.getDirection(), player, entityboat, hand).isCancelled()) {
++                            return InteractionResultHolder.fail(itemstack);
++                        }
++
++                        if (!level.addFreshEntity(entityboat)) {
++                            return InteractionResultHolder.pass(itemstack);
++                        }
++                        // CraftBukkit end
++                        level.gameEvent((Entity) player, GameEvent.ENTITY_PLACE, movingobjectpositionblock.getLocation());
+                         if (!player.getAbilities().instabuild) {
+-                            itemInHand.shrink(1);
++                            itemstack.shrink(1);
+                         }
+                     }
+ 
+                     player.awardStat(Stats.ITEM_USED.get(this));
+-                    return InteractionResultHolder.sidedSuccess(itemInHand, level.isClientSide());
++                    return InteractionResultHolder.sidedSuccess(itemstack, level.isClientSide());
+                 }
+             } else {
+-                return InteractionResultHolder.pass(itemInHand);
++                return InteractionResultHolder.pass(itemstack);
+             }
+         }
+     }
+ 
+-    private Boat getBoat(Level level, HitResult hitResult, ItemStack itemStack, Player player) {
+-        Vec3 location = hitResult.getLocation();
+-        Boat boat = (Boat)(this.hasChest ? new ChestBoat(level, location.x, location.y, location.z) : new Boat(level, location.x, location.y, location.z));
+-        if (level instanceof ServerLevel serverLevel) {
+-            EntityType.<Boat>createDefaultStackConfig(serverLevel, itemStack, player).accept(boat);
++    private Boat getBoat(Level world, HitResult movingobjectposition, ItemStack itemstack, Player entityhuman) {
++        Vec3 vec3d = movingobjectposition.getLocation();
++        Boat object = this.hasChest ? new ChestBoat(world, vec3d.x, vec3d.y, vec3d.z) : new Boat(world, vec3d.x, vec3d.y, vec3d.z); // CraftBukkit - decompile error
++
++        if (world instanceof ServerLevel) {
++            ServerLevel worldserver = (ServerLevel) world;
++
++            EntityType.createDefaultStackConfig(worldserver, itemstack, entityhuman).accept(object);
+         }
+ 
+-        return boat;
++        return (Boat) object;
+     }
+ }

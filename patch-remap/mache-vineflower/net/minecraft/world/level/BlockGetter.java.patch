@@ -1,0 +1,254 @@
+--- a/net/minecraft/world/level/BlockGetter.java
++++ b/net/minecraft/world/level/BlockGetter.java
+@@ -11,7 +11,7 @@
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+@@ -19,15 +19,17 @@
+ import net.minecraft.world.phys.shapes.VoxelShape;
+ 
+ public interface BlockGetter extends LevelHeightAccessor {
++
+     @Nullable
+     BlockEntity getBlockEntity(BlockPos pos);
+ 
+     default <T extends BlockEntity> Optional<T> getBlockEntity(BlockPos pos, BlockEntityType<T> blockEntityType) {
+-        BlockEntity blockEntity = this.getBlockEntity(pos);
+-        return blockEntity != null && blockEntity.getType() == blockEntityType ? Optional.of((T)blockEntity) : Optional.empty();
++        BlockEntity tileentity = this.getBlockEntity(pos);
++
++        return tileentity != null && tileentity.getType() == blockEntityType ? (Optional<T>) Optional.of(tileentity) : Optional.empty(); // CraftBukkit - decompile error
+     }
+ 
+-    BlockState getBlockState(BlockPos pos);
++    IBlockData getBlockState(BlockPos pos);
+ 
+     FluidState getFluidState(BlockPos pos);
+ 
+@@ -39,77 +41,80 @@
+         return 15;
+     }
+ 
+-    default Stream<BlockState> getBlockStates(AABB area) {
++    default Stream<IBlockData> getBlockStates(AABB area) {
+         return BlockPos.betweenClosedStream(area).map(this::getBlockState);
+     }
+ 
+     default BlockHitResult isBlockInLine(ClipBlockStateContext context) {
+-        return traverseBlocks(
+-            context.getFrom(),
+-            context.getTo(),
+-            context,
+-            (traverseContext, traversePos) -> {
+-                BlockState blockState = this.getBlockState(traversePos);
+-                Vec3 vec3 = traverseContext.getFrom().subtract(traverseContext.getTo());
+-                return traverseContext.isTargetBlock().test(blockState)
+-                    ? new BlockHitResult(
+-                        traverseContext.getTo(), Direction.getNearest(vec3.x, vec3.y, vec3.z), BlockPos.containing(traverseContext.getTo()), false
+-                    )
+-                    : null;
+-            },
+-            failContext -> {
+-                Vec3 vec3 = failContext.getFrom().subtract(failContext.getTo());
+-                return BlockHitResult.miss(failContext.getTo(), Direction.getNearest(vec3.x, vec3.y, vec3.z), BlockPos.containing(failContext.getTo()));
+-            }
+-        );
++        return (BlockHitResult) traverseBlocks(context.getFrom(), context.getTo(), context, (clipblockstatecontext1, blockposition) -> {
++            IBlockData iblockdata = this.getBlockState(blockposition);
++            Vec3 vec3d = clipblockstatecontext1.getFrom().subtract(clipblockstatecontext1.getTo());
++
++            return clipblockstatecontext1.isTargetBlock().test(iblockdata) ? new BlockHitResult(clipblockstatecontext1.getTo(), Direction.getNearest(vec3d.x, vec3d.y, vec3d.z), BlockPos.containing(clipblockstatecontext1.getTo()), false) : null;
++        }, (clipblockstatecontext1) -> {
++            Vec3 vec3d = clipblockstatecontext1.getFrom().subtract(clipblockstatecontext1.getTo());
++
++            return BlockHitResult.miss(clipblockstatecontext1.getTo(), Direction.getNearest(vec3d.x, vec3d.y, vec3d.z), BlockPos.containing(clipblockstatecontext1.getTo()));
++        });
+     }
+ 
++    // CraftBukkit start - moved block handling into separate method for use by Block#rayTrace
++    default BlockHitResult clip(ClipContext raytrace1, BlockPos blockposition) {
++            IBlockData iblockdata = this.getBlockState(blockposition);
++            FluidState fluid = this.getFluidState(blockposition);
++            Vec3 vec3d = raytrace1.getFrom();
++            Vec3 vec3d1 = raytrace1.getTo();
++            VoxelShape voxelshape = raytrace1.getBlockShape(iblockdata, this, blockposition);
++            BlockHitResult movingobjectpositionblock = this.clipWithInteractionOverride(vec3d, vec3d1, blockposition, voxelshape, iblockdata);
++            VoxelShape voxelshape1 = raytrace1.getFluidShape(fluid, this, blockposition);
++            BlockHitResult movingobjectpositionblock1 = voxelshape1.clip(vec3d, vec3d1, blockposition);
++            double d0 = movingobjectpositionblock == null ? Double.MAX_VALUE : raytrace1.getFrom().distanceToSqr(movingobjectpositionblock.getLocation());
++            double d1 = movingobjectpositionblock1 == null ? Double.MAX_VALUE : raytrace1.getFrom().distanceToSqr(movingobjectpositionblock1.getLocation());
++
++            return d0 <= d1 ? movingobjectpositionblock : movingobjectpositionblock1;
++    }
++    // CraftBukkit end
++
+     default BlockHitResult clip(ClipContext context) {
+-        return traverseBlocks(context.getFrom(), context.getTo(), context, (traverseContext, traversePos) -> {
+-            BlockState blockState = this.getBlockState(traversePos);
+-            FluidState fluidState = this.getFluidState(traversePos);
+-            Vec3 from = traverseContext.getFrom();
+-            Vec3 to = traverseContext.getTo();
+-            VoxelShape blockShape = traverseContext.getBlockShape(blockState, this, traversePos);
+-            BlockHitResult blockHitResult = this.clipWithInteractionOverride(from, to, traversePos, blockShape, blockState);
+-            VoxelShape fluidShape = traverseContext.getFluidShape(fluidState, this, traversePos);
+-            BlockHitResult blockHitResult1 = fluidShape.clip(from, to, traversePos);
+-            double d = blockHitResult == null ? Double.MAX_VALUE : traverseContext.getFrom().distanceToSqr(blockHitResult.getLocation());
+-            double d1 = blockHitResult1 == null ? Double.MAX_VALUE : traverseContext.getFrom().distanceToSqr(blockHitResult1.getLocation());
+-            return d <= d1 ? blockHitResult : blockHitResult1;
+-        }, failContext -> {
+-            Vec3 vec3 = failContext.getFrom().subtract(failContext.getTo());
+-            return BlockHitResult.miss(failContext.getTo(), Direction.getNearest(vec3.x, vec3.y, vec3.z), BlockPos.containing(failContext.getTo()));
++        return (BlockHitResult) traverseBlocks(context.getFrom(), context.getTo(), context, (raytrace1, blockposition) -> {
++            return this.clip(raytrace1, blockposition); // CraftBukkit - moved into separate method
++        }, (raytrace1) -> {
++            Vec3 vec3d = raytrace1.getFrom().subtract(raytrace1.getTo());
++
++            return BlockHitResult.miss(raytrace1.getTo(), Direction.getNearest(vec3d.x, vec3d.y, vec3d.z), BlockPos.containing(raytrace1.getTo()));
+         });
+     }
+ 
+     @Nullable
+-    default BlockHitResult clipWithInteractionOverride(Vec3 startVec, Vec3 endVec, BlockPos pos, VoxelShape shape, BlockState state) {
+-        BlockHitResult blockHitResult = shape.clip(startVec, endVec, pos);
+-        if (blockHitResult != null) {
+-            BlockHitResult blockHitResult1 = state.getInteractionShape(this, pos).clip(startVec, endVec, pos);
+-            if (blockHitResult1 != null
+-                && blockHitResult1.getLocation().subtract(startVec).lengthSqr() < blockHitResult.getLocation().subtract(startVec).lengthSqr()) {
+-                return blockHitResult.withDirection(blockHitResult1.getDirection());
++    default BlockHitResult clipWithInteractionOverride(Vec3 startVec, Vec3 endVec, BlockPos pos, VoxelShape shape, IBlockData state) {
++        BlockHitResult movingobjectpositionblock = shape.clip(startVec, endVec, pos);
++
++        if (movingobjectpositionblock != null) {
++            BlockHitResult movingobjectpositionblock1 = state.getInteractionShape(this, pos).clip(startVec, endVec, pos);
++
++            if (movingobjectpositionblock1 != null && movingobjectpositionblock1.getLocation().subtract(startVec).lengthSqr() < movingobjectpositionblock.getLocation().subtract(startVec).lengthSqr()) {
++                return movingobjectpositionblock.withDirection(movingobjectpositionblock1.getDirection());
+             }
+         }
+ 
+-        return blockHitResult;
++        return movingobjectpositionblock;
+     }
+ 
+     default double getBlockFloorHeight(VoxelShape shape, Supplier<VoxelShape> belowShapeSupplier) {
+         if (!shape.isEmpty()) {
+             return shape.max(Direction.Axis.Y);
+         } else {
+-            double d = belowShapeSupplier.get().max(Direction.Axis.Y);
+-            return d >= 1.0 ? d - 1.0 : Double.NEGATIVE_INFINITY;
++            double d0 = ((VoxelShape) belowShapeSupplier.get()).max(Direction.Axis.Y);
++
++            return d0 >= 1.0D ? d0 - 1.0D : Double.NEGATIVE_INFINITY;
+         }
+     }
+ 
+     default double getBlockFloorHeight(BlockPos pos) {
+         return this.getBlockFloorHeight(this.getBlockState(pos).getCollisionShape(this, pos), () -> {
+-            BlockPos blockPos = pos.below();
+-            return this.getBlockState(blockPos).getCollisionShape(this, blockPos);
++            BlockPos blockposition1 = pos.below();
++
++            return this.getBlockState(blockposition1).getCollisionShape(this, blockposition1);
+         });
+     }
+ 
+@@ -117,57 +122,61 @@
+         if (from.equals(to)) {
+             return onFail.apply(context);
+         } else {
+-            double d = Mth.lerp(-1.0E-7, to.x, from.x);
+-            double d1 = Mth.lerp(-1.0E-7, to.y, from.y);
+-            double d2 = Mth.lerp(-1.0E-7, to.z, from.z);
+-            double d3 = Mth.lerp(-1.0E-7, from.x, to.x);
+-            double d4 = Mth.lerp(-1.0E-7, from.y, to.y);
+-            double d5 = Mth.lerp(-1.0E-7, from.z, to.z);
+-            int floor = Mth.floor(d3);
+-            int floor1 = Mth.floor(d4);
+-            int floor2 = Mth.floor(d5);
+-            BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos(floor, floor1, floor2);
+-            T object = tester.apply(context, mutableBlockPos);
+-            if (object != null) {
+-                return object;
++            double d0 = Mth.lerp(-1.0E-7D, to.x, from.x);
++            double d1 = Mth.lerp(-1.0E-7D, to.y, from.y);
++            double d2 = Mth.lerp(-1.0E-7D, to.z, from.z);
++            double d3 = Mth.lerp(-1.0E-7D, from.x, to.x);
++            double d4 = Mth.lerp(-1.0E-7D, from.y, to.y);
++            double d5 = Mth.lerp(-1.0E-7D, from.z, to.z);
++            int i = Mth.floor(d3);
++            int j = Mth.floor(d4);
++            int k = Mth.floor(d5);
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos(i, j, k);
++            T t0 = tester.apply(context, blockposition_mutableblockposition);
++
++            if (t0 != null) {
++                return t0;
+             } else {
+-                double d6 = d - d3;
++                double d6 = d0 - d3;
+                 double d7 = d1 - d4;
+                 double d8 = d2 - d5;
+-                int i = Mth.sign(d6);
++                int l = Mth.sign(d6);
+                 int i1 = Mth.sign(d7);
+-                int i2 = Mth.sign(d8);
+-                double d9 = i == 0 ? Double.MAX_VALUE : (double)i / d6;
+-                double d10 = i1 == 0 ? Double.MAX_VALUE : (double)i1 / d7;
+-                double d11 = i2 == 0 ? Double.MAX_VALUE : (double)i2 / d8;
+-                double d12 = d9 * (i > 0 ? 1.0 - Mth.frac(d3) : Mth.frac(d3));
+-                double d13 = d10 * (i1 > 0 ? 1.0 - Mth.frac(d4) : Mth.frac(d4));
+-                double d14 = d11 * (i2 > 0 ? 1.0 - Mth.frac(d5) : Mth.frac(d5));
++                int j1 = Mth.sign(d8);
++                double d9 = l == 0 ? Double.MAX_VALUE : (double) l / d6;
++                double d10 = i1 == 0 ? Double.MAX_VALUE : (double) i1 / d7;
++                double d11 = j1 == 0 ? Double.MAX_VALUE : (double) j1 / d8;
++                double d12 = d9 * (l > 0 ? 1.0D - Mth.frac(d3) : Mth.frac(d3));
++                double d13 = d10 * (i1 > 0 ? 1.0D - Mth.frac(d4) : Mth.frac(d4));
++                double d14 = d11 * (j1 > 0 ? 1.0D - Mth.frac(d5) : Mth.frac(d5));
+ 
+-                while (d12 <= 1.0 || d13 <= 1.0 || d14 <= 1.0) {
++                T object; // CraftBukkit - decompile error
++
++                do {
++                    if (d12 > 1.0D && d13 > 1.0D && d14 > 1.0D) {
++                        return onFail.apply(context);
++                    }
++
+                     if (d12 < d13) {
+                         if (d12 < d14) {
+-                            floor += i;
++                            i += l;
+                             d12 += d9;
+                         } else {
+-                            floor2 += i2;
++                            k += j1;
+                             d14 += d11;
+                         }
+                     } else if (d13 < d14) {
+-                        floor1 += i1;
++                        j += i1;
+                         d13 += d10;
+                     } else {
+-                        floor2 += i2;
++                        k += j1;
+                         d14 += d11;
+                     }
+ 
+-                    T object1 = tester.apply(context, mutableBlockPos.set(floor, floor1, floor2));
+-                    if (object1 != null) {
+-                        return object1;
+-                    }
+-                }
++                    object = tester.apply(context, blockposition_mutableblockposition.set(i, j, k));
++                } while (object == null);
+ 
+-                return onFail.apply(context);
++                return object;
+             }
+         }
+     }

@@ -1,0 +1,81 @@
+--- a/net/minecraft/server/commands/ReloadCommand.java
++++ b/net/minecraft/server/commands/ReloadCommand.java
+@@ -7,7 +7,6 @@
+ import java.util.Collection;
+ import java.util.Iterator;
+ import net.minecraft.commands.CommandSourceStack;
+-import net.minecraft.commands.Commands;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.packs.repository.PackRepository;
+@@ -20,19 +19,19 @@
+ 
+     public ReloadCommand() {}
+ 
+-    public static void reloadPacks(Collection<String> collection, CommandSourceStack commandsourcestack) {
+-        commandsourcestack.getServer().reloadResources(collection).exceptionally((throwable) -> {
++    public static void reloadPacks(Collection<String> selectedIds, CommandSourceStack source) {
++        source.getServer().reloadResources(selectedIds).exceptionally((throwable) -> {
+             ReloadCommand.LOGGER.warn("Failed to execute reload", throwable);
+-            commandsourcestack.sendFailure(Component.translatable("commands.reload.failure"));
++            source.sendFailure(Component.translatable("commands.reload.failure"));
+             return null;
+         });
+     }
+ 
+-    private static Collection<String> discoverNewPacks(PackRepository packrepository, WorldData worlddata, Collection<String> collection) {
+-        packrepository.reload();
+-        Collection<String> collection1 = Lists.newArrayList(collection);
+-        Collection<String> collection2 = worlddata.getDataConfiguration().dataPacks().getDisabled();
+-        Iterator iterator = packrepository.getAvailableIds().iterator();
++    private static Collection<String> discoverNewPacks(PackRepository packRepository, WorldData worldData, Collection<String> selectedIds) {
++        packRepository.reload();
++        Collection<String> collection1 = Lists.newArrayList(selectedIds);
++        Collection<String> collection2 = worldData.getDataConfiguration().dataPacks().getDisabled();
++        Iterator iterator = packRepository.getAvailableIds().iterator();
+ 
+         while (iterator.hasNext()) {
+             String s = (String) iterator.next();
+@@ -45,21 +44,31 @@
+         return collection1;
+     }
+ 
+-    public static void register(CommandDispatcher<CommandSourceStack> commanddispatcher) {
+-        commanddispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) Commands.literal("reload").requires((commandsourcestack) -> {
+-            return commandsourcestack.hasPermission(2);
++    // CraftBukkit start
++    public static void reload(MinecraftServer minecraftserver) {
++        PackRepository resourcepackrepository = minecraftserver.getPackRepository();
++        WorldData savedata = minecraftserver.getWorldData();
++        Collection<String> collection = resourcepackrepository.getSelectedIds();
++        Collection<String> collection1 = discoverNewPacks(resourcepackrepository, savedata, collection);
++        minecraftserver.reloadResources(collection1);
++    }
++    // CraftBukkit end
++
++    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
++        dispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) net.minecraft.commands.Commands.literal("reload").requires((commandlistenerwrapper) -> {
++            return commandlistenerwrapper.hasPermission(2);
+         })).executes((commandcontext) -> {
+-            CommandSourceStack commandsourcestack = (CommandSourceStack) commandcontext.getSource();
+-            MinecraftServer minecraftserver = commandsourcestack.getServer();
+-            PackRepository packrepository = minecraftserver.getPackRepository();
+-            WorldData worlddata = minecraftserver.getWorldData();
+-            Collection<String> collection = packrepository.getSelectedIds();
+-            Collection<String> collection1 = discoverNewPacks(packrepository, worlddata, collection);
++            CommandSourceStack commandlistenerwrapper = (CommandSourceStack) commandcontext.getSource();
++            MinecraftServer minecraftserver = commandlistenerwrapper.getServer();
++            PackRepository resourcepackrepository = minecraftserver.getPackRepository();
++            WorldData savedata = minecraftserver.getWorldData();
++            Collection<String> collection = resourcepackrepository.getSelectedIds();
++            Collection<String> collection1 = discoverNewPacks(resourcepackrepository, savedata, collection);
+ 
+-            commandsourcestack.sendSuccess(() -> {
++            commandlistenerwrapper.sendSuccess(() -> {
+                 return Component.translatable("commands.reload.success");
+             }, true);
+-            reloadPacks(collection1, commandsourcestack);
++            reloadPacks(collection1, commandlistenerwrapper);
+             return 0;
+         }));
+     }

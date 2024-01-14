@@ -1,0 +1,83 @@
+--- a/net/minecraft/network/protocol/PacketUtils.java
++++ b/net/minecraft/network/protocol/PacketUtils.java
+@@ -4,10 +4,15 @@
+ import net.minecraft.CrashReport;
+ import net.minecraft.ReportedException;
+ import net.minecraft.network.PacketListener;
+-import net.minecraft.server.RunningOnDifferentThreadException;
++import net.minecraft.server.CancelledPacketHandleException;
++import org.slf4j.Logger;
++
++// CraftBukkit start
++import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.network.ServerCommonPacketListenerImpl;
++// CraftBukkit end
+ import net.minecraft.util.thread.BlockableEventLoop;
+-import org.slf4j.Logger;
+ 
+ public class PacketUtils {
+ 
+@@ -15,16 +20,17 @@
+ 
+     public PacketUtils() {}
+ 
+-    public static <T extends PacketListener> void ensureRunningOnSameThread(Packet<T> packet, T t0, ServerLevel serverlevel) throws RunningOnDifferentThreadException {
+-        ensureRunningOnSameThread(packet, t0, (BlockableEventLoop) serverlevel.getServer());
++    public static <T extends PacketListener> void ensureRunningOnSameThread(Packet<T> packet, T processor, ServerLevel level) throws CancelledPacketHandleException {
++        ensureRunningOnSameThread(packet, processor, (BlockableEventLoop) level.getServer());
+     }
+ 
+-    public static <T extends PacketListener> void ensureRunningOnSameThread(Packet<T> packet, T t0, BlockableEventLoop<?> blockableeventloop) throws RunningOnDifferentThreadException {
+-        if (!blockableeventloop.isSameThread()) {
+-            blockableeventloop.executeIfPossible(() -> {
+-                if (t0.shouldHandleMessage(packet)) {
++    public static <T extends PacketListener> void ensureRunningOnSameThread(Packet<T> packet, T processor, BlockableEventLoop<?> executor) throws CancelledPacketHandleException {
++        if (!executor.isSameThread()) {
++            executor.executeIfPossible(() -> {
++                if (MinecraftServer.getServer().hasStopped() || (processor instanceof ServerCommonPacketListenerImpl && ((ServerCommonPacketListenerImpl) processor).processedDisconnect)) return; // CraftBukkit, MC-142590
++                if (processor.shouldHandleMessage(packet)) {
+                     try {
+-                        packet.handle(t0);
++                        packet.handle(processor);
+                     } catch (Exception exception) {
+                         label25:
+                         {
+@@ -36,7 +42,7 @@
+                                 }
+                             }
+ 
+-                            if (!t0.shouldPropagateHandlingExceptions()) {
++                            if (!processor.shouldPropagateHandlingExceptions()) {
+                                 PacketUtils.LOGGER.error("Failed to handle packet {}, suppressing error", packet, exception);
+                                 return;
+                             }
+@@ -45,13 +51,13 @@
+                         if (exception instanceof ReportedException) {
+                             ReportedException reportedexception1 = (ReportedException) exception;
+ 
+-                            t0.fillCrashReport(reportedexception1.getReport());
++                            processor.fillCrashReport(reportedexception1.getReport());
+                             throw exception;
+                         }
+ 
+                         CrashReport crashreport = CrashReport.forThrowable(exception, "Main thread packet handler");
+ 
+-                        t0.fillCrashReport(crashreport);
++                        processor.fillCrashReport(crashreport);
+                         throw new ReportedException(crashreport);
+                     }
+                 } else {
+@@ -59,7 +65,11 @@
+                 }
+ 
+             });
+-            throw RunningOnDifferentThreadException.RUNNING_ON_DIFFERENT_THREAD;
++            throw CancelledPacketHandleException.RUNNING_ON_DIFFERENT_THREAD;
++            // CraftBukkit start - SPIGOT-5477, MC-142590
++        } else if (MinecraftServer.getServer().hasStopped() || (processor instanceof ServerCommonPacketListenerImpl && ((ServerCommonPacketListenerImpl) processor).processedDisconnect)) {
++            throw CancelledPacketHandleException.RUNNING_ON_DIFFERENT_THREAD;
++            // CraftBukkit end
+         }
+     }
+ }

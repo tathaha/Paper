@@ -1,0 +1,330 @@
+--- a/net/minecraft/world/entity/npc/AbstractVillager.java
++++ b/net/minecraft/world/entity/npc/AbstractVillager.java
+@@ -20,11 +20,11 @@
+ import net.minecraft.world.entity.AgeableMob;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
+-import net.minecraft.world.entity.MobSpawnType;
+-import net.minecraft.world.entity.Pose;
++import net.minecraft.world.entity.EnumMobSpawn;
++import net.minecraft.world.entity.GroupDataEntity;
+ import net.minecraft.world.entity.SlotAccess;
+-import net.minecraft.world.entity.SpawnGroupData;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.trading.Merchant;
+@@ -34,9 +34,23 @@
+ import net.minecraft.world.level.ServerLevelAccessor;
+ import net.minecraft.world.level.pathfinder.BlockPathTypes;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.inventory.CraftMerchant;
++import org.bukkit.craftbukkit.inventory.CraftMerchantRecipe;
++import org.bukkit.event.entity.VillagerAcquireTradeEvent;
++// CraftBukkit end
+ 
+-public abstract class AbstractVillager extends AgeableMob implements InventoryCarrier, Npc, Merchant {
++public abstract class AbstractVillager extends AgeableMob implements InventoryCarrier, NPC, Merchant {
+ 
++    // CraftBukkit start
++    private CraftMerchant craftMerchant;
++
++    @Override
++    public CraftMerchant getCraftMerchant() {
++        return (craftMerchant == null) ? craftMerchant = new CraftMerchant(this) : craftMerchant;
++    }
++    // CraftBukkit end
+     private static final EntityDataAccessor<Integer> DATA_UNHAPPY_COUNTER = SynchedEntityData.defineId(AbstractVillager.class, EntityDataSerializers.INT);
+     public static final int VILLAGER_SLOT_OFFSET = 300;
+     private static final int VILLAGER_INVENTORY_SIZE = 8;
+@@ -44,60 +58,54 @@
+     private Player tradingPlayer;
+     @Nullable
+     protected MerchantOffers offers;
+-    private final SimpleContainer inventory = new SimpleContainer(8);
++    private final SimpleContainer inventory = new SimpleContainer(8, (org.bukkit.craftbukkit.entity.CraftAbstractVillager) this.getBukkitEntity()); // CraftBukkit add argument
+ 
+-    public AbstractVillager(EntityType<? extends AbstractVillager> entitytype, Level level) {
+-        super(entitytype, level);
++    public AbstractVillager(EntityType<? extends AbstractVillager> entityType, Level level) {
++        super(entityType, level);
+         this.setPathfindingMalus(BlockPathTypes.DANGER_FIRE, 16.0F);
+         this.setPathfindingMalus(BlockPathTypes.DAMAGE_FIRE, -1.0F);
+     }
+ 
+     @Override
+-    @Override
+-    public SpawnGroupData finalizeSpawn(ServerLevelAccessor serverlevelaccessor, DifficultyInstance difficultyinstance, MobSpawnType mobspawntype, @Nullable SpawnGroupData spawngroupdata, @Nullable CompoundTag compoundtag) {
+-        if (spawngroupdata == null) {
+-            spawngroupdata = new AgeableMob.AgeableMobGroupData(false);
++    public GroupDataEntity finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, EnumMobSpawn reason, @Nullable GroupDataEntity spawnData, @Nullable CompoundTag dataTag) {
++        if (spawnData == null) {
++            spawnData = new AgeableMob.AgeableMobGroupData(false);
+         }
+ 
+-        return super.finalizeSpawn(serverlevelaccessor, difficultyinstance, mobspawntype, (SpawnGroupData) spawngroupdata, compoundtag);
++        return super.finalizeSpawn(level, difficulty, reason, (GroupDataEntity) spawnData, dataTag);
+     }
+ 
+     public int getUnhappyCounter() {
+         return (Integer) this.entityData.get(AbstractVillager.DATA_UNHAPPY_COUNTER);
+     }
+ 
+-    public void setUnhappyCounter(int i) {
+-        this.entityData.set(AbstractVillager.DATA_UNHAPPY_COUNTER, i);
++    public void setUnhappyCounter(int unhappyCounter) {
++        this.entityData.set(AbstractVillager.DATA_UNHAPPY_COUNTER, unhappyCounter);
+     }
+ 
+     @Override
+-    @Override
+     public int getVillagerXp() {
+         return 0;
+     }
+ 
+     @Override
+-    @Override
+-    protected float getStandingEyeHeight(Pose pose, EntityDimensions entitydimensions) {
++    protected float getStandingEyeHeight(EntityPose pose, EntityDimensions size) {
+         return this.isBaby() ? 0.81F : 1.62F;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.entityData.define(AbstractVillager.DATA_UNHAPPY_COUNTER, 0);
+     }
+ 
+     @Override
+-    @Override
+     public void setTradingPlayer(@Nullable Player player) {
+         this.tradingPlayer = player;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public Player getTradingPlayer() {
+         return this.tradingPlayer;
+     }
+@@ -107,7 +115,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public MerchantOffers getOffers() {
+         if (this.offers == null) {
+             this.offers = new MerchantOffers();
+@@ -118,21 +125,18 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void overrideOffers(@Nullable MerchantOffers merchantoffers) {}
++    public void overrideOffers(@Nullable MerchantOffers offers) {}
+ 
+     @Override
+-    @Override
+-    public void overrideXp(int i) {}
++    public void overrideXp(int xp) {}
+ 
+     @Override
+-    @Override
+-    public void notifyTrade(MerchantOffer merchantoffer) {
+-        merchantoffer.increaseUses();
++    public void notifyTrade(MerchantOffer offer) {
++        offer.increaseUses();
+         this.ambientSoundTime = -this.getAmbientSoundInterval();
+-        this.rewardTradeXp(merchantoffer);
++        this.rewardTradeXp(offer);
+         if (this.tradingPlayer instanceof ServerPlayer) {
+-            CriteriaTriggers.TRADE.trigger((ServerPlayer) this.tradingPlayer, this, merchantoffer.getResult());
++            CriteriaTriggers.TRADE.trigger((ServerPlayer) this.tradingPlayer, this, offer.getResult());
+         }
+ 
+     }
+@@ -140,29 +144,26 @@
+     protected abstract void rewardTradeXp(MerchantOffer offer);
+ 
+     @Override
+-    @Override
+     public boolean showProgressBar() {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public void notifyTradeUpdated(ItemStack itemstack) {
++    public void notifyTradeUpdated(ItemStack stack) {
+         if (!this.level().isClientSide && this.ambientSoundTime > -this.getAmbientSoundInterval() + 20) {
+             this.ambientSoundTime = -this.getAmbientSoundInterval();
+-            this.playSound(this.getTradeUpdatedSound(!itemstack.isEmpty()), this.getSoundVolume(), this.getVoicePitch());
++            this.playSound(this.getTradeUpdatedSound(!stack.isEmpty()), this.getSoundVolume(), this.getVoicePitch());
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public SoundEvent getNotifyTradeSound() {
+         return SoundEvents.VILLAGER_YES;
+     }
+ 
+-    protected SoundEvent getTradeUpdatedSound(boolean flag) {
+-        return flag ? SoundEvents.VILLAGER_YES : SoundEvents.VILLAGER_NO;
++    protected SoundEvent getTradeUpdatedSound(boolean isYesSound) {
++        return isYesSound ? SoundEvents.VILLAGER_YES : SoundEvents.VILLAGER_NO;
+     }
+ 
+     public void playCelebrateSound() {
+@@ -170,35 +171,32 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        MerchantOffers merchantoffers = this.getOffers();
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        MerchantOffers merchantrecipelist = this.getOffers();
+ 
+-        if (!merchantoffers.isEmpty()) {
+-            compoundtag.put("Offers", merchantoffers.createTag());
++        if (!merchantrecipelist.isEmpty()) {
++            compound.put("Offers", merchantrecipelist.createTag());
+         }
+ 
+-        this.writeInventoryToTag(compoundtag);
++        this.writeInventoryToTag(compound);
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        if (compoundtag.contains("Offers", 10)) {
+-            this.offers = new MerchantOffers(compoundtag.getCompound("Offers"));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        if (compound.contains("Offers", 10)) {
++            this.offers = new MerchantOffers(compound.getCompound("Offers"));
+         }
+ 
+-        this.readInventoryFromTag(compoundtag);
++        this.readInventoryFromTag(compound);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public Entity changeDimension(ServerLevel serverlevel) {
++    public Entity changeDimension(ServerLevel server) {
+         this.stopTrading();
+-        return super.changeDimension(serverlevel);
++        return super.changeDimension(server);
+     }
+ 
+     protected void stopTrading() {
+@@ -206,54 +204,59 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void die(DamageSource damagesource) {
+-        super.die(damagesource);
++    public void die(DamageSource cause) {
++        super.die(cause);
+         this.stopTrading();
+     }
+ 
+-    protected void addParticlesAroundSelf(ParticleOptions particleoptions) {
++    protected void addParticlesAroundSelf(ParticleOptions particleOption) {
+         for (int i = 0; i < 5; ++i) {
+             double d0 = this.random.nextGaussian() * 0.02D;
+             double d1 = this.random.nextGaussian() * 0.02D;
+             double d2 = this.random.nextGaussian() * 0.02D;
+ 
+-            this.level().addParticle(particleoptions, this.getRandomX(1.0D), this.getRandomY() + 1.0D, this.getRandomZ(1.0D), d0, d1, d2);
++            this.level().addParticle(particleOption, this.getRandomX(1.0D), this.getRandomY() + 1.0D, this.getRandomZ(1.0D), d0, d1, d2);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public boolean canBeLeashed(Player player) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     public SimpleContainer getInventory() {
+         return this.inventory;
+     }
+ 
+     @Override
+-    @Override
+-    public SlotAccess getSlot(int i) {
+-        int j = i - 300;
++    public SlotAccess getSlot(int slot) {
++        int j = slot - 300;
+ 
+-        return j >= 0 && j < this.inventory.getContainerSize() ? SlotAccess.forContainer(this.inventory, j) : super.getSlot(i);
++        return j >= 0 && j < this.inventory.getContainerSize() ? SlotAccess.forContainer(this.inventory, j) : super.getSlot(slot);
+     }
+ 
+     protected abstract void updateTrades();
+ 
+-    protected void addOffersFromItemListings(MerchantOffers merchantoffers, VillagerTrades.ItemListing[] avillagertrades_itemlisting, int i) {
+-        ArrayList<VillagerTrades.ItemListing> arraylist = Lists.newArrayList(avillagertrades_itemlisting);
++    protected void addOffersFromItemListings(MerchantOffers givenMerchantOffers, VillagerTrades.ItemListing[] newTrades, int maxNumbers) {
++        ArrayList<VillagerTrades.ItemListing> arraylist = Lists.newArrayList(newTrades);
+         int j = 0;
+ 
+-        while (j < i && !arraylist.isEmpty()) {
+-            MerchantOffer merchantoffer = ((VillagerTrades.ItemListing) arraylist.remove(this.random.nextInt(arraylist.size()))).getOffer(this, this.random);
++        while (j < maxNumbers && !arraylist.isEmpty()) {
++            MerchantOffer merchantrecipe = ((VillagerTrades.ItemListing) arraylist.remove(this.random.nextInt(arraylist.size()))).getOffer(this, this.random);
+ 
+-            if (merchantoffer != null) {
+-                merchantoffers.add(merchantoffer);
++            if (merchantrecipe != null) {
++                // CraftBukkit start
++                VillagerAcquireTradeEvent event = new VillagerAcquireTradeEvent((org.bukkit.entity.AbstractVillager) getBukkitEntity(), merchantrecipe.asBukkit());
++                // Suppress during worldgen
++                if (this.valid) {
++                    Bukkit.getPluginManager().callEvent(event);
++                }
++                if (!event.isCancelled()) {
++                    givenMerchantOffers.add(CraftMerchantRecipe.fromBukkit(event.getRecipe()).toMinecraft());
++                }
++                // CraftBukkit end
+                 ++j;
+             }
+         }
+@@ -261,16 +264,14 @@
+     }
+ 
+     @Override
+-    @Override
+-    public Vec3 getRopeHoldPosition(float f) {
+-        float f1 = Mth.lerp(f, this.yBodyRotO, this.yBodyRot) * 0.017453292F;
+-        Vec3 vec3 = new Vec3(0.0D, this.getBoundingBox().getYsize() - 1.0D, 0.2D);
++    public Vec3 getRopeHoldPosition(float partialTicks) {
++        float f1 = Mth.lerp(partialTicks, this.yBodyRotO, this.yBodyRot) * 0.017453292F;
++        Vec3 vec3d = new Vec3(0.0D, this.getBoundingBox().getYsize() - 1.0D, 0.2D);
+ 
+-        return this.getPosition(f).add(vec3.yRot(-f1));
++        return this.getPosition(partialTicks).add(vec3d.yRot(-f1));
+     }
+ 
+     @Override
+-    @Override
+     public boolean isClientSide() {
+         return this.level().isClientSide;
+     }

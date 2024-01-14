@@ -1,0 +1,62 @@
+--- a/net/minecraft/world/entity/projectile/AbstractArrow.java
++++ b/net/minecraft/world/entity/projectile/AbstractArrow.java
+@@ -46,6 +47,9 @@
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.event.entity.EntityCombustByEntityEvent;
++import org.bukkit.event.player.PlayerPickupArrowEvent;
++// CraftBukkit end
+ 
+ public abstract class AbstractArrow extends Projectile {
+ 
+@@ -225,7 +223,7 @@
+                 }
+ 
+                 if (object != null && !flag) {
+-                    this.onHit((HitResult) object);
++                    this.preOnHit((HitResult) object); // CraftBukkit - projectile hit event
+                     this.hasImpulse = true;
+                 }
+ 
+@@ -375,7 +371,13 @@
+         boolean flag1 = entity.getType().is(EntityTypeTags.DEFLECTS_ARROWS);
+ 
+         if (this.isOnFire() && !flag && !flag1) {
+-            entity.setSecondsOnFire(5);
++            // CraftBukkit start
++            EntityCombustByEntityEvent combustEvent = new EntityCombustByEntityEvent(this.getBukkitEntity(), entity.getBukkitEntity(), 5);
++            org.bukkit.Bukkit.getPluginManager().callEvent(combustEvent);
++            if (!combustEvent.isCancelled()) {
++                entity.setSecondsOnFire(combustEvent.getDuration(), false);
++            }
++            // CraftBukkit end
+         }
+ 
+         if (entity.hurt(damagesource, (float) i)) {
+@@ -559,8 +555,23 @@
+     @Override
+     public void playerTouch(Player player) {
+         if (!this.level().isClientSide && (this.inGround || this.isNoPhysics()) && this.shakeTime <= 0) {
+-            if (this.tryPickup(player)) {
+-                player.take(this, 1);
++            // CraftBukkit start
++            ItemStack itemstack = this.getPickupItem();
++            if (this.pickup == Pickup.ALLOWED && !itemstack.isEmpty() && entity.getInventory().canHold(itemstack) > 0) {
++                ItemEntity item = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), itemstack);
++                PlayerPickupArrowEvent event = new PlayerPickupArrowEvent((org.bukkit.entity.Player) entity.getBukkitEntity(), new org.bukkit.craftbukkit.entity.CraftItem(this.level().getCraftServer(), item), (org.bukkit.entity.AbstractArrow) this.getBukkitEntity());
++                // event.setCancelled(!entityhuman.canPickUpLoot); TODO
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (event.isCancelled()) {
++                    return;
++                }
++                itemstack = item.getItem();
++            }
++
++            if ((this.pickup == AbstractArrow.Pickup.ALLOWED && entity.getInventory().add(itemstack)) || (this.pickup == AbstractArrow.Pickup.CREATIVE_ONLY && entity.getAbilities().instabuild)) {
++                // CraftBukkit end
++                entity.take(this, 1);
+                 this.discard();
+             }
+ 

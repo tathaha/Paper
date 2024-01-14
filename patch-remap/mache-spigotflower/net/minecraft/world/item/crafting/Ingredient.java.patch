@@ -1,0 +1,278 @@
+--- a/net/minecraft/world/item/crafting/Ingredient.java
++++ b/net/minecraft/world/item/crafting/Ingredient.java
+@@ -25,33 +25,34 @@
+ import net.minecraft.world.entity.player.StackedContents;
+ import net.minecraft.world.item.Item;
+ import net.minecraft.world.item.ItemStack;
+-import net.minecraft.world.level.ItemLike;
++import net.minecraft.world.level.IMaterial;
+ 
+ public final class Ingredient implements Predicate<ItemStack> {
+ 
+     public static final Ingredient EMPTY = new Ingredient(Stream.empty());
+-    private final Ingredient.Value[] values;
++    private final Ingredient.Provider[] values;
+     @Nullable
+-    private ItemStack[] itemStacks;
++    public ItemStack[] itemStacks;
+     @Nullable
+     private IntList stackingIds;
++    public boolean exact; // CraftBukkit
+     public static final Codec<Ingredient> CODEC = codec(true);
+     public static final Codec<Ingredient> CODEC_NONEMPTY = codec(false);
+ 
+-    private Ingredient(Stream<? extends Ingredient.Value> stream) {
+-        this.values = (Ingredient.Value[]) stream.toArray((i) -> {
+-            return new Ingredient.Value[i];
++    public Ingredient(Stream<? extends Ingredient.Provider> values) {
++        this.values = (Ingredient.Provider[]) values.toArray((i) -> {
++            return new Ingredient.Provider[i];
+         });
+     }
+ 
+-    private Ingredient(Ingredient.Value[] aingredient_value) {
+-        this.values = aingredient_value;
++    private Ingredient(Ingredient.Provider[] arecipeitemstack_provider) {
++        this.values = arecipeitemstack_provider;
+     }
+ 
+     public ItemStack[] getItems() {
+         if (this.itemStacks == null) {
+-            this.itemStacks = (ItemStack[]) Arrays.stream(this.values).flatMap((ingredient_value) -> {
+-                return ingredient_value.getItems().stream();
++            this.itemStacks = (ItemStack[]) Arrays.stream(this.values).flatMap((recipeitemstack_provider) -> {
++                return recipeitemstack_provider.getItems().stream();
+             }).distinct().toArray((i) -> {
+                 return new ItemStack[i];
+             });
+@@ -60,12 +61,11 @@
+         return this.itemStacks;
+     }
+ 
+-    @Override
+-    public boolean test(@Nullable ItemStack itemstack) {
+-        if (itemstack == null) {
++    public boolean test(@Nullable ItemStack stack) {
++        if (stack == null) {
+             return false;
+         } else if (this.isEmpty()) {
+-            return itemstack.isEmpty();
++            return stack.isEmpty();
+         } else {
+             ItemStack[] aitemstack = this.getItems();
+             int i = aitemstack.length;
+@@ -73,7 +73,16 @@
+             for (int j = 0; j < i; ++j) {
+                 ItemStack itemstack1 = aitemstack[j];
+ 
+-                if (itemstack1.is(itemstack.getItem())) {
++                // CraftBukkit start
++                if (exact) {
++                    if (itemstack1.getItem() == stack.getItem() && ItemStack.isSameItemSameTags(stack, itemstack1)) {
++                        return true;
++                    }
++
++                    continue;
++                }
++                // CraftBukkit end
++                if (itemstack1.is(stack.getItem())) {
+                     return true;
+                 }
+             }
+@@ -102,92 +111,91 @@
+         return this.stackingIds;
+     }
+ 
+-    public void toNetwork(FriendlyByteBuf friendlybytebuf) {
+-        friendlybytebuf.writeCollection(Arrays.asList(this.getItems()), FriendlyByteBuf::writeItem);
++    public void toNetwork(FriendlyByteBuf buffer) {
++        buffer.writeCollection(Arrays.asList(this.getItems()), FriendlyByteBuf::writeItem);
+     }
+ 
+     public boolean isEmpty() {
+         return this.values.length == 0;
+     }
+ 
+-    @Override
+     public boolean equals(Object object) {
+         if (object instanceof Ingredient) {
+-            Ingredient ingredient = (Ingredient) object;
++            Ingredient recipeitemstack = (Ingredient) object;
+ 
+-            return Arrays.equals(this.values, ingredient.values);
++            return Arrays.equals(this.values, recipeitemstack.values);
+         } else {
+             return false;
+         }
+     }
+ 
+-    private static Ingredient fromValues(Stream<? extends Ingredient.Value> stream) {
+-        Ingredient ingredient = new Ingredient(stream);
++    private static Ingredient fromValues(Stream<? extends Ingredient.Provider> stream) {
++        Ingredient recipeitemstack = new Ingredient(stream);
+ 
+-        return ingredient.isEmpty() ? Ingredient.EMPTY : ingredient;
++        return recipeitemstack.isEmpty() ? Ingredient.EMPTY : recipeitemstack;
+     }
+ 
+     public static Ingredient of() {
+         return Ingredient.EMPTY;
+     }
+ 
+-    public static Ingredient of(ItemLike... aitemlike) {
+-        return of(Arrays.stream(aitemlike).map(ItemStack::new));
++    public static Ingredient of(IMaterial... items) {
++        return of(Arrays.stream(items).map(ItemStack::new));
+     }
+ 
+-    public static Ingredient of(ItemStack... aitemstack) {
+-        return of(Arrays.stream(aitemstack));
++    public static Ingredient of(ItemStack... stacks) {
++        return of(Arrays.stream(stacks));
+     }
+ 
+-    public static Ingredient of(Stream<ItemStack> stream) {
+-        return fromValues(stream.filter((itemstack) -> {
++    public static Ingredient of(Stream<ItemStack> stacks) {
++        return fromValues(stacks.filter((itemstack) -> {
+             return !itemstack.isEmpty();
+         }).map(Ingredient.ItemValue::new));
+     }
+ 
+-    public static Ingredient of(TagKey<Item> tagkey) {
+-        return fromValues(Stream.of(new Ingredient.TagValue(tagkey)));
++    public static Ingredient of(TagKey<Item> tag) {
++        return fromValues(Stream.of(new Ingredient.TagValue(tag)));
+     }
+ 
+-    public static Ingredient fromNetwork(FriendlyByteBuf friendlybytebuf) {
+-        return fromValues(friendlybytebuf.readList(FriendlyByteBuf::readItem).stream().map(Ingredient.ItemValue::new));
++    public static Ingredient fromNetwork(FriendlyByteBuf buffer) {
++        return fromValues(buffer.readList(FriendlyByteBuf::readItem).stream().map(Ingredient.ItemValue::new));
+     }
+ 
+     private static Codec<Ingredient> codec(boolean flag) {
+-        Codec<Ingredient.Value[]> codec = Codec.list(Ingredient.Value.CODEC).comapFlatMap((list) -> {
++        Codec<Ingredient.Provider[]> codec = Codec.list(Ingredient.Provider.CODEC).comapFlatMap((list) -> {
+             return !flag && list.size() < 1 ? DataResult.error(() -> {
+                 return "Item array cannot be empty, at least one item must be defined";
+-            }) : DataResult.success((Ingredient.Value[]) list.toArray(new Ingredient.Value[0]));
++            }) : DataResult.success((Ingredient.Provider[]) list.toArray(new Ingredient.Provider[0]));
+         }, List::of);
+ 
+-        return ExtraCodecs.either(codec, Ingredient.Value.CODEC).flatComapMap((either) -> {
+-            return (Ingredient) either.map(Ingredient::new, (ingredient_value) -> {
+-                return new Ingredient(new Ingredient.Value[]{ingredient_value});
++        return ExtraCodecs.either(codec, Ingredient.Provider.CODEC).flatComapMap((either) -> {
++            return (Ingredient) either.map(Ingredient::new, (recipeitemstack_provider) -> {
++                return new Ingredient(new Ingredient.Provider[]{recipeitemstack_provider});
+             });
+-        }, (ingredient) -> {
+-            return ingredient.values.length == 1 ? DataResult.success(Either.right(ingredient.values[0])) : (ingredient.values.length == 0 && !flag ? DataResult.error(() -> {
++        }, (recipeitemstack) -> {
++            return recipeitemstack.values.length == 1 ? DataResult.success(Either.right(recipeitemstack.values[0])) : (recipeitemstack.values.length == 0 && !flag ? DataResult.error(() -> {
+                 return "Item array cannot be empty, at least one item must be defined";
+-            }) : DataResult.success(Either.left(ingredient.values)));
++            }) : DataResult.success(Either.left(recipeitemstack.values)));
+         });
+     }
+ 
+-    private interface Value {
++    public interface Provider {
+ 
+-        Codec<Ingredient.Value> CODEC = ExtraCodecs.xor(Ingredient.ItemValue.CODEC, Ingredient.TagValue.CODEC).xmap((either) -> {
+-            return (Ingredient.Value) either.map((ingredient_itemvalue) -> {
+-                return ingredient_itemvalue;
+-            }, (ingredient_tagvalue) -> {
+-                return ingredient_tagvalue;
++        Codec<Ingredient.Provider> CODEC = ExtraCodecs.xor(Ingredient.ItemValue.CODEC, Ingredient.TagValue.CODEC).xmap((either) -> {
++            return (Ingredient.Provider) either.map((recipeitemstack_stackprovider) -> {
++                return recipeitemstack_stackprovider;
++            }, (recipeitemstack_b) -> {
++                return recipeitemstack_b;
+             });
+-        }, (ingredient_value) -> {
+-            if (ingredient_value instanceof Ingredient.TagValue) {
+-                Ingredient.TagValue ingredient_tagvalue = (Ingredient.TagValue) ingredient_value;
++        }, (recipeitemstack_provider) -> {
++            if (recipeitemstack_provider instanceof Ingredient.TagValue) {
++                Ingredient.TagValue recipeitemstack_b = (Ingredient.TagValue) recipeitemstack_provider;
+ 
+-                return Either.right(ingredient_tagvalue);
+-            } else if (ingredient_value instanceof Ingredient.ItemValue) {
+-                Ingredient.ItemValue ingredient_itemvalue = (Ingredient.ItemValue) ingredient_value;
++                return Either.right(recipeitemstack_b);
++            } else if (recipeitemstack_provider instanceof Ingredient.ItemValue) {
++                Ingredient.ItemValue recipeitemstack_stackprovider = (Ingredient.ItemValue) recipeitemstack_provider;
+ 
+-                return Either.left(ingredient_itemvalue);
++                return Either.left(recipeitemstack_stackprovider);
+             } else {
+                 throw new UnsupportedOperationException("This is neither an item value nor a tag value.");
+             }
+@@ -196,27 +204,25 @@
+         Collection<ItemStack> getItems();
+     }
+ 
+-    private static record TagValue(TagKey<Item> tag) implements Ingredient.Value {
++    private static record TagValue(TagKey<Item> tag) implements Ingredient.Provider {
+ 
+         static final Codec<Ingredient.TagValue> CODEC = RecordCodecBuilder.create((instance) -> {
+-            return instance.group(TagKey.codec(Registries.ITEM).fieldOf("tag").forGetter((ingredient_tagvalue) -> {
+-                return ingredient_tagvalue.tag;
++            return instance.group(TagKey.codec(Registries.ITEM).fieldOf("tag").forGetter((recipeitemstack_b) -> {
++                return recipeitemstack_b.tag;
+             })).apply(instance, Ingredient.TagValue::new);
+         });
+ 
+-        @Override
+         public boolean equals(Object object) {
+             if (object instanceof Ingredient.TagValue) {
+-                Ingredient.TagValue ingredient_tagvalue = (Ingredient.TagValue) object;
++                Ingredient.TagValue recipeitemstack_b = (Ingredient.TagValue) object;
+ 
+-                return ingredient_tagvalue.tag.location().equals(this.tag.location());
++                return recipeitemstack_b.tag.location().equals(this.tag.location());
+             } else {
+                 return false;
+             }
+         }
+ 
+         @Override
+-        @Override
+         public Collection<ItemStack> getItems() {
+             List<ItemStack> list = Lists.newArrayList();
+             Iterator iterator = BuiltInRegistries.ITEM.getTagOrEmpty(this.tag).iterator();
+@@ -231,27 +237,25 @@
+         }
+     }
+ 
+-    private static record ItemValue(ItemStack item) implements Ingredient.Value {
++    public static record ItemValue(ItemStack item) implements Ingredient.Provider {
+ 
+         static final Codec<Ingredient.ItemValue> CODEC = RecordCodecBuilder.create((instance) -> {
+-            return instance.group(ItemStack.SINGLE_ITEM_CODEC.fieldOf("item").forGetter((ingredient_itemvalue) -> {
+-                return ingredient_itemvalue.item;
++            return instance.group(ItemStack.SINGLE_ITEM_CODEC.fieldOf("item").forGetter((recipeitemstack_stackprovider) -> {
++                return recipeitemstack_stackprovider.item;
+             })).apply(instance, Ingredient.ItemValue::new);
+         });
+ 
+-        @Override
+         public boolean equals(Object object) {
+             if (!(object instanceof Ingredient.ItemValue)) {
+                 return false;
+             } else {
+-                Ingredient.ItemValue ingredient_itemvalue = (Ingredient.ItemValue) object;
++                Ingredient.ItemValue recipeitemstack_stackprovider = (Ingredient.ItemValue) object;
+ 
+-                return ingredient_itemvalue.item.getItem().equals(this.item.getItem()) && ingredient_itemvalue.item.getCount() == this.item.getCount();
++                return recipeitemstack_stackprovider.item.getItem().equals(this.item.getItem()) && recipeitemstack_stackprovider.item.getCount() == this.item.getCount();
+             }
+         }
+ 
+         @Override
+-        @Override
+         public Collection<ItemStack> getItems() {
+             return Collections.singleton(this.item);
+         }

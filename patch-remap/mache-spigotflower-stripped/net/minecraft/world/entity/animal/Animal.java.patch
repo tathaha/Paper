@@ -1,0 +1,115 @@
+--- a/net/minecraft/world/entity/animal/Animal.java
++++ b/net/minecraft/world/entity/animal/Animal.java
+@@ -29,13 +29,19 @@
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.pathfinder.BlockPathTypes;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityBreedEvent;
++import org.bukkit.event.entity.EntityEnterLoveModeEvent;
++// CraftBukkit end
+ 
+ public abstract class Animal extends AgeableMob {
+ 
+     protected static final int PARENT_AGE_AFTER_BREEDING = 6000;
+     private int inLove;
+     @Nullable
+-    private UUID loveCause;
++    public UUID loveCause;
++    public ItemStack breedItem; // CraftBukkit - Add breedItem variable
+ 
+     protected Animal(EntityType<? extends Animal> entitytype, Level level) {
+         super(entitytype, level);
+@@ -80,8 +83,13 @@
+         if (this.isInvulnerableTo(damagesource)) {
+             return false;
+         } else {
++            // CraftBukkit start
++            boolean result = super.hurt(source, amount);
++            if (result) {
+             this.inLove = 0;
+-            return super.hurt(damagesource, f);
++            }
++            return result;
++            // CraftBukkit end
+         }
+     }
+ 
+@@ -182,10 +183,17 @@
+     }
+ 
+     public void setInLove(@Nullable Player player) {
+-        this.inLove = 600;
++        // CraftBukkit start
++        EntityEnterLoveModeEvent entityEnterLoveModeEvent = CraftEventFactory.callEntityEnterLoveModeEvent(player, this, 600);
++        if (entityEnterLoveModeEvent.isCancelled()) {
++            return;
++        }
++        this.inLove = entityEnterLoveModeEvent.getTicksInLove();
++        // CraftBukkit end
+         if (player != null) {
+             this.loveCause = player.getUUID();
+         }
++        this.breedItem = player.getInventory().getSelected(); // CraftBukkit
+ 
+         this.level().broadcastEntityEvent(this, (byte) 18);
+     }
+@@ -224,15 +232,32 @@
+     public void spawnChildFromBreeding(ServerLevel serverlevel, Animal animal) {
+         AgeableMob ageablemob = this.getBreedOffspring(serverlevel, animal);
+ 
+-        if (ageablemob != null) {
+-            ageablemob.setBaby(true);
+-            ageablemob.moveTo(this.getX(), this.getY(), this.getZ(), 0.0F, 0.0F);
+-            this.finalizeSpawnChildFromBreeding(serverlevel, animal, ageablemob);
+-            serverlevel.addFreshEntityWithPassengers(ageablemob);
++        if (entityageable != null) {
++            entityageable.setBaby(true);
++            entityageable.moveTo(this.getX(), this.getY(), this.getZ(), 0.0F, 0.0F);
++            // CraftBukkit start - call EntityBreedEvent
++            ServerPlayer breeder = Optional.ofNullable(this.getLoveCause()).or(() -> {
++                return Optional.ofNullable(mate.getLoveCause());
++            }).orElse(null);
++            int experience = this.getRandom().nextInt(7) + 1;
++            EntityBreedEvent entityBreedEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callEntityBreedEvent(entityageable, this, mate, breeder, this.breedItem, experience);
++            if (entityBreedEvent.isCancelled()) {
++                return;
++            }
++            experience = entityBreedEvent.getExperience();
++            this.finalizeSpawnChildFromBreeding(level, mate, entityageable, experience);
++            level.addFreshEntityWithPassengers(entityageable, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.BREEDING);
++            // CraftBukkit end
+         }
+     }
+ 
+-    public void finalizeSpawnChildFromBreeding(ServerLevel serverlevel, Animal animal, @Nullable AgeableMob ageablemob) {
++    public void finalizeSpawnChildFromBreeding(ServerLevel level, Animal animal, @Nullable AgeableMob baby) {
++        // CraftBukkit start
++        this.finalizeSpawnChildFromBreeding(level, animal, baby, this.getRandom().nextInt(7) + 1);
++    }
++
++    public void finalizeSpawnChildFromBreeding(ServerLevel worldserver, Animal entityanimal, @Nullable AgeableMob entityageable, int experience) {
++        // CraftBukkit end
+         Optional.ofNullable(this.getLoveCause()).or(() -> {
+             return Optional.ofNullable(animal.getLoveCause());
+         }).ifPresent((serverplayer) -> {
+@@ -242,10 +267,14 @@
+         this.setAge(6000);
+         animal.setAge(6000);
+         this.resetLove();
+-        animal.resetLove();
+-        serverlevel.broadcastEntityEvent(this, (byte) 18);
+-        if (serverlevel.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)) {
+-            serverlevel.addFreshEntity(new ExperienceOrb(serverlevel, this.getX(), this.getY(), this.getZ(), this.getRandom().nextInt(7) + 1));
++        entityanimal.resetLove();
++        worldserver.broadcastEntityEvent(this, (byte) 18);
++        if (worldserver.getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT)) {
++            // CraftBukkit start - use event experience
++            if (experience > 0) {
++                worldserver.addFreshEntity(new ExperienceOrb(worldserver, this.getX(), this.getY(), this.getZ(), experience));
++            }
++            // CraftBukkit end
+         }
+ 
+     }

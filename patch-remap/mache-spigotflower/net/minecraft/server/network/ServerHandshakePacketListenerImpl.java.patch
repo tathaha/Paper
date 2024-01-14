@@ -1,0 +1,123 @@
+--- a/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
++++ b/net/minecraft/server/network/ServerHandshakePacketListenerImpl.java
+@@ -11,60 +11,101 @@
+ import net.minecraft.network.protocol.status.ServerStatus;
+ import net.minecraft.server.MinecraftServer;
+ 
++// CraftBukkit start
++import java.net.InetAddress;
++import java.util.HashMap;
++// CraftBukkit end
++
+ public class ServerHandshakePacketListenerImpl implements ServerHandshakePacketListener {
+ 
++    // CraftBukkit start - add fields
++    private static final HashMap<InetAddress, Long> throttleTracker = new HashMap<InetAddress, Long>();
++    private static int throttleCounter = 0;
++    // CraftBukkit end
+     private static final Component IGNORE_STATUS_REASON = Component.translatable("disconnect.ignoring_status_request");
+     private final MinecraftServer server;
+     private final Connection connection;
+ 
+-    public ServerHandshakePacketListenerImpl(MinecraftServer minecraftserver, Connection connection) {
+-        this.server = minecraftserver;
++    public ServerHandshakePacketListenerImpl(MinecraftServer server, Connection connection) {
++        this.server = server;
+         this.connection = connection;
+     }
+ 
+     @Override
+-    @Override
+-    public void handleIntention(ClientIntentionPacket clientintentionpacket) {
+-        switch (clientintentionpacket.intention()) {
++    public void handleIntention(ClientIntentionPacket packet) {
++        this.connection.hostname = packet.hostName() + ":" + packet.port(); // CraftBukkit  - set hostname
++        switch (packet.intention()) {
+             case LOGIN:
+                 this.connection.setClientboundProtocolAfterHandshake(ClientIntent.LOGIN);
+-                if (clientintentionpacket.protocolVersion() != SharedConstants.getCurrentVersion().getProtocolVersion()) {
+-                    MutableComponent mutablecomponent;
++                // CraftBukkit start - Connection throttle
++                try {
++                    long currentTime = System.currentTimeMillis();
++                    long connectionThrottle = this.server.server.getConnectionThrottle();
++                    InetAddress address = ((java.net.InetSocketAddress) this.connection.getRemoteAddress()).getAddress();
+ 
+-                    if (clientintentionpacket.protocolVersion() < 754) {
+-                        mutablecomponent = Component.translatable("multiplayer.disconnect.outdated_client", SharedConstants.getCurrentVersion().getName());
++                    synchronized (throttleTracker) {
++                        if (throttleTracker.containsKey(address) && !"127.0.0.1".equals(address.getHostAddress()) && currentTime - throttleTracker.get(address) < connectionThrottle) {
++                            throttleTracker.put(address, currentTime);
++                            MutableComponent chatmessage = Component.literal("Connection throttled! Please wait before reconnecting.");
++                            this.connection.send(new ClientboundLoginDisconnectPacket(chatmessage));
++                            this.connection.disconnect(chatmessage);
++                            return;
++                        }
++
++                        throttleTracker.put(address, currentTime);
++                        throttleCounter++;
++                        if (throttleCounter > 200) {
++                            throttleCounter = 0;
++
++                            // Cleanup stale entries
++                            java.util.Iterator iter = throttleTracker.entrySet().iterator();
++                            while (iter.hasNext()) {
++                                java.util.Map.Entry<InetAddress, Long> entry = (java.util.Map.Entry) iter.next();
++                                if (entry.getValue() > connectionThrottle) {
++                                    iter.remove();
++                                }
++                            }
++                        }
++                    }
++                } catch (Throwable t) {
++                    org.apache.logging.log4j.LogManager.getLogger().debug("Failed to check connection throttle", t);
++                }
++                // CraftBukkit end
++                if (packet.protocolVersion() != SharedConstants.getCurrentVersion().getProtocolVersion()) {
++                    MutableComponent ichatmutablecomponent;
++
++                    if (packet.protocolVersion() < 754) {
++                        ichatmutablecomponent = Component.translatable("multiplayer.disconnect.outdated_client", SharedConstants.getCurrentVersion().getName());
+                     } else {
+-                        mutablecomponent = Component.translatable("multiplayer.disconnect.incompatible", SharedConstants.getCurrentVersion().getName());
++                        ichatmutablecomponent = Component.translatable("multiplayer.disconnect.incompatible", SharedConstants.getCurrentVersion().getName());
+                     }
+ 
+-                    this.connection.send(new ClientboundLoginDisconnectPacket(mutablecomponent));
+-                    this.connection.disconnect(mutablecomponent);
++                    this.connection.send(new ClientboundLoginDisconnectPacket(ichatmutablecomponent));
++                    this.connection.disconnect(ichatmutablecomponent);
+                 } else {
+                     this.connection.setListener(new ServerLoginPacketListenerImpl(this.server, this.connection));
+                 }
+                 break;
+             case STATUS:
+-                ServerStatus serverstatus = this.server.getStatus();
++                ServerStatus serverping = this.server.getStatus();
+ 
+-                if (this.server.repliesToStatus() && serverstatus != null) {
++                if (this.server.repliesToStatus() && serverping != null) {
+                     this.connection.setClientboundProtocolAfterHandshake(ClientIntent.STATUS);
+-                    this.connection.setListener(new ServerStatusPacketListenerImpl(serverstatus, this.connection));
++                    this.connection.setListener(new ServerStatusPacketListenerImpl(serverping, this.connection));
+                 } else {
+                     this.connection.disconnect(ServerHandshakePacketListenerImpl.IGNORE_STATUS_REASON);
+                 }
+                 break;
+             default:
+-                throw new UnsupportedOperationException("Invalid intention " + clientintentionpacket.intention());
++                throw new UnsupportedOperationException("Invalid intention " + packet.intention());
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onDisconnect(Component component) {}
++    public void onDisconnect(Component reason) {}
+ 
+     @Override
+-    @Override
+     public boolean isAcceptingMessages() {
+         return this.connection.isConnected();
+     }

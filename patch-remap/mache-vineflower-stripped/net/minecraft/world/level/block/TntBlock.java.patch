@@ -1,0 +1,80 @@
+--- a/net/minecraft/world/level/block/TntBlock.java
++++ b/net/minecraft/world/level/block/TntBlock.java
+@@ -25,6 +25,10 @@
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.BlockHitResult;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.block.TNTPrimeEvent.PrimeCause;
++// CraftBukkit end
+ 
+ public class TntBlock extends Block {
+     public static final MapCodec<TntBlock> CODEC = simpleCodec(TntBlock::new);
+@@ -43,7 +48,7 @@
+     @Override
+     public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+         if (!oldState.is(state.getBlock())) {
+-            if (level.hasNeighborSignal(pos)) {
++            if (level.hasNeighborSignal(pos) && CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.REDSTONE, null, null)) { // CraftBukkit - TNTPrimeEvent
+                 explode(level, pos);
+                 level.removeBlock(pos, false);
+             }
+@@ -51,17 +57,17 @@
+     }
+ 
+     @Override
+-    public void neighborChanged(BlockState state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
+-        if (level.hasNeighborSignal(pos)) {
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
++        if (level.hasNeighborSignal(pos) && CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.REDSTONE, null, fromPos)) { // CraftBukkit - TNTPrimeEvent
+             explode(level, pos);
+             level.removeBlock(pos, false);
+         }
+     }
+ 
+     @Override
+-    public BlockState playerWillDestroy(Level level, BlockPos blockPos, BlockState blockState, Player player) {
+-        if (!level.isClientSide() && !player.isCreative() && blockState.getValue(UNSTABLE)) {
+-            explode(level, blockPos);
++    public IBlockData playerWillDestroy(Level world, BlockPos blockposition, IBlockData iblockdata, Player entityhuman) {
++        if (!world.isClientSide() && !entityhuman.isCreative() && (Boolean) iblockdata.getValue(TntBlock.UNSTABLE) && CraftEventFactory.callTNTPrimeEvent(world, blockposition, PrimeCause.BLOCK_BREAK, entityhuman, null)) { // CraftBukkit - TNTPrimeEvent
++            explode(world, blockposition);
+         }
+ 
+         return super.playerWillDestroy(level, blockPos, blockState, player);
+@@ -98,6 +106,11 @@
+         if (!itemInHand.is(Items.FLINT_AND_STEEL) && !itemInHand.is(Items.FIRE_CHARGE)) {
+             return super.use(state, level, pos, player, hand, hit);
+         } else {
++            // CraftBukkit start - TNTPrimeEvent
++            if (!CraftEventFactory.callTNTPrimeEvent(level, pos, PrimeCause.PLAYER, player, null)) {
++                return InteractionResult.CONSUME;
++            }
++            // CraftBukkit end
+             explode(level, pos, player);
+             level.setBlock(pos, Blocks.AIR.defaultBlockState(), 11);
+             Item item = itemInHand.getItem();
+@@ -117,11 +133,17 @@
+     @Override
+     public void onProjectileHit(Level level, BlockState state, BlockHitResult hit, Projectile projectile) {
+         if (!level.isClientSide) {
+-            BlockPos blockPos = hit.getBlockPos();
+-            Entity owner = projectile.getOwner();
+-            if (projectile.isOnFire() && projectile.mayInteract(level, blockPos)) {
+-                explode(level, blockPos, owner instanceof LivingEntity ? (LivingEntity)owner : null);
+-                level.removeBlock(blockPos, false);
++            BlockPos blockposition = hit.getBlockPos();
++            Entity entity = projectile.getOwner();
++
++            if (projectile.isOnFire() && projectile.mayInteract(level, blockposition)) {
++                // CraftBukkit start
++                if (!org.bukkit.craftbukkit.event.CraftEventFactory.callEntityChangeBlockEvent(projectile, blockposition, Blocks.AIR.defaultBlockState()) || !CraftEventFactory.callTNTPrimeEvent(level, blockposition, PrimeCause.PROJECTILE, projectile, null)) {
++                    return;
++                }
++                // CraftBukkit end
++                explode(level, blockposition, entity instanceof LivingEntity ? (LivingEntity) entity : null);
++                level.removeBlock(blockposition, false);
+             }
+         }
+     }

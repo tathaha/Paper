@@ -1,0 +1,156 @@
+--- a/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java
++++ b/net/minecraft/core/dispenser/DefaultDispenseItemBehavior.java
+@@ -1,54 +1,122 @@
+ package net.minecraft.core.dispenser;
+ 
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.Position;
++import net.minecraft.core.IPosition;
+ import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.DispenserBlock;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.craftbukkit.util.CraftVector;
++import org.bukkit.event.block.BlockDispenseEvent;
++// CraftBukkit end
+ 
+ public class DefaultDispenseItemBehavior implements DispenseItemBehavior {
++
++    // CraftBukkit start
++    private boolean dropper;
++
++    public DefaultDispenseItemBehavior(boolean dropper) {
++        this.dropper = dropper;
++    }
++    // CraftBukkit end
++
++    public DefaultDispenseItemBehavior() {}
++
+     @Override
+-    public final ItemStack dispense(BlockSource blockSource, ItemStack itemStack) {
+-        ItemStack itemStack1 = this.execute(blockSource, itemStack);
+-        this.playSound(blockSource);
+-        this.playAnimation(blockSource, blockSource.state().getValue(DispenserBlock.FACING));
+-        return itemStack1;
++    public final ItemStack dispense(SourceBlock sourceblock, ItemStack itemstack) {
++        ItemStack itemstack1 = this.execute(sourceblock, itemstack);
++
++        this.playSound(sourceblock);
++        this.playAnimation(sourceblock, (Direction) sourceblock.state().getValue(DispenserBlock.FACING));
++        return itemstack1;
+     }
+ 
+-    protected ItemStack execute(BlockSource blockSource, ItemStack itemStack) {
+-        Direction direction = blockSource.state().getValue(DispenserBlock.FACING);
+-        Position dispensePosition = DispenserBlock.getDispensePosition(blockSource);
+-        ItemStack itemStack1 = itemStack.split(1);
+-        spawnItem(blockSource.level(), itemStack1, 6, direction, dispensePosition);
+-        return itemStack;
++    protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
++        Direction enumdirection = (Direction) sourceblock.state().getValue(DispenserBlock.FACING);
++        IPosition iposition = DispenserBlock.getDispensePosition(sourceblock);
++        ItemStack itemstack1 = itemstack.split(1);
++
++        // CraftBukkit start
++        if (!spawnItem(sourceblock.level(), itemstack1, 6, enumdirection, sourceblock, dropper)) {
++            itemstack.grow(1);
++        }
++        // CraftBukkit end
++        return itemstack;
+     }
+ 
+-    public static void spawnItem(Level level, ItemStack stack, int speed, Direction facing, Position position) {
+-        double d = position.x();
+-        double d1 = position.y();
+-        double d2 = position.z();
+-        if (facing.getAxis() == Direction.Axis.Y) {
+-            d1 -= 0.125;
++    public static void spawnItem(Level level, ItemStack stack, int speed, Direction facing, IPosition position) {
++        // CraftBukkit start
++        ItemEntity entityitem = prepareItem(level, stack, speed, facing, position);
++        level.addFreshEntity(entityitem);
++    }
++
++    private static ItemEntity prepareItem(Level world, ItemStack itemstack, int i, Direction enumdirection, IPosition iposition) {
++        // CraftBukkit end
++        double d0 = iposition.x();
++        double d1 = iposition.y();
++        double d2 = iposition.z();
++
++        if (enumdirection.getAxis() == Direction.Axis.Y) {
++            d1 -= 0.125D;
+         } else {
+-            d1 -= 0.15625;
++            d1 -= 0.15625D;
+         }
+ 
+-        ItemEntity itemEntity = new ItemEntity(level, d, d1, d2, stack);
+-        double d3 = level.random.nextDouble() * 0.1 + 0.2;
+-        itemEntity.setDeltaMovement(
+-            level.random.triangle((double)facing.getStepX() * d3, 0.0172275 * (double)speed),
+-            level.random.triangle(0.2, 0.0172275 * (double)speed),
+-            level.random.triangle((double)facing.getStepZ() * d3, 0.0172275 * (double)speed)
+-        );
+-        level.addFreshEntity(itemEntity);
++        ItemEntity entityitem = new ItemEntity(world, d0, d1, d2, itemstack);
++        double d3 = world.random.nextDouble() * 0.1D + 0.2D;
++
++        entityitem.setDeltaMovement(world.random.triangle((double) enumdirection.getStepX() * d3, 0.0172275D * (double) i), world.random.triangle(0.2D, 0.0172275D * (double) i), world.random.triangle((double) enumdirection.getStepZ() * d3, 0.0172275D * (double) i));
++        // CraftBukkit start
++        return entityitem;
+     }
+ 
+-    protected void playSound(BlockSource blockSource) {
+-        blockSource.level().levelEvent(1000, blockSource.pos(), 0);
++    // CraftBukkit - void -> boolean return, IPosition -> ISourceBlock last argument, dropper
++    public static boolean spawnItem(Level world, ItemStack itemstack, int i, Direction enumdirection, SourceBlock sourceblock, boolean dropper) {
++        if (itemstack.isEmpty()) return true;
++        IPosition iposition = DispenserBlock.getDispensePosition(sourceblock);
++        ItemEntity entityitem = prepareItem(world, itemstack, i, enumdirection, iposition);
++
++        org.bukkit.block.Block block = CraftBlock.at(world, sourceblock.pos());
++        CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack);
++
++        BlockDispenseEvent event = new BlockDispenseEvent(block, craftItem.clone(), CraftVector.toBukkit(entityitem.getDeltaMovement()));
++        if (!DispenserBlock.eventFired) {
++            world.getCraftServer().getPluginManager().callEvent(event);
++        }
++
++        if (event.isCancelled()) {
++            return false;
++        }
++
++        entityitem.setItem(CraftItemStack.asNMSCopy(event.getItem()));
++        entityitem.setDeltaMovement(CraftVector.toNMS(event.getVelocity()));
++
++        if (!dropper && !event.getItem().getType().equals(craftItem.getType())) {
++            // Chain to handler for new item
++            ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++            DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++            if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior.getClass() != DefaultDispenseItemBehavior.class) {
++                idispensebehavior.dispense(sourceblock, eventStack);
++            } else {
++                world.addFreshEntity(entityitem);
++            }
++            return false;
++        }
++
++        world.addFreshEntity(entityitem);
++
++        return true;
++        // CraftBukkit end
+     }
+ 
+-    protected void playAnimation(BlockSource blockSource, Direction direction) {
+-        blockSource.level().levelEvent(2000, blockSource.pos(), direction.get3DDataValue());
++    protected void playSound(SourceBlock sourceblock) {
++        sourceblock.level().levelEvent(1000, sourceblock.pos(), 0);
+     }
++
++    protected void playAnimation(SourceBlock sourceblock, Direction enumdirection) {
++        sourceblock.level().levelEvent(2000, sourceblock.pos(), enumdirection.get3DDataValue());
++    }
+ }

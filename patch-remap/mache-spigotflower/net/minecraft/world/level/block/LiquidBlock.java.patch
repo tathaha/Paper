@@ -1,0 +1,278 @@
+--- a/net/minecraft/world/level/block/LiquidBlock.java
++++ b/net/minecraft/world/level/block/LiquidBlock.java
+@@ -24,13 +24,13 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.IntegerProperty;
+ import net.minecraft.world.level.material.FlowingFluid;
+ import net.minecraft.world.level.material.FluidState;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.level.storage.loot.LootParams;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+@@ -38,26 +38,26 @@
+ 
+ public class LiquidBlock extends Block implements BucketPickup {
+ 
+-    private static final Codec<FlowingFluid> FLOWING_FLUID = BuiltInRegistries.FLUID.byNameCodec().comapFlatMap((fluid) -> {
+-        DataResult dataresult;
++    private static final Codec<FlowingFluid> FLOWING_FLUID = BuiltInRegistries.FLUID.byNameCodec().comapFlatMap((fluidtype) -> {
++        DataResult<FlowingFluid> dataresult; // CraftBukkit - decompile error
+ 
+-        if (fluid instanceof FlowingFluid) {
+-            FlowingFluid flowingfluid = (FlowingFluid) fluid;
++        if (fluidtype instanceof FlowingFluid) {
++            FlowingFluid fluidtypeflowing = (FlowingFluid) fluidtype;
+ 
+-            dataresult = DataResult.success(flowingfluid);
++            dataresult = DataResult.success(fluidtypeflowing);
+         } else {
+             dataresult = DataResult.error(() -> {
+-                return "Not a flowing fluid: " + fluid;
++                return "Not a flowing fluid: " + fluidtype;
+             });
+         }
+ 
+         return dataresult;
+-    }, (flowingfluid) -> {
+-        return flowingfluid;
++    }, (fluidtypeflowing) -> {
++        return fluidtypeflowing;
+     });
+     public static final MapCodec<LiquidBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
+-        return instance.group(LiquidBlock.FLOWING_FLUID.fieldOf("fluid").forGetter((liquidblock) -> {
+-            return liquidblock.fluid;
++        return instance.group(LiquidBlock.FLOWING_FLUID.fieldOf("fluid").forGetter((blockfluids) -> {
++            return blockfluids.fluid;
+         }), propertiesCodec()).apply(instance, LiquidBlock::new);
+     });
+     public static final IntegerProperty LEVEL = BlockStateProperties.LEVEL;
+@@ -67,135 +67,127 @@
+     public static final ImmutableList<Direction> POSSIBLE_FLOW_DIRECTIONS = ImmutableList.of(Direction.DOWN, Direction.SOUTH, Direction.NORTH, Direction.EAST, Direction.WEST);
+ 
+     @Override
+-    @Override
+     public MapCodec<LiquidBlock> codec() {
+         return LiquidBlock.CODEC;
+     }
+ 
+-    protected LiquidBlock(FlowingFluid flowingfluid, BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.fluid = flowingfluid;
++    protected LiquidBlock(FlowingFluid fluid, BlockBehaviour.Properties properties) {
++        super(properties);
++        this.fluid = fluid;
+         this.stateCache = Lists.newArrayList();
+-        this.stateCache.add(flowingfluid.getSource(false));
++        this.stateCache.add(fluid.getSource(false));
+ 
+         for (int i = 1; i < 8; ++i) {
+-            this.stateCache.add(flowingfluid.getFlowing(8 - i, false));
++            this.stateCache.add(fluid.getFlowing(8 - i, false));
+         }
+ 
+-        this.stateCache.add(flowingfluid.getFlowing(8, true));
+-        this.registerDefaultState((BlockState) ((BlockState) this.stateDefinition.any()).setValue(LiquidBlock.LEVEL, 0));
++        this.stateCache.add(fluid.getFlowing(8, true));
++        this.registerDefaultState((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(LiquidBlock.LEVEL, 0));
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getCollisionShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return collisioncontext.isAbove(LiquidBlock.STABLE_SHAPE, blockpos, true) && (Integer) blockstate.getValue(LiquidBlock.LEVEL) == 0 && collisioncontext.canStandOnFluid(blockgetter.getFluidState(blockpos.above()), blockstate.getFluidState()) ? LiquidBlock.STABLE_SHAPE : Shapes.empty();
++    public VoxelShape getCollisionShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return context.isAbove(LiquidBlock.STABLE_SHAPE, pos, true) && (Integer) state.getValue(LiquidBlock.LEVEL) == 0 && context.canStandOnFluid(level.getFluidState(pos.above()), state.getFluidState()) ? LiquidBlock.STABLE_SHAPE : Shapes.empty();
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isRandomlyTicking(BlockState blockstate) {
+-        return blockstate.getFluidState().isRandomlyTicking();
++    public boolean isRandomlyTicking(IBlockData state) {
++        return state.getFluidState().isRandomlyTicking();
+     }
+ 
+     @Override
+-    @Override
+-    public void randomTick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        blockstate.getFluidState().randomTick(serverlevel, blockpos, randomsource);
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        state.getFluidState().randomTick(level, pos, random);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean propagatesSkylightDown(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
++    public boolean propagatesSkylightDown(IBlockData state, BlockGetter reader, BlockPos pos) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return !this.fluid.is(FluidTags.LAVA);
+     }
+ 
+     @Override
+-    @Override
+-    public FluidState getFluidState(BlockState blockstate) {
+-        int i = (Integer) blockstate.getValue(LiquidBlock.LEVEL);
++    public FluidState getFluidState(IBlockData state) {
++        int i = (Integer) state.getValue(LiquidBlock.LEVEL);
+ 
+         return (FluidState) this.stateCache.get(Math.min(i, 8));
+     }
+ 
+     @Override
+-    @Override
+-    public boolean skipRendering(BlockState blockstate, BlockState blockstate1, Direction direction) {
+-        return blockstate1.getFluidState().getType().isSame(this.fluid);
++    public boolean skipRendering(IBlockData state, IBlockData adjacentBlockState, Direction side) {
++        return adjacentBlockState.getFluidState().getType().isSame(this.fluid);
+     }
+ 
+     @Override
+-    @Override
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.INVISIBLE;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.INVISIBLE;
+     }
+ 
+     @Override
+-    @Override
+-    public List<ItemStack> getDrops(BlockState blockstate, LootParams.Builder lootparams_builder) {
++    public List<ItemStack> getDrops(IBlockData state, LootParams.Builder params) {
+         return Collections.emptyList();
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return Shapes.empty();
+     }
+ 
+     @Override
+-    @Override
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (this.shouldSpreadLiquid(level, blockpos, blockstate)) {
+-            level.scheduleTick(blockpos, blockstate.getFluidState().getType(), this.fluid.getTickDelay(level));
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
++        if (this.shouldSpreadLiquid(level, pos, state)) {
++            level.scheduleTick(pos, state.getFluidState().getType(), this.fluid.getTickDelay(level));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        if (blockstate.getFluidState().isSource() || blockstate1.getFluidState().isSource()) {
+-            levelaccessor.scheduleTick(blockpos, blockstate.getFluidState().getType(), this.fluid.getTickDelay(levelaccessor));
++    public IBlockData updateShape(IBlockData state, Direction facing, IBlockData facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
++        if (state.getFluidState().isSource() || facingState.getFluidState().isSource()) {
++            level.scheduleTick(currentPos, state.getFluidState().getType(), this.fluid.getTickDelay(level));
+         }
+ 
+-        return super.updateShape(blockstate, direction, blockstate1, levelaccessor, blockpos, blockpos1);
++        return super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+     }
+ 
+     @Override
+-    @Override
+-    public void neighborChanged(BlockState blockstate, Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-        if (this.shouldSpreadLiquid(level, blockpos, blockstate)) {
+-            level.scheduleTick(blockpos, blockstate.getFluidState().getType(), this.fluid.getTickDelay(level));
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
++        if (this.shouldSpreadLiquid(level, pos, state)) {
++            level.scheduleTick(pos, state.getFluidState().getType(), this.fluid.getTickDelay(level));
+         }
+ 
+     }
+ 
+-    private boolean shouldSpreadLiquid(Level level, BlockPos blockpos, BlockState blockstate) {
++    private boolean shouldSpreadLiquid(Level level, BlockPos pos, IBlockData state) {
+         if (this.fluid.is(FluidTags.LAVA)) {
+-            boolean flag = level.getBlockState(blockpos.below()).is(Blocks.SOUL_SOIL);
++            boolean flag = level.getBlockState(pos.below()).is(Blocks.SOUL_SOIL);
+             UnmodifiableIterator unmodifiableiterator = LiquidBlock.POSSIBLE_FLOW_DIRECTIONS.iterator();
+ 
+             while (unmodifiableiterator.hasNext()) {
+-                Direction direction = (Direction) unmodifiableiterator.next();
+-                BlockPos blockpos1 = blockpos.relative(direction.getOpposite());
++                Direction enumdirection = (Direction) unmodifiableiterator.next();
++                BlockPos blockposition1 = pos.relative(enumdirection.getOpposite());
+ 
+-                if (level.getFluidState(blockpos1).is(FluidTags.WATER)) {
+-                    Block block = level.getFluidState(blockpos).isSource() ? Blocks.OBSIDIAN : Blocks.COBBLESTONE;
++                if (level.getFluidState(blockposition1).is(FluidTags.WATER)) {
++                    Block block = level.getFluidState(pos).isSource() ? Blocks.OBSIDIAN : Blocks.COBBLESTONE;
+ 
+-                    level.setBlockAndUpdate(blockpos, block.defaultBlockState());
+-                    this.fizz(level, blockpos);
++                    // CraftBukkit start
++                    if (org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockFormEvent(level, pos, block.defaultBlockState())) {
++                        this.fizz(level, pos);
++                    }
++                    // CraftBukkit end
+                     return false;
+                 }
+ 
+-                if (flag && level.getBlockState(blockpos1).is(Blocks.BLUE_ICE)) {
+-                    level.setBlockAndUpdate(blockpos, Blocks.BASALT.defaultBlockState());
+-                    this.fizz(level, blockpos);
++                if (flag && level.getBlockState(blockposition1).is(Blocks.BLUE_ICE)) {
++                    // CraftBukkit start
++                    if (org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockFormEvent(level, pos, Blocks.BASALT.defaultBlockState())) {
++                        this.fizz(level, pos);
++                    }
++                    // CraftBukkit end
+                     return false;
+                 }
+             }
+@@ -204,21 +196,19 @@
+         return true;
+     }
+ 
+-    private void fizz(LevelAccessor levelaccessor, BlockPos blockpos) {
+-        levelaccessor.levelEvent(1501, blockpos, 0);
++    private void fizz(LevelAccessor level, BlockPos pos) {
++        level.levelEvent(1501, pos, 0);
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(LiquidBlock.LEVEL);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(LiquidBlock.LEVEL);
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack pickupBlock(@Nullable Player player, LevelAccessor levelaccessor, BlockPos blockpos, BlockState blockstate) {
+-        if ((Integer) blockstate.getValue(LiquidBlock.LEVEL) == 0) {
+-            levelaccessor.setBlock(blockpos, Blocks.AIR.defaultBlockState(), 11);
++    public ItemStack pickupBlock(@Nullable Player entityhuman, LevelAccessor generatoraccess, BlockPos blockposition, IBlockData iblockdata) {
++        if ((Integer) iblockdata.getValue(LiquidBlock.LEVEL) == 0) {
++            generatoraccess.setBlock(blockposition, Blocks.AIR.defaultBlockState(), 11);
+             return new ItemStack(this.fluid.getBucket());
+         } else {
+             return ItemStack.EMPTY;
+@@ -226,7 +216,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public Optional<SoundEvent> getPickupSound() {
+         return this.fluid.getPickupSound();
+     }

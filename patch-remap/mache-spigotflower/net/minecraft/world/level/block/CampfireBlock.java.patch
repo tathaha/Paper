@@ -1,0 +1,394 @@
+--- a/net/minecraft/world/level/block/CampfireBlock.java
++++ b/net/minecraft/world/level/block/CampfireBlock.java
+@@ -15,7 +15,7 @@
+ import net.minecraft.tags.BlockTags;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.Containers;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.LivingEntity;
+@@ -34,7 +34,7 @@
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+ import net.minecraft.world.level.block.entity.CampfireBlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+@@ -43,20 +43,23 @@
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++// CraftBukkit end
+ 
+ public class CampfireBlock extends BaseEntityBlock implements SimpleWaterloggedBlock {
+ 
+     public static final MapCodec<CampfireBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
+-        return instance.group(Codec.BOOL.fieldOf("spawn_particles").forGetter((campfireblock) -> {
+-            return campfireblock.spawnParticles;
+-        }), Codec.intRange(0, 1000).fieldOf("fire_damage").forGetter((campfireblock) -> {
+-            return campfireblock.fireDamage;
++        return instance.group(Codec.BOOL.fieldOf("spawn_particles").forGetter((blockcampfire) -> {
++            return blockcampfire.spawnParticles;
++        }), Codec.intRange(0, 1000).fieldOf("fire_damage").forGetter((blockcampfire) -> {
++            return blockcampfire.fireDamage;
+         }), propertiesCodec()).apply(instance, CampfireBlock::new);
+     });
+     protected static final VoxelShape SHAPE = Block.box(0.0D, 0.0D, 0.0D, 16.0D, 7.0D, 16.0D);
+@@ -70,30 +73,28 @@
+     private final int fireDamage;
+ 
+     @Override
+-    @Override
+     public MapCodec<CampfireBlock> codec() {
+         return CampfireBlock.CODEC;
+     }
+ 
+-    public CampfireBlock(boolean flag, int i, BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.spawnParticles = flag;
+-        this.fireDamage = i;
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(CampfireBlock.LIT, true)).setValue(CampfireBlock.SIGNAL_FIRE, false)).setValue(CampfireBlock.WATERLOGGED, false)).setValue(CampfireBlock.FACING, Direction.NORTH));
++    public CampfireBlock(boolean spawnParticles, int fireDamage, BlockBehaviour.Properties properties) {
++        super(properties);
++        this.spawnParticles = spawnParticles;
++        this.fireDamage = fireDamage;
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(CampfireBlock.LIT, true)).setValue(CampfireBlock.SIGNAL_FIRE, false)).setValue(CampfireBlock.WATERLOGGED, false)).setValue(CampfireBlock.FACING, Direction.NORTH));
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult use(BlockState blockstate, Level level, BlockPos blockpos, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
+-        BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
++        BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-        if (blockentity instanceof CampfireBlockEntity) {
+-            CampfireBlockEntity campfireblockentity = (CampfireBlockEntity) blockentity;
+-            ItemStack itemstack = player.getItemInHand(interactionhand);
+-            Optional<RecipeHolder<CampfireCookingRecipe>> optional = campfireblockentity.getCookableRecipe(itemstack);
++        if (tileentity instanceof CampfireBlockEntity) {
++            CampfireBlockEntity tileentitycampfire = (CampfireBlockEntity) tileentity;
++            ItemStack itemstack = player.getItemInHand(hand);
++            Optional<RecipeHolder<CampfireCookingRecipe>> optional = tileentitycampfire.getCookableRecipe(itemstack);
+ 
+             if (optional.isPresent()) {
+-                if (!level.isClientSide && campfireblockentity.placeFood(player, player.getAbilities().instabuild ? itemstack.copy() : itemstack, ((CampfireCookingRecipe) ((RecipeHolder) optional.get()).value()).getCookingTime())) {
++                if (!level.isClientSide && tileentitycampfire.placeFood(player, player.getAbilities().instabuild ? itemstack.copy() : itemstack, ((CampfireCookingRecipe) ((RecipeHolder) optional.get()).value()).getCookingTime())) {
+                     player.awardStat(Stats.INTERACT_WITH_CAMPFIRE);
+                     return InteractionResult.SUCCESS;
+                 }
+@@ -106,115 +107,109 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void entityInside(BlockState blockstate, Level level, BlockPos blockpos, Entity entity) {
+-        if ((Boolean) blockstate.getValue(CampfireBlock.LIT) && entity instanceof LivingEntity && !EnchantmentHelper.hasFrostWalker((LivingEntity) entity)) {
++    public void entityInside(IBlockData state, Level level, BlockPos pos, Entity entity) {
++        if ((Boolean) state.getValue(CampfireBlock.LIT) && entity instanceof LivingEntity && !EnchantmentHelper.hasFrostWalker((LivingEntity) entity)) {
++            org.bukkit.craftbukkit.event.CraftEventFactory.blockDamage = CraftBlock.at(level, pos); // CraftBukkit
+             entity.hurt(level.damageSources().inFire(), (float) this.fireDamage);
++            org.bukkit.craftbukkit.event.CraftEventFactory.blockDamage = null; // CraftBukkit
+         }
+ 
+-        super.entityInside(blockstate, level, blockpos, entity);
++        super.entityInside(state, level, pos, entity);
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!blockstate.is(blockstate1.getBlock())) {
+-            BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean isMoving) {
++        if (!state.is(newState.getBlock())) {
++            BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-            if (blockentity instanceof CampfireBlockEntity) {
+-                Containers.dropContents(level, blockpos, ((CampfireBlockEntity) blockentity).getItems());
++            if (tileentity instanceof CampfireBlockEntity) {
++                Containers.dropContents(level, pos, ((CampfireBlockEntity) tileentity).getItems());
+             }
+ 
+-            super.onRemove(blockstate, level, blockpos, blockstate1, flag);
++            super.onRemove(state, level, pos, newState, isMoving);
+         }
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        Level level = blockplacecontext.getLevel();
+-        BlockPos blockpos = blockplacecontext.getClickedPos();
+-        boolean flag = level.getFluidState(blockpos).getType() == Fluids.WATER;
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        Level world = context.getLevel();
++        BlockPos blockposition = context.getClickedPos();
++        boolean flag = world.getFluidState(blockposition).getType() == Fluids.WATER;
+ 
+-        return (BlockState) ((BlockState) ((BlockState) ((BlockState) this.defaultBlockState().setValue(CampfireBlock.WATERLOGGED, flag)).setValue(CampfireBlock.SIGNAL_FIRE, this.isSmokeSource(level.getBlockState(blockpos.below())))).setValue(CampfireBlock.LIT, !flag)).setValue(CampfireBlock.FACING, blockplacecontext.getHorizontalDirection());
++        return (IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.defaultBlockState().setValue(CampfireBlock.WATERLOGGED, flag)).setValue(CampfireBlock.SIGNAL_FIRE, this.isSmokeSource(world.getBlockState(blockposition.below())))).setValue(CampfireBlock.LIT, !flag)).setValue(CampfireBlock.FACING, context.getHorizontalDirection());
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        if ((Boolean) blockstate.getValue(CampfireBlock.WATERLOGGED)) {
+-            levelaccessor.scheduleTick(blockpos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(levelaccessor));
++    public IBlockData updateShape(IBlockData state, Direction facing, IBlockData facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
++        if ((Boolean) state.getValue(CampfireBlock.WATERLOGGED)) {
++            level.scheduleTick(currentPos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(level));
+         }
+ 
+-        return direction == Direction.DOWN ? (BlockState) blockstate.setValue(CampfireBlock.SIGNAL_FIRE, this.isSmokeSource(blockstate1)) : super.updateShape(blockstate, direction, blockstate1, levelaccessor, blockpos, blockpos1);
++        return facing == Direction.DOWN ? (IBlockData) state.setValue(CampfireBlock.SIGNAL_FIRE, this.isSmokeSource(facingState)) : super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+     }
+ 
+-    private boolean isSmokeSource(BlockState blockstate) {
+-        return blockstate.is(Blocks.HAY_BLOCK);
++    private boolean isSmokeSource(IBlockData state) {
++        return state.is(Blocks.HAY_BLOCK);
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return CampfireBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.MODEL;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.MODEL;
+     }
+ 
+     @Override
+-    @Override
+-    public void animateTick(BlockState blockstate, Level level, BlockPos blockpos, RandomSource randomsource) {
+-        if ((Boolean) blockstate.getValue(CampfireBlock.LIT)) {
+-            if (randomsource.nextInt(10) == 0) {
+-                level.playLocalSound((double) blockpos.getX() + 0.5D, (double) blockpos.getY() + 0.5D, (double) blockpos.getZ() + 0.5D, SoundEvents.CAMPFIRE_CRACKLE, SoundSource.BLOCKS, 0.5F + randomsource.nextFloat(), randomsource.nextFloat() * 0.7F + 0.6F, false);
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(CampfireBlock.LIT)) {
++            if (random.nextInt(10) == 0) {
++                level.playLocalSound((double) pos.getX() + 0.5D, (double) pos.getY() + 0.5D, (double) pos.getZ() + 0.5D, SoundEvents.CAMPFIRE_CRACKLE, SoundSource.BLOCKS, 0.5F + random.nextFloat(), random.nextFloat() * 0.7F + 0.6F, false);
+             }
+ 
+-            if (this.spawnParticles && randomsource.nextInt(5) == 0) {
+-                for (int i = 0; i < randomsource.nextInt(1) + 1; ++i) {
+-                    level.addParticle(ParticleTypes.LAVA, (double) blockpos.getX() + 0.5D, (double) blockpos.getY() + 0.5D, (double) blockpos.getZ() + 0.5D, (double) (randomsource.nextFloat() / 2.0F), 5.0E-5D, (double) (randomsource.nextFloat() / 2.0F));
++            if (this.spawnParticles && random.nextInt(5) == 0) {
++                for (int i = 0; i < random.nextInt(1) + 1; ++i) {
++                    level.addParticle(ParticleTypes.LAVA, (double) pos.getX() + 0.5D, (double) pos.getY() + 0.5D, (double) pos.getZ() + 0.5D, (double) (random.nextFloat() / 2.0F), 5.0E-5D, (double) (random.nextFloat() / 2.0F));
+                 }
+             }
+ 
+         }
+     }
+ 
+-    public static void dowse(@Nullable Entity entity, LevelAccessor levelaccessor, BlockPos blockpos, BlockState blockstate) {
+-        if (levelaccessor.isClientSide()) {
++    public static void dowse(@Nullable Entity entity, LevelAccessor level, BlockPos pos, IBlockData state) {
++        if (level.isClientSide()) {
+             for (int i = 0; i < 20; ++i) {
+-                makeParticles((Level) levelaccessor, blockpos, (Boolean) blockstate.getValue(CampfireBlock.SIGNAL_FIRE), true);
++                makeParticles((Level) level, pos, (Boolean) state.getValue(CampfireBlock.SIGNAL_FIRE), true);
+             }
+         }
+ 
+-        BlockEntity blockentity = levelaccessor.getBlockEntity(blockpos);
++        BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-        if (blockentity instanceof CampfireBlockEntity) {
+-            ((CampfireBlockEntity) blockentity).dowse();
++        if (tileentity instanceof CampfireBlockEntity) {
++            ((CampfireBlockEntity) tileentity).dowse();
+         }
+ 
+-        levelaccessor.gameEvent(entity, GameEvent.BLOCK_CHANGE, blockpos);
++        level.gameEvent(entity, GameEvent.BLOCK_CHANGE, pos);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean placeLiquid(LevelAccessor levelaccessor, BlockPos blockpos, BlockState blockstate, FluidState fluidstate) {
+-        if (!(Boolean) blockstate.getValue(BlockStateProperties.WATERLOGGED) && fluidstate.getType() == Fluids.WATER) {
+-            boolean flag = (Boolean) blockstate.getValue(CampfireBlock.LIT);
++    public boolean placeLiquid(LevelAccessor level, BlockPos pos, IBlockData state, FluidState fluidState) {
++        if (!(Boolean) state.getValue(BlockStateProperties.WATERLOGGED) && fluidState.getType() == Fluids.WATER) {
++            boolean flag = (Boolean) state.getValue(CampfireBlock.LIT);
+ 
+             if (flag) {
+-                if (!levelaccessor.isClientSide()) {
+-                    levelaccessor.playSound((Player) null, blockpos, SoundEvents.GENERIC_EXTINGUISH_FIRE, SoundSource.BLOCKS, 1.0F, 1.0F);
++                if (!level.isClientSide()) {
++                    level.playSound((Player) null, pos, SoundEvents.GENERIC_EXTINGUISH_FIRE, SoundSource.BLOCKS, 1.0F, 1.0F);
+                 }
+ 
+-                dowse((Entity) null, levelaccessor, blockpos, blockstate);
++                dowse((Entity) null, level, pos, state);
+             }
+ 
+-            levelaccessor.setBlock(blockpos, (BlockState) ((BlockState) blockstate.setValue(CampfireBlock.WATERLOGGED, true)).setValue(CampfireBlock.LIT, false), 3);
+-            levelaccessor.scheduleTick(blockpos, fluidstate.getType(), fluidstate.getType().getTickDelay(levelaccessor));
++            level.setBlock(pos, (IBlockData) ((IBlockData) state.setValue(CampfireBlock.WATERLOGGED, true)).setValue(CampfireBlock.LIT, false), 3);
++            level.scheduleTick(pos, fluidState.getType(), fluidState.getType().getTickDelay(level));
+             return true;
+         } else {
+             return false;
+@@ -222,98 +217,95 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void onProjectileHit(Level level, BlockState blockstate, BlockHitResult blockhitresult, Projectile projectile) {
+-        BlockPos blockpos = blockhitresult.getBlockPos();
++    public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {
++        BlockPos blockposition = hit.getBlockPos();
+ 
+-        if (!level.isClientSide && projectile.isOnFire() && projectile.mayInteract(level, blockpos) && !(Boolean) blockstate.getValue(CampfireBlock.LIT) && !(Boolean) blockstate.getValue(CampfireBlock.WATERLOGGED)) {
+-            level.setBlock(blockpos, (BlockState) blockstate.setValue(BlockStateProperties.LIT, true), 11);
++        if (!level.isClientSide && projectile.isOnFire() && projectile.mayInteract(level, blockposition) && !(Boolean) state.getValue(CampfireBlock.LIT) && !(Boolean) state.getValue(CampfireBlock.WATERLOGGED)) {
++            // CraftBukkit start
++            if (org.bukkit.craftbukkit.event.CraftEventFactory.callBlockIgniteEvent(level, blockposition, projectile).isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++            level.setBlock(blockposition, (IBlockData) state.setValue(BlockStateProperties.LIT, true), 11);
+         }
+ 
+     }
+ 
+-    public static void makeParticles(Level level, BlockPos blockpos, boolean flag, boolean flag1) {
++    public static void makeParticles(Level level, BlockPos pos, boolean isSignalFire, boolean spawnExtraSmoke) {
+         RandomSource randomsource = level.getRandom();
+-        SimpleParticleType simpleparticletype = flag ? ParticleTypes.CAMPFIRE_SIGNAL_SMOKE : ParticleTypes.CAMPFIRE_COSY_SMOKE;
++        SimpleParticleType particletype = isSignalFire ? ParticleTypes.CAMPFIRE_SIGNAL_SMOKE : ParticleTypes.CAMPFIRE_COSY_SMOKE;
+ 
+-        level.addAlwaysVisibleParticle(simpleparticletype, true, (double) blockpos.getX() + 0.5D + randomsource.nextDouble() / 3.0D * (double) (randomsource.nextBoolean() ? 1 : -1), (double) blockpos.getY() + randomsource.nextDouble() + randomsource.nextDouble(), (double) blockpos.getZ() + 0.5D + randomsource.nextDouble() / 3.0D * (double) (randomsource.nextBoolean() ? 1 : -1), 0.0D, 0.07D, 0.0D);
+-        if (flag1) {
+-            level.addParticle(ParticleTypes.SMOKE, (double) blockpos.getX() + 0.5D + randomsource.nextDouble() / 4.0D * (double) (randomsource.nextBoolean() ? 1 : -1), (double) blockpos.getY() + 0.4D, (double) blockpos.getZ() + 0.5D + randomsource.nextDouble() / 4.0D * (double) (randomsource.nextBoolean() ? 1 : -1), 0.0D, 0.005D, 0.0D);
++        level.addAlwaysVisibleParticle(particletype, true, (double) pos.getX() + 0.5D + randomsource.nextDouble() / 3.0D * (double) (randomsource.nextBoolean() ? 1 : -1), (double) pos.getY() + randomsource.nextDouble() + randomsource.nextDouble(), (double) pos.getZ() + 0.5D + randomsource.nextDouble() / 3.0D * (double) (randomsource.nextBoolean() ? 1 : -1), 0.0D, 0.07D, 0.0D);
++        if (spawnExtraSmoke) {
++            level.addParticle(ParticleTypes.SMOKE, (double) pos.getX() + 0.5D + randomsource.nextDouble() / 4.0D * (double) (randomsource.nextBoolean() ? 1 : -1), (double) pos.getY() + 0.4D, (double) pos.getZ() + 0.5D + randomsource.nextDouble() / 4.0D * (double) (randomsource.nextBoolean() ? 1 : -1), 0.0D, 0.005D, 0.0D);
+         }
+ 
+     }
+ 
+-    public static boolean isSmokeyPos(Level level, BlockPos blockpos) {
++    public static boolean isSmokeyPos(Level level, BlockPos pos) {
+         for (int i = 1; i <= 5; ++i) {
+-            BlockPos blockpos1 = blockpos.below(i);
+-            BlockState blockstate = level.getBlockState(blockpos1);
++            BlockPos blockposition1 = pos.below(i);
++            IBlockData iblockdata = level.getBlockState(blockposition1);
+ 
+-            if (isLitCampfire(blockstate)) {
++            if (isLitCampfire(iblockdata)) {
+                 return true;
+             }
+ 
+-            boolean flag = Shapes.joinIsNotEmpty(CampfireBlock.VIRTUAL_FENCE_POST, blockstate.getCollisionShape(level, blockpos, CollisionContext.empty()), BooleanOp.AND);
++            boolean flag = Shapes.joinIsNotEmpty(CampfireBlock.VIRTUAL_FENCE_POST, iblockdata.getCollisionShape(level, pos, CollisionContext.empty()), BooleanOp.AND);
+ 
+             if (flag) {
+-                BlockState blockstate1 = level.getBlockState(blockpos1.below());
++                IBlockData iblockdata1 = level.getBlockState(blockposition1.below());
+ 
+-                return isLitCampfire(blockstate1);
++                return isLitCampfire(iblockdata1);
+             }
+         }
+ 
+         return false;
+     }
+ 
+-    public static boolean isLitCampfire(BlockState blockstate) {
+-        return blockstate.hasProperty(CampfireBlock.LIT) && blockstate.is(BlockTags.CAMPFIRES) && (Boolean) blockstate.getValue(CampfireBlock.LIT);
++    public static boolean isLitCampfire(IBlockData state) {
++        return state.hasProperty(CampfireBlock.LIT) && state.is(BlockTags.CAMPFIRES) && (Boolean) state.getValue(CampfireBlock.LIT);
+     }
+ 
+     @Override
+-    @Override
+-    public FluidState getFluidState(BlockState blockstate) {
+-        return (Boolean) blockstate.getValue(CampfireBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(blockstate);
++    public FluidState getFluidState(IBlockData state) {
++        return (Boolean) state.getValue(CampfireBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState rotate(BlockState blockstate, Rotation rotation) {
+-        return (BlockState) blockstate.setValue(CampfireBlock.FACING, rotation.rotate((Direction) blockstate.getValue(CampfireBlock.FACING)));
++    public IBlockData rotate(IBlockData state, Rotation rot) {
++        return (IBlockData) state.setValue(CampfireBlock.FACING, rot.rotate((Direction) state.getValue(CampfireBlock.FACING)));
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState mirror(BlockState blockstate, Mirror mirror) {
+-        return blockstate.rotate(mirror.getRotation((Direction) blockstate.getValue(CampfireBlock.FACING)));
++    public IBlockData mirror(IBlockData state, Mirror mirror) {
++        return state.rotate(mirror.getRotation((Direction) state.getValue(CampfireBlock.FACING)));
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(CampfireBlock.LIT, CampfireBlock.SIGNAL_FIRE, CampfireBlock.WATERLOGGED, CampfireBlock.FACING);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(CampfireBlock.LIT, CampfireBlock.SIGNAL_FIRE, CampfireBlock.WATERLOGGED, CampfireBlock.FACING);
+     }
+ 
+     @Override
+-    @Override
+-    public BlockEntity newBlockEntity(BlockPos blockpos, BlockState blockstate) {
+-        return new CampfireBlockEntity(blockpos, blockstate);
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
++        return new CampfireBlockEntity(pos, state);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState blockstate, BlockEntityType<T> blockentitytype) {
+-        return level.isClientSide ? ((Boolean) blockstate.getValue(CampfireBlock.LIT) ? createTickerHelper(blockentitytype, BlockEntityType.CAMPFIRE, CampfireBlockEntity::particleTick) : null) : ((Boolean) blockstate.getValue(CampfireBlock.LIT) ? createTickerHelper(blockentitytype, BlockEntityType.CAMPFIRE, CampfireBlockEntity::cookTick) : createTickerHelper(blockentitytype, BlockEntityType.CAMPFIRE, CampfireBlockEntity::cooldownTick));
++    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, IBlockData state, BlockEntityType<T> blockEntityType) {
++        return level.isClientSide ? ((Boolean) state.getValue(CampfireBlock.LIT) ? createTickerHelper(blockEntityType, BlockEntityType.CAMPFIRE, CampfireBlockEntity::particleTick) : null) : ((Boolean) state.getValue(CampfireBlock.LIT) ? createTickerHelper(blockEntityType, BlockEntityType.CAMPFIRE, CampfireBlockEntity::cookTick) : createTickerHelper(blockEntityType, BlockEntityType.CAMPFIRE, CampfireBlockEntity::cooldownTick));
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+-    public static boolean canLight(BlockState blockstate) {
+-        return blockstate.is(BlockTags.CAMPFIRES, (blockbehaviour_blockstatebase) -> {
+-            return blockbehaviour_blockstatebase.hasProperty(CampfireBlock.WATERLOGGED) && blockbehaviour_blockstatebase.hasProperty(CampfireBlock.LIT);
+-        }) && !(Boolean) blockstate.getValue(CampfireBlock.WATERLOGGED) && !(Boolean) blockstate.getValue(CampfireBlock.LIT);
++    public static boolean canLight(IBlockData state) {
++        return state.is(BlockTags.CAMPFIRES, (blockbase_blockdata) -> {
++            return blockbase_blockdata.hasProperty(CampfireBlock.WATERLOGGED) && blockbase_blockdata.hasProperty(CampfireBlock.LIT);
++        }) && !(Boolean) state.getValue(CampfireBlock.WATERLOGGED) && !(Boolean) state.getValue(CampfireBlock.LIT);
+     }
+ }

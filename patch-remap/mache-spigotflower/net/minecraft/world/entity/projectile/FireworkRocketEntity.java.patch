@@ -1,0 +1,377 @@
+--- a/net/minecraft/world/entity/projectile/FireworkRocketEntity.java
++++ b/net/minecraft/world/entity/projectile/FireworkRocketEntity.java
+@@ -15,8 +15,8 @@
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.LivingEntity;
+-import net.minecraft.world.entity.MoverType;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+@@ -27,25 +27,26 @@
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
++import org.bukkit.craftbukkit.event.CraftEventFactory; // CraftBukkit
+ 
+ public class FireworkRocketEntity extends Projectile implements ItemSupplier {
+ 
+-    private static final EntityDataAccessor<ItemStack> DATA_ID_FIREWORKS_ITEM = SynchedEntityData.defineId(FireworkRocketEntity.class, EntityDataSerializers.ITEM_STACK);
++    public static final EntityDataAccessor<ItemStack> DATA_ID_FIREWORKS_ITEM = SynchedEntityData.defineId(FireworkRocketEntity.class, EntityDataSerializers.ITEM_STACK);
+     private static final EntityDataAccessor<OptionalInt> DATA_ATTACHED_TO_TARGET = SynchedEntityData.defineId(FireworkRocketEntity.class, EntityDataSerializers.OPTIONAL_UNSIGNED_INT);
+-    private static final EntityDataAccessor<Boolean> DATA_SHOT_AT_ANGLE = SynchedEntityData.defineId(FireworkRocketEntity.class, EntityDataSerializers.BOOLEAN);
+-    private int life;
+-    private int lifetime;
++    public static final EntityDataAccessor<Boolean> DATA_SHOT_AT_ANGLE = SynchedEntityData.defineId(FireworkRocketEntity.class, EntityDataSerializers.BOOLEAN);
++    public int life;
++    public int lifetime;
+     @Nullable
+-    private LivingEntity attachedToEntity;
++    public LivingEntity attachedToEntity;
+ 
+-    public FireworkRocketEntity(EntityType<? extends FireworkRocketEntity> entitytype, Level level) {
+-        super(entitytype, level);
++    public FireworkRocketEntity(EntityType<? extends FireworkRocketEntity> entityType, Level level) {
++        super(entityType, level);
+     }
+ 
+-    public FireworkRocketEntity(Level level, double d0, double d1, double d2, ItemStack itemstack) {
++    public FireworkRocketEntity(Level level, double x, double d1, double y, ItemStack itemstack) {
+         super(EntityType.FIREWORK_ROCKET, level);
+         this.life = 0;
+-        this.setPos(d0, d1, d2);
++        this.setPos(x, d1, y);
+         int i = 1;
+ 
+         if (!itemstack.isEmpty() && itemstack.hasTag()) {
+@@ -57,29 +58,28 @@
+         this.lifetime = 10 * i + this.random.nextInt(6) + this.random.nextInt(7);
+     }
+ 
+-    public FireworkRocketEntity(Level level, @Nullable Entity entity, double d0, double d1, double d2, ItemStack itemstack) {
+-        this(level, d0, d1, d2, itemstack);
+-        this.setOwner(entity);
++    public FireworkRocketEntity(Level level, @Nullable Entity shooter, double x, double d1, double y, ItemStack itemstack) {
++        this(level, x, d1, y, itemstack);
++        this.setOwner(shooter);
+     }
+ 
+-    public FireworkRocketEntity(Level level, ItemStack itemstack, LivingEntity livingentity) {
+-        this(level, livingentity, livingentity.getX(), livingentity.getY(), livingentity.getZ(), itemstack);
+-        this.entityData.set(FireworkRocketEntity.DATA_ATTACHED_TO_TARGET, OptionalInt.of(livingentity.getId()));
+-        this.attachedToEntity = livingentity;
++    public FireworkRocketEntity(Level level, ItemStack stack, LivingEntity shooter) {
++        this(level, shooter, shooter.getX(), shooter.getY(), shooter.getZ(), stack);
++        this.entityData.set(FireworkRocketEntity.DATA_ATTACHED_TO_TARGET, OptionalInt.of(shooter.getId()));
++        this.attachedToEntity = shooter;
+     }
+ 
+-    public FireworkRocketEntity(Level level, ItemStack itemstack, double d0, double d1, double d2, boolean flag) {
+-        this(level, d0, d1, d2, itemstack);
++    public FireworkRocketEntity(Level level, ItemStack stack, double x, double d1, double y, boolean flag) {
++        this(level, x, d1, y, stack);
+         this.entityData.set(FireworkRocketEntity.DATA_SHOT_AT_ANGLE, flag);
+     }
+ 
+-    public FireworkRocketEntity(Level level, ItemStack itemstack, Entity entity, double d0, double d1, double d2, boolean flag) {
+-        this(level, itemstack, d0, d1, d2, flag);
+-        this.setOwner(entity);
++    public FireworkRocketEntity(Level level, ItemStack stack, Entity shooter, double x, double d1, double y, boolean flag) {
++        this(level, stack, x, d1, y, flag);
++        this.setOwner(shooter);
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.entityData.define(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM, ItemStack.EMPTY);
+         this.entityData.define(FireworkRocketEntity.DATA_ATTACHED_TO_TARGET, OptionalInt.empty());
+@@ -87,22 +87,19 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean shouldRenderAtSqrDistance(double d0) {
+-        return d0 < 4096.0D && !this.isAttachedToEntity();
++    public boolean shouldRenderAtSqrDistance(double distance) {
++        return distance < 4096.0D && !this.isAttachedToEntity();
+     }
+ 
+     @Override
+-    @Override
+-    public boolean shouldRender(double d0, double d1, double d2) {
+-        return super.shouldRender(d0, d1, d2) && !this.isAttachedToEntity();
++    public boolean shouldRender(double x, double d1, double y) {
++        return super.shouldRender(x, d1, y) && !this.isAttachedToEntity();
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         super.tick();
+-        Vec3 vec3;
++        Vec3 vec3d;
+ 
+         if (this.isAttachedToEntity()) {
+             if (this.attachedToEntity == null) {
+@@ -118,18 +115,18 @@
+ 
+             if (this.attachedToEntity != null) {
+                 if (this.attachedToEntity.isFallFlying()) {
+-                    Vec3 vec31 = this.attachedToEntity.getLookAngle();
++                    Vec3 vec3d1 = this.attachedToEntity.getLookAngle();
+                     double d0 = 1.5D;
+                     double d1 = 0.1D;
+-                    Vec3 vec32 = this.attachedToEntity.getDeltaMovement();
++                    Vec3 vec3d2 = this.attachedToEntity.getDeltaMovement();
+ 
+-                    this.attachedToEntity.setDeltaMovement(vec32.add(vec31.x * 0.1D + (vec31.x * 1.5D - vec32.x) * 0.5D, vec31.y * 0.1D + (vec31.y * 1.5D - vec32.y) * 0.5D, vec31.z * 0.1D + (vec31.z * 1.5D - vec32.z) * 0.5D));
+-                    vec3 = this.attachedToEntity.getHandHoldingItemAngle(Items.FIREWORK_ROCKET);
++                    this.attachedToEntity.setDeltaMovement(vec3d2.add(vec3d1.x * 0.1D + (vec3d1.x * 1.5D - vec3d2.x) * 0.5D, vec3d1.y * 0.1D + (vec3d1.y * 1.5D - vec3d2.y) * 0.5D, vec3d1.z * 0.1D + (vec3d1.z * 1.5D - vec3d2.z) * 0.5D));
++                    vec3d = this.attachedToEntity.getHandHoldingItemAngle(Items.FIREWORK_ROCKET);
+                 } else {
+-                    vec3 = Vec3.ZERO;
++                    vec3d = Vec3.ZERO;
+                 }
+ 
+-                this.setPos(this.attachedToEntity.getX() + vec3.x, this.attachedToEntity.getY() + vec3.y, this.attachedToEntity.getZ() + vec3.z);
++                this.setPos(this.attachedToEntity.getX() + vec3d.x, this.attachedToEntity.getY() + vec3d.y, this.attachedToEntity.getZ() + vec3d.z);
+                 this.setDeltaMovement(this.attachedToEntity.getDeltaMovement());
+             }
+         } else {
+@@ -139,15 +136,15 @@
+                 this.setDeltaMovement(this.getDeltaMovement().multiply(d2, 1.0D, d2).add(0.0D, 0.04D, 0.0D));
+             }
+ 
+-            vec3 = this.getDeltaMovement();
+-            this.move(MoverType.SELF, vec3);
+-            this.setDeltaMovement(vec3);
++            vec3d = this.getDeltaMovement();
++            this.move(EnumMoveType.SELF, vec3d);
++            this.setDeltaMovement(vec3d);
+         }
+ 
+-        HitResult hitresult = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
++        HitResult movingobjectposition = ProjectileUtil.getHitResultOnMoveVector(this, this::canHitEntity);
+ 
+         if (!this.noPhysics) {
+-            this.onHit(hitresult);
++            this.preOnHit(movingobjectposition); // CraftBukkit - projectile hit event
+             this.hasImpulse = true;
+         }
+ 
+@@ -162,7 +159,11 @@
+         }
+ 
+         if (!this.level().isClientSide && this.life > this.lifetime) {
+-            this.explode();
++            // CraftBukkit start
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.callFireworkExplodeEvent(this).isCancelled()) {
++                this.explode();
++            }
++            // CraftBukkit end
+         }
+ 
+     }
+@@ -175,75 +176,85 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitEntity(EntityHitResult entityhitresult) {
+-        super.onHitEntity(entityhitresult);
++    protected void onHitEntity(EntityHitResult result) {
++        super.onHitEntity(result);
+         if (!this.level().isClientSide) {
+-            this.explode();
++            // CraftBukkit start
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.callFireworkExplodeEvent(this).isCancelled()) {
++                this.explode();
++            }
++            // CraftBukkit end
+         }
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitBlock(BlockHitResult blockhitresult) {
+-        BlockPos blockpos = new BlockPos(blockhitresult.getBlockPos());
++    protected void onHitBlock(BlockHitResult result) {
++        BlockPos blockposition = new BlockPos(result.getBlockPos());
+ 
+-        this.level().getBlockState(blockpos).entityInside(this.level(), blockpos, this);
++        this.level().getBlockState(blockposition).entityInside(this.level(), blockposition, this);
+         if (!this.level().isClientSide() && this.hasExplosion()) {
+-            this.explode();
++            // CraftBukkit start
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.callFireworkExplodeEvent(this).isCancelled()) {
++                this.explode();
++            }
++            // CraftBukkit end
+         }
+ 
+-        super.onHitBlock(blockhitresult);
++        super.onHitBlock(result);
+     }
+ 
+     private boolean hasExplosion() {
+         ItemStack itemstack = (ItemStack) this.entityData.get(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM);
+-        CompoundTag compoundtag = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
+-        ListTag listtag = compoundtag != null ? compoundtag.getList("Explosions", 10) : null;
++        CompoundTag nbttagcompound = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
++        ListTag nbttaglist = nbttagcompound != null ? nbttagcompound.getList("Explosions", 10) : null;
+ 
+-        return listtag != null && !listtag.isEmpty();
++        return nbttaglist != null && !nbttaglist.isEmpty();
+     }
+ 
+     private void dealExplosionDamage() {
+         float f = 0.0F;
+         ItemStack itemstack = (ItemStack) this.entityData.get(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM);
+-        CompoundTag compoundtag = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
+-        ListTag listtag = compoundtag != null ? compoundtag.getList("Explosions", 10) : null;
++        CompoundTag nbttagcompound = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
++        ListTag nbttaglist = nbttagcompound != null ? nbttagcompound.getList("Explosions", 10) : null;
+ 
+-        if (listtag != null && !listtag.isEmpty()) {
+-            f = 5.0F + (float) (listtag.size() * 2);
++        if (nbttaglist != null && !nbttaglist.isEmpty()) {
++            f = 5.0F + (float) (nbttaglist.size() * 2);
+         }
+ 
+         if (f > 0.0F) {
+             if (this.attachedToEntity != null) {
+-                this.attachedToEntity.hurt(this.damageSources().fireworks(this, this.getOwner()), 5.0F + (float) (listtag.size() * 2));
++                CraftEventFactory.entityDamage = this; // CraftBukkit
++                this.attachedToEntity.hurt(this.damageSources().fireworks(this, this.getOwner()), 5.0F + (float) (nbttaglist.size() * 2));
++                CraftEventFactory.entityDamage = null; // CraftBukkit
+             }
+ 
+             double d0 = 5.0D;
+-            Vec3 vec3 = this.position();
++            Vec3 vec3d = this.position();
+             List<LivingEntity> list = this.level().getEntitiesOfClass(LivingEntity.class, this.getBoundingBox().inflate(5.0D));
+             Iterator iterator = list.iterator();
+ 
+             while (iterator.hasNext()) {
+-                LivingEntity livingentity = (LivingEntity) iterator.next();
++                LivingEntity entityliving = (LivingEntity) iterator.next();
+ 
+-                if (livingentity != this.attachedToEntity && this.distanceToSqr((Entity) livingentity) <= 25.0D) {
++                if (entityliving != this.attachedToEntity && this.distanceToSqr((Entity) entityliving) <= 25.0D) {
+                     boolean flag = false;
+ 
+                     for (int i = 0; i < 2; ++i) {
+-                        Vec3 vec31 = new Vec3(livingentity.getX(), livingentity.getY(0.5D * (double) i), livingentity.getZ());
+-                        BlockHitResult blockhitresult = this.level().clip(new ClipContext(vec3, vec31, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
++                        Vec3 vec3d1 = new Vec3(entityliving.getX(), entityliving.getY(0.5D * (double) i), entityliving.getZ());
++                        BlockHitResult movingobjectpositionblock = this.level().clip(new ClipContext(vec3d, vec3d1, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
+ 
+-                        if (blockhitresult.getType() == HitResult.Type.MISS) {
++                        if (movingobjectpositionblock.getType() == HitResult.EnumMovingObjectType.MISS) {
+                             flag = true;
+                             break;
+                         }
+                     }
+ 
+                     if (flag) {
+-                        float f1 = f * (float) Math.sqrt((5.0D - (double) this.distanceTo(livingentity)) / 5.0D);
++                        float f1 = f * (float) Math.sqrt((5.0D - (double) this.distanceTo(entityliving)) / 5.0D);
+ 
+-                        livingentity.hurt(this.damageSources().fireworks(this, this.getOwner()), f1);
++                        CraftEventFactory.entityDamage = this; // CraftBukkit
++                        entityliving.hurt(this.damageSources().fireworks(this, this.getOwner()), f1);
++                        CraftEventFactory.entityDamage = null; // CraftBukkit
+                     }
+                 }
+             }
+@@ -260,60 +271,56 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void handleEntityEvent(byte b0) {
+-        if (b0 == 17 && this.level().isClientSide) {
++    public void handleEntityEvent(byte id) {
++        if (id == 17 && this.level().isClientSide) {
+             if (!this.hasExplosion()) {
+                 for (int i = 0; i < this.random.nextInt(3) + 2; ++i) {
+                     this.level().addParticle(ParticleTypes.POOF, this.getX(), this.getY(), this.getZ(), this.random.nextGaussian() * 0.05D, 0.005D, this.random.nextGaussian() * 0.05D);
+                 }
+             } else {
+                 ItemStack itemstack = (ItemStack) this.entityData.get(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM);
+-                CompoundTag compoundtag = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
+-                Vec3 vec3 = this.getDeltaMovement();
++                CompoundTag nbttagcompound = itemstack.isEmpty() ? null : itemstack.getTagElement("Fireworks");
++                Vec3 vec3d = this.getDeltaMovement();
+ 
+-                this.level().createFireworks(this.getX(), this.getY(), this.getZ(), vec3.x, vec3.y, vec3.z, compoundtag);
++                this.level().createFireworks(this.getX(), this.getY(), this.getZ(), vec3d.x, vec3d.y, vec3d.z, nbttagcompound);
+             }
+         }
+ 
+-        super.handleEntityEvent(b0);
++        super.handleEntityEvent(id);
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putInt("Life", this.life);
+-        compoundtag.putInt("LifeTime", this.lifetime);
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putInt("Life", this.life);
++        compound.putInt("LifeTime", this.lifetime);
+         ItemStack itemstack = (ItemStack) this.entityData.get(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM);
+ 
+         if (!itemstack.isEmpty()) {
+-            compoundtag.put("FireworksItem", itemstack.save(new CompoundTag()));
++            compound.put("FireworksItem", itemstack.save(new CompoundTag()));
+         }
+ 
+-        compoundtag.putBoolean("ShotAtAngle", (Boolean) this.entityData.get(FireworkRocketEntity.DATA_SHOT_AT_ANGLE));
++        compound.putBoolean("ShotAtAngle", (Boolean) this.entityData.get(FireworkRocketEntity.DATA_SHOT_AT_ANGLE));
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.life = compoundtag.getInt("Life");
+-        this.lifetime = compoundtag.getInt("LifeTime");
+-        ItemStack itemstack = ItemStack.of(compoundtag.getCompound("FireworksItem"));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.life = compound.getInt("Life");
++        this.lifetime = compound.getInt("LifeTime");
++        ItemStack itemstack = ItemStack.of(compound.getCompound("FireworksItem"));
+ 
+         if (!itemstack.isEmpty()) {
+             this.entityData.set(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM, itemstack);
+         }
+ 
+-        if (compoundtag.contains("ShotAtAngle")) {
+-            this.entityData.set(FireworkRocketEntity.DATA_SHOT_AT_ANGLE, compoundtag.getBoolean("ShotAtAngle"));
++        if (compound.contains("ShotAtAngle")) {
++            this.entityData.set(FireworkRocketEntity.DATA_SHOT_AT_ANGLE, compound.getBoolean("ShotAtAngle"));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public ItemStack getItem() {
+         ItemStack itemstack = (ItemStack) this.entityData.get(FireworkRocketEntity.DATA_ID_FIREWORKS_ITEM);
+ 
+@@ -321,7 +328,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean isAttackable() {
+         return false;
+     }

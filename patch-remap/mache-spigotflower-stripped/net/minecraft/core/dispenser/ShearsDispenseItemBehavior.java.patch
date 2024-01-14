@@ -1,0 +1,84 @@
+--- a/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
++++ b/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
+@@ -21,21 +21,47 @@
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.AABB;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.block.BlockDispenseEvent;
++// CraftBukkit end
+ 
+ public class ShearsDispenseItemBehavior extends OptionalDispenseItemBehavior {
+ 
+     public ShearsDispenseItemBehavior() {}
+ 
+     @Override
+-    @Override
+-    protected ItemStack execute(BlockSource blocksource, ItemStack itemstack) {
+-        ServerLevel serverlevel = blocksource.level();
++    protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
++        ServerLevel worldserver = sourceblock.level();
++        // CraftBukkit start
++        org.bukkit.block.Block bukkitBlock = CraftBlock.at(worldserver, sourceblock.pos());
++        CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack);
+ 
+         if (!serverlevel.isClientSide()) {
+             BlockPos blockpos = blocksource.pos().relative((Direction) blocksource.state().getValue(DispenserBlock.FACING));
+ 
+-            this.setSuccess(tryShearBeehive(serverlevel, blockpos) || tryShearLivingEntity(serverlevel, blockpos));
+-            if (this.isSuccess() && itemstack.hurt(1, serverlevel.getRandom(), (ServerPlayer) null)) {
++        if (event.isCancelled()) {
++            return itemstack;
++        }
++
++        if (!event.getItem().equals(craftItem)) {
++            // Chain to handler for new item
++            ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++            DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++            if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior != this) {
++                idispensebehavior.dispense(sourceblock, eventStack);
++                return itemstack;
++            }
++        }
++        // CraftBukkit end
++
++        if (!worldserver.isClientSide()) {
++            BlockPos blockposition = sourceblock.pos().relative((Direction) sourceblock.state().getValue(DispenserBlock.FACING));
++
++            this.setSuccess(tryShearBeehive(worldserver, blockposition) || tryShearLivingEntity(worldserver, blockposition, bukkitBlock, craftItem)); // CraftBukkit
++            if (this.isSuccess() && itemstack.hurt(1, worldserver.getRandom(), (ServerPlayer) null)) {
+                 itemstack.setCount(0);
+             }
+         }
+@@ -63,8 +91,8 @@
+         return false;
+     }
+ 
+-    private static boolean tryShearLivingEntity(ServerLevel serverlevel, BlockPos blockpos) {
+-        List<LivingEntity> list = serverlevel.getEntitiesOfClass(LivingEntity.class, new AABB(blockpos), EntitySelector.NO_SPECTATORS);
++    private static boolean tryShearLivingEntity(ServerLevel worldserver, BlockPos blockposition, org.bukkit.block.Block bukkitBlock, CraftItemStack craftItem) { // CraftBukkit - add args
++        List<LivingEntity> list = worldserver.getEntitiesOfClass(LivingEntity.class, new AABB(blockposition), EntitySelector.NO_SPECTATORS);
+         Iterator iterator = list.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -73,9 +101,14 @@
+             if (livingentity instanceof Shearable) {
+                 Shearable shearable = (Shearable) livingentity;
+ 
+-                if (shearable.readyForShearing()) {
+-                    shearable.shear(SoundSource.BLOCKS);
+-                    serverlevel.gameEvent((Entity) null, GameEvent.SHEAR, blockpos);
++                if (ishearable.readyForShearing()) {
++                    // CraftBukkit start
++                    if (CraftEventFactory.callBlockShearEntityEvent(entityliving, bukkitBlock, craftItem).isCancelled()) {
++                        continue;
++                    }
++                    // CraftBukkit end
++                    ishearable.shear(SoundSource.BLOCKS);
++                    worldserver.gameEvent((Entity) null, GameEvent.SHEAR, blockposition);
+                     return true;
+                 }
+             }

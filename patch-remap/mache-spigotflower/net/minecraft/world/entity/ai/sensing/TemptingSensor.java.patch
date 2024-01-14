@@ -1,0 +1,87 @@
+--- a/net/minecraft/world/entity/ai/sensing/TemptingSensor.java
++++ b/net/minecraft/world/entity/ai/sensing/TemptingSensor.java
+@@ -17,6 +17,13 @@
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.crafting.Ingredient;
++// CraftBukkit start
++import org.bukkit.craftbukkit.entity.CraftHumanEntity;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.event.entity.EntityTargetEvent;
++import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
++// CraftBukkit end
+ 
+ public class TemptingSensor extends Sensor<PathfinderMob> {
+ 
+@@ -24,30 +31,39 @@
+     private static final TargetingConditions TEMPT_TARGETING = TargetingConditions.forNonCombat().range(10.0D).ignoreLineOfSight();
+     private final Ingredient temptations;
+ 
+-    public TemptingSensor(Ingredient ingredient) {
+-        this.temptations = ingredient;
++    public TemptingSensor(Ingredient temptations) {
++        this.temptations = temptations;
+     }
+ 
+-    @Override
+-    protected void doTick(ServerLevel serverlevel, PathfinderMob pathfindermob) {
+-        Brain<?> brain = pathfindermob.getBrain();
+-        Stream stream = serverlevel.players().stream().filter(EntitySelector.NO_SPECTATORS).filter((serverplayer) -> {
+-            return TemptingSensor.TEMPT_TARGETING.test(pathfindermob, serverplayer);
+-        }).filter((serverplayer) -> {
+-            return pathfindermob.closerThan(serverplayer, 10.0D);
+-        }).filter(this::playerHoldingTemptation).filter((serverplayer) -> {
+-            return !pathfindermob.hasPassenger((Entity) serverplayer);
++    protected void doTick(ServerLevel level, PathfinderMob entity) {
++        Brain<?> behaviorcontroller = entity.getBrain();
++        Stream<net.minecraft.server.level.ServerPlayer> stream = level.players().stream().filter(EntitySelector.NO_SPECTATORS).filter((entityplayer) -> { // CraftBukkit - decompile error
++            return TemptingSensor.TEMPT_TARGETING.test(entity, entityplayer);
++        }).filter((entityplayer) -> {
++            return entity.closerThan(entityplayer, 10.0D);
++        }).filter(this::playerHoldingTemptation).filter((entityplayer) -> {
++            return !entity.hasPassenger((Entity) entityplayer);
+         });
+ 
+-        Objects.requireNonNull(pathfindermob);
+-        List<Player> list = (List) stream.sorted(Comparator.comparingDouble(pathfindermob::distanceToSqr)).collect(Collectors.toList());
++        Objects.requireNonNull(entity);
++        List<Player> list = (List) stream.sorted(Comparator.comparingDouble(entity::distanceToSqr)).collect(Collectors.toList());
+ 
+         if (!list.isEmpty()) {
+-            Player player = (Player) list.get(0);
++            Player entityhuman = (Player) list.get(0);
+ 
+-            brain.setMemory(MemoryModuleType.TEMPTING_PLAYER, (Object) player);
++            // CraftBukkit start
++            EntityTargetLivingEntityEvent event = CraftEventFactory.callEntityTargetLivingEvent(entity, entityhuman, EntityTargetEvent.TargetReason.TEMPT);
++            if (event.isCancelled()) {
++                return;
++            }
++            if (event.getTarget() instanceof HumanEntity) {
++                behaviorcontroller.setMemory(MemoryModuleType.TEMPTING_PLAYER, ((CraftHumanEntity) event.getTarget()).getHandle());
++            } else {
++                behaviorcontroller.eraseMemory(MemoryModuleType.TEMPTING_PLAYER);
++            }
++            // CraftBukkit end
+         } else {
+-            brain.eraseMemory(MemoryModuleType.TEMPTING_PLAYER);
++            behaviorcontroller.eraseMemory(MemoryModuleType.TEMPTING_PLAYER);
+         }
+ 
+     }
+@@ -56,12 +72,11 @@
+         return this.isTemptation(player.getMainHandItem()) || this.isTemptation(player.getOffhandItem());
+     }
+ 
+-    private boolean isTemptation(ItemStack itemstack) {
+-        return this.temptations.test(itemstack);
++    private boolean isTemptation(ItemStack stack) {
++        return this.temptations.test(stack);
+     }
+ 
+     @Override
+-    @Override
+     public Set<MemoryModuleType<?>> requires() {
+         return ImmutableSet.of(MemoryModuleType.TEMPTING_PLAYER);
+     }

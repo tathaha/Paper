@@ -1,0 +1,677 @@
+--- a/net/minecraft/world/entity/monster/Strider.java
++++ b/net/minecraft/world/entity/monster/Strider.java
+@@ -21,22 +21,22 @@
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.DifficultyInstance;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.AgeableMob;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMobSpawn;
+ import net.minecraft.world.entity.EquipmentSlot;
++import net.minecraft.world.entity.GroupDataEntity;
++import net.minecraft.world.entity.ISteerable;
+ import net.minecraft.world.entity.ItemBasedSteering;
+-import net.minecraft.world.entity.ItemSteerable;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MobSpawnType;
+-import net.minecraft.world.entity.Pose;
+ import net.minecraft.world.entity.Saddleable;
+-import net.minecraft.world.entity.SpawnGroupData;
+ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+@@ -57,25 +57,25 @@
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.item.crafting.Ingredient;
+-import net.minecraft.world.level.ItemLike;
++import net.minecraft.world.level.IMaterial;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.ServerLevelAccessor;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.LiquidBlock;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.pathfinder.BlockPathTypes;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
+ import net.minecraft.world.level.pathfinder.PathFinder;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import org.joml.Vector3f;
+ 
+-public class Strider extends Animal implements ItemSteerable, Saddleable {
++public class Strider extends Animal implements ISteerable, Saddleable {
+ 
+     private static final UUID SUFFOCATING_MODIFIER_UUID = UUID.fromString("9e362924-01de-4ddd-a2b2-d0f7a405a174");
+     private static final AttributeModifier SUFFOCATING_MODIFIER = new AttributeModifier(Strider.SUFFOCATING_MODIFIER_UUID, "Strider suffocating modifier", -0.3400000035762787D, AttributeModifier.Operation.MULTIPLY_BASE);
+@@ -86,12 +86,12 @@
+     private static final EntityDataAccessor<Integer> DATA_BOOST_TIME = SynchedEntityData.defineId(Strider.class, EntityDataSerializers.INT);
+     private static final EntityDataAccessor<Boolean> DATA_SUFFOCATING = SynchedEntityData.defineId(Strider.class, EntityDataSerializers.BOOLEAN);
+     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(Strider.class, EntityDataSerializers.BOOLEAN);
+-    private final ItemBasedSteering steering;
++    public final ItemBasedSteering steering;
+     @Nullable
+     private TemptGoal temptGoal;
+ 
+-    public Strider(EntityType<? extends Strider> entitytype, Level level) {
+-        super(entitytype, level);
++    public Strider(EntityType<? extends Strider> entityType, Level level) {
++        super(entityType, level);
+         this.steering = new ItemBasedSteering(this.entityData, Strider.DATA_BOOST_TIME, Strider.DATA_SADDLE_ID);
+         this.blocksBuilding = true;
+         this.setPathfindingMalus(BlockPathTypes.WATER, -1.0F);
+@@ -100,28 +100,26 @@
+         this.setPathfindingMalus(BlockPathTypes.DAMAGE_FIRE, 0.0F);
+     }
+ 
+-    public static boolean checkStriderSpawnRules(EntityType<Strider> entitytype, LevelAccessor levelaccessor, MobSpawnType mobspawntype, BlockPos blockpos, RandomSource randomsource) {
+-        BlockPos.MutableBlockPos blockpos_mutableblockpos = blockpos.mutable();
++    public static boolean checkStriderSpawnRules(EntityType<Strider> strider, LevelAccessor level, EnumMobSpawn spawnType, BlockPos pos, RandomSource random) {
++        BlockPos.MutableBlockPos blockposition_mutableblockposition = pos.mutable();
+ 
+         do {
+-            blockpos_mutableblockpos.move(Direction.UP);
+-        } while (levelaccessor.getFluidState(blockpos_mutableblockpos).is(FluidTags.LAVA));
++            blockposition_mutableblockposition.move(Direction.UP);
++        } while (level.getFluidState(blockposition_mutableblockposition).is(FluidTags.LAVA));
+ 
+-        return levelaccessor.getBlockState(blockpos_mutableblockpos).isAir();
++        return level.getBlockState(blockposition_mutableblockposition).isAir();
+     }
+ 
+     @Override
+-    @Override
+-    public void onSyncedDataUpdated(EntityDataAccessor<?> entitydataaccessor) {
+-        if (Strider.DATA_BOOST_TIME.equals(entitydataaccessor) && this.level().isClientSide) {
++    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
++        if (Strider.DATA_BOOST_TIME.equals(key) && this.level().isClientSide) {
+             this.steering.onSynced();
+         }
+ 
+-        super.onSyncedDataUpdated(entitydataaccessor);
++        super.onSyncedDataUpdated(key);
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.entityData.define(Strider.DATA_BOOST_TIME, 0);
+@@ -130,43 +128,37 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        this.steering.addAdditionalSaveData(compoundtag);
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        this.steering.addAdditionalSaveData(compound);
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.steering.readAdditionalSaveData(compoundtag);
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.steering.readAdditionalSaveData(compound);
+     }
+ 
+     @Override
+-    @Override
+     public boolean isSaddled() {
+         return this.steering.hasSaddle();
+     }
+ 
+     @Override
+-    @Override
+     public boolean isSaddleable() {
+         return this.isAlive() && !this.isBaby();
+     }
+ 
+     @Override
+-    @Override
+-    public void equipSaddle(@Nullable SoundSource soundsource) {
++    public void equipSaddle(@Nullable SoundSource source) {
+         this.steering.setSaddle(true);
+-        if (soundsource != null) {
+-            this.level().playSound((Player) null, (Entity) this, SoundEvents.STRIDER_SADDLE, soundsource, 0.5F, 1.0F);
++        if (source != null) {
++            this.level().playSound((Player) null, (Entity) this, SoundEvents.STRIDER_SADDLE, source, 0.5F, 1.0F);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     protected void registerGoals() {
+         this.goalSelector.addGoal(1, new PanicGoal(this, 1.65D));
+         this.goalSelector.addGoal(2, new BreedGoal(this, 1.0D));
+@@ -180,14 +172,14 @@
+         this.goalSelector.addGoal(9, new LookAtPlayerGoal(this, Strider.class, 8.0F));
+     }
+ 
+-    public void setSuffocating(boolean flag) {
+-        this.entityData.set(Strider.DATA_SUFFOCATING, flag);
+-        AttributeInstance attributeinstance = this.getAttribute(Attributes.MOVEMENT_SPEED);
++    public void setSuffocating(boolean suffocating) {
++        this.entityData.set(Strider.DATA_SUFFOCATING, suffocating);
++        AttributeInstance attributemodifiable = this.getAttribute(Attributes.MOVEMENT_SPEED);
+ 
+-        if (attributeinstance != null) {
+-            attributeinstance.removeModifier(Strider.SUFFOCATING_MODIFIER_UUID);
+-            if (flag) {
+-                attributeinstance.addTransientModifier(Strider.SUFFOCATING_MODIFIER);
++        if (attributemodifiable != null) {
++            attributemodifiable.removeModifier(Strider.SUFFOCATING_MODIFIER_UUID);
++            if (suffocating) {
++                attributemodifiable.addTransientModifier(Strider.SUFFOCATING_MODIFIER);
+             }
+         }
+ 
+@@ -198,39 +190,35 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canStandOnFluid(FluidState fluidstate) {
+-        return fluidstate.is(FluidTags.LAVA);
++    public boolean canStandOnFluid(FluidState fluidState) {
++        return fluidState.is(FluidTags.LAVA);
+     }
+ 
+     @Override
+-    @Override
+-    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitydimensions, float f) {
++    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitysize, float f) {
+         float f1 = Math.min(0.25F, this.walkAnimation.speed());
+         float f2 = this.walkAnimation.position();
+         float f3 = 0.12F * Mth.cos(f2 * 1.5F) * 2.0F * f1;
+ 
+-        return new Vector3f(0.0F, entitydimensions.height + f3 * f, 0.0F);
++        return new Vector3f(0.0F, entitysize.height + f3 * f, 0.0F);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean checkSpawnObstruction(LevelReader levelreader) {
+-        return levelreader.isUnobstructed(this);
++    public boolean checkSpawnObstruction(LevelReader level) {
++        return level.isUnobstructed(this);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public LivingEntity getControllingPassenger() {
+         if (this.isSaddled()) {
+             Entity entity = this.getFirstPassenger();
+ 
+             if (entity instanceof Player) {
+-                Player player = (Player) entity;
++                Player entityhuman = (Player) entity;
+ 
+-                if (player.isHolding(Items.WARPED_FUNGUS_ON_A_STICK)) {
+-                    return player;
++                if (entityhuman.isHolding(Items.WARPED_FUNGUS_ON_A_STICK)) {
++                    return entityhuman;
+                 }
+             }
+         }
+@@ -239,46 +227,45 @@
+     }
+ 
+     @Override
+-    @Override
+-    public Vec3 getDismountLocationForPassenger(LivingEntity livingentity) {
+-        Vec3[] avec3 = new Vec3[]{getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingentity.getBbWidth(), livingentity.getYRot()), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingentity.getBbWidth(), livingentity.getYRot() - 22.5F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingentity.getBbWidth(), livingentity.getYRot() + 22.5F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingentity.getBbWidth(), livingentity.getYRot() - 45.0F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingentity.getBbWidth(), livingentity.getYRot() + 45.0F)};
++    public Vec3 getDismountLocationForPassenger(LivingEntity livingEntity) {
++        Vec3[] avec3d = new Vec3[]{getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingEntity.getBbWidth(), livingEntity.getYRot()), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingEntity.getBbWidth(), livingEntity.getYRot() - 22.5F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingEntity.getBbWidth(), livingEntity.getYRot() + 22.5F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingEntity.getBbWidth(), livingEntity.getYRot() - 45.0F), getCollisionHorizontalEscapeVector((double) this.getBbWidth(), (double) livingEntity.getBbWidth(), livingEntity.getYRot() + 45.0F)};
+         Set<BlockPos> set = Sets.newLinkedHashSet();
+         double d0 = this.getBoundingBox().maxY;
+         double d1 = this.getBoundingBox().minY - 0.5D;
+-        BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
+-        Vec3[] avec31 = avec3;
+-        int i = avec3.length;
++        BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++        Vec3[] avec3d1 = avec3d;
++        int i = avec3d.length;
+ 
+         for (int j = 0; j < i; ++j) {
+-            Vec3 vec3 = avec31[j];
++            Vec3 vec3d = avec3d1[j];
+ 
+-            blockpos_mutableblockpos.set(this.getX() + vec3.x, d0, this.getZ() + vec3.z);
++            blockposition_mutableblockposition.set(this.getX() + vec3d.x, d0, this.getZ() + vec3d.z);
+ 
+             for (double d2 = d0; d2 > d1; --d2) {
+-                set.add(blockpos_mutableblockpos.immutable());
+-                blockpos_mutableblockpos.move(Direction.DOWN);
++                set.add(blockposition_mutableblockposition.immutable());
++                blockposition_mutableblockposition.move(Direction.DOWN);
+             }
+         }
+ 
+         Iterator iterator = set.iterator();
+ 
+         while (iterator.hasNext()) {
+-            BlockPos blockpos = (BlockPos) iterator.next();
++            BlockPos blockposition = (BlockPos) iterator.next();
+ 
+-            if (!this.level().getFluidState(blockpos).is(FluidTags.LAVA)) {
+-                double d3 = this.level().getBlockFloorHeight(blockpos);
++            if (!this.level().getFluidState(blockposition).is(FluidTags.LAVA)) {
++                double d3 = this.level().getBlockFloorHeight(blockposition);
+ 
+                 if (DismountHelper.isBlockFloorValid(d3)) {
+-                    Vec3 vec31 = Vec3.upFromBottomCenterOf(blockpos, d3);
+-                    UnmodifiableIterator unmodifiableiterator = livingentity.getDismountPoses().iterator();
++                    Vec3 vec3d1 = Vec3.upFromBottomCenterOf(blockposition, d3);
++                    UnmodifiableIterator unmodifiableiterator = livingEntity.getDismountPoses().iterator();
+ 
+                     while (unmodifiableiterator.hasNext()) {
+-                        Pose pose = (Pose) unmodifiableiterator.next();
+-                        AABB aabb = livingentity.getLocalBoundsForPose(pose);
++                        EntityPose entitypose = (EntityPose) unmodifiableiterator.next();
++                        AABB axisalignedbb = livingEntity.getLocalBoundsForPose(entitypose);
+ 
+-                        if (DismountHelper.canDismountTo(this.level(), livingentity, aabb.move(vec31))) {
+-                            livingentity.setPose(pose);
+-                            return vec31;
++                        if (DismountHelper.canDismountTo(this.level(), livingEntity, axisalignedbb.move(vec3d1))) {
++                            livingEntity.setPose(entitypose);
++                            return vec3d1;
+                         }
+                     }
+                 }
+@@ -289,57 +276,49 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void tickRidden(Player player, Vec3 vec3) {
++    protected void tickRidden(Player player, Vec3 travelVector) {
+         this.setRot(player.getYRot(), player.getXRot() * 0.5F);
+         this.yRotO = this.yBodyRot = this.yHeadRot = this.getYRot();
+         this.steering.tickBoost();
+-        super.tickRidden(player, vec3);
++        super.tickRidden(player, travelVector);
+     }
+ 
+     @Override
+-    @Override
+-    protected Vec3 getRiddenInput(Player player, Vec3 vec3) {
++    protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+         return new Vec3(0.0D, 0.0D, 1.0D);
+     }
+ 
+     @Override
+-    @Override
+     protected float getRiddenSpeed(Player player) {
+         return (float) (this.getAttributeValue(Attributes.MOVEMENT_SPEED) * (double) (this.isSuffocating() ? 0.35F : 0.55F) * (double) this.steering.boostFactor());
+     }
+ 
+     @Override
+-    @Override
+     protected float nextStep() {
+         return this.moveDist + 0.6F;
+     }
+ 
+     @Override
+-    @Override
+-    protected void playStepSound(BlockPos blockpos, BlockState blockstate) {
++    protected void playStepSound(BlockPos pos, IBlockData block) {
+         this.playSound(this.isInLava() ? SoundEvents.STRIDER_STEP_LAVA : SoundEvents.STRIDER_STEP, 1.0F, 1.0F);
+     }
+ 
+     @Override
+-    @Override
+     public boolean boost() {
+         return this.steering.boost(this.getRandom());
+     }
+ 
+     @Override
+-    @Override
+-    protected void checkFallDamage(double d0, boolean flag, BlockState blockstate, BlockPos blockpos) {
++    protected void checkFallDamage(double y, boolean flag, IBlockData onGround, BlockPos state) {
+         this.checkInsideBlocks();
+         if (this.isInLava()) {
+             this.resetFallDistance();
+         } else {
+-            super.checkFallDamage(d0, flag, blockstate, blockpos);
++            super.checkFallDamage(y, flag, onGround, state);
+         }
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         if (this.isBeingTempted() && this.random.nextInt(140) == 0) {
+             this.playSound(SoundEvents.STRIDER_HAPPY, 1.0F, this.getVoicePitch());
+@@ -352,16 +331,16 @@
+             boolean flag1;
+             label36:
+             {
+-                BlockState blockstate = this.level().getBlockState(this.blockPosition());
+-                BlockState blockstate1 = this.getBlockStateOnLegacy();
++                IBlockData iblockdata = this.level().getBlockState(this.blockPosition());
++                IBlockData iblockdata1 = this.getBlockStateOnLegacy();
+ 
+-                flag = blockstate.is(BlockTags.STRIDER_WARM_BLOCKS) || blockstate1.is(BlockTags.STRIDER_WARM_BLOCKS) || this.getFluidHeight(FluidTags.LAVA) > 0.0D;
++                flag = iblockdata.is(BlockTags.STRIDER_WARM_BLOCKS) || iblockdata1.is(BlockTags.STRIDER_WARM_BLOCKS) || this.getFluidHeight(FluidTags.LAVA) > 0.0D;
+                 Entity entity = this.getVehicle();
+ 
+                 if (entity instanceof Strider) {
+-                    Strider strider = (Strider) entity;
++                    Strider entitystrider = (Strider) entity;
+ 
+-                    if (strider.isSuffocating()) {
++                    if (entitystrider.isSuffocating()) {
+                         flag1 = true;
+                         break label36;
+                     }
+@@ -372,7 +351,14 @@
+ 
+             boolean flag2 = flag1;
+ 
+-            this.setSuffocating(!flag || flag2);
++            // CraftBukkit start
++            boolean suffocating = !flag || flag2;
++            if (suffocating ^ this.isSuffocating()) {
++                if (org.bukkit.craftbukkit.event.CraftEventFactory.callStriderTemperatureChangeEvent(this, suffocating)) {
++                    this.setSuffocating(suffocating);
++                }
++            }
++            // CraftBukkit end
+         }
+ 
+         super.tick();
+@@ -385,16 +371,15 @@
+     }
+ 
+     @Override
+-    @Override
+     protected boolean shouldPassengersInheritMalus() {
+         return true;
+     }
+ 
+     private void floatStrider() {
+         if (this.isInLava()) {
+-            CollisionContext collisioncontext = CollisionContext.of(this);
++            CollisionContext voxelshapecollision = CollisionContext.of(this);
+ 
+-            if (collisioncontext.isAbove(LiquidBlock.STABLE_SHAPE, this.blockPosition(), true) && !this.level().getFluidState(this.blockPosition().above()).is(FluidTags.LAVA)) {
++            if (voxelshapecollision.isAbove(LiquidBlock.STABLE_SHAPE, this.blockPosition(), true) && !this.level().getFluidState(this.blockPosition().above()).is(FluidTags.LAVA)) {
+                 this.setOnGround(true);
+             } else {
+                 this.setDeltaMovement(this.getDeltaMovement().scale(0.5D).add(0.0D, 0.05D, 0.0D));
+@@ -408,80 +393,68 @@
+     }
+ 
+     @Override
+-    @Override
+     protected SoundEvent getAmbientSound() {
+         return !this.isPanicking() && !this.isBeingTempted() ? SoundEvents.STRIDER_AMBIENT : null;
+     }
+ 
+     @Override
+-    @Override
+-    protected SoundEvent getHurtSound(DamageSource damagesource) {
++    protected SoundEvent getHurtSound(DamageSource damageSource) {
+         return SoundEvents.STRIDER_HURT;
+     }
+ 
+     @Override
+-    @Override
+     protected SoundEvent getDeathSound() {
+         return SoundEvents.STRIDER_DEATH;
+     }
+ 
+     @Override
+-    @Override
+-    protected boolean canAddPassenger(Entity entity) {
++    protected boolean canAddPassenger(Entity passenger) {
+         return !this.isVehicle() && !this.isEyeInFluid(FluidTags.LAVA);
+     }
+ 
+     @Override
+-    @Override
+     public boolean isSensitiveToWater() {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isOnFire() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     protected PathNavigation createNavigation(Level level) {
+         return new Strider.StriderPathNavigation(this, level);
+     }
+ 
+     @Override
+-    @Override
+-    public float getWalkTargetValue(BlockPos blockpos, LevelReader levelreader) {
+-        return levelreader.getBlockState(blockpos).getFluidState().is(FluidTags.LAVA) ? 10.0F : (this.isInLava() ? Float.NEGATIVE_INFINITY : 0.0F);
++    public float getWalkTargetValue(BlockPos pos, LevelReader level) {
++        return level.getBlockState(pos).getFluidState().is(FluidTags.LAVA) ? 10.0F : (this.isInLava() ? Float.NEGATIVE_INFINITY : 0.0F);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public Strider getBreedOffspring(ServerLevel serverlevel, AgeableMob ageablemob) {
+-        return (Strider) EntityType.STRIDER.create(serverlevel);
++    public Strider getBreedOffspring(ServerLevel level, AgeableMob otherParent) {
++        return (Strider) EntityType.STRIDER.create(level);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isFood(ItemStack itemstack) {
+-        return Strider.FOOD_ITEMS.test(itemstack);
++    public boolean isFood(ItemStack stack) {
++        return Strider.FOOD_ITEMS.test(stack);
+     }
+ 
+     @Override
+-    @Override
+     protected void dropEquipment() {
+         super.dropEquipment();
+         if (this.isSaddled()) {
+-            this.spawnAtLocation((ItemLike) Items.SADDLE);
++            this.spawnAtLocation((IMaterial) Items.SADDLE);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult mobInteract(Player player, InteractionHand interactionhand) {
+-        boolean flag = this.isFood(player.getItemInHand(interactionhand));
++    public InteractionResult mobInteract(Player player, EnumHand hand) {
++        boolean flag = this.isFood(player.getItemInHand(hand));
+ 
+         if (!flag && this.isSaddled() && !this.isVehicle() && !player.isSecondaryUseActive()) {
+             if (!this.level().isClientSide) {
+@@ -490,64 +463,62 @@
+ 
+             return InteractionResult.sidedSuccess(this.level().isClientSide);
+         } else {
+-            InteractionResult interactionresult = super.mobInteract(player, interactionhand);
++            InteractionResult enuminteractionresult = super.mobInteract(player, hand);
+ 
+-            if (!interactionresult.consumesAction()) {
+-                ItemStack itemstack = player.getItemInHand(interactionhand);
++            if (!enuminteractionresult.consumesAction()) {
++                ItemStack itemstack = player.getItemInHand(hand);
+ 
+-                return itemstack.is(Items.SADDLE) ? itemstack.interactLivingEntity(player, this, interactionhand) : InteractionResult.PASS;
++                return itemstack.is(Items.SADDLE) ? itemstack.interactLivingEntity(player, this, hand) : InteractionResult.PASS;
+             } else {
+                 if (flag && !this.isSilent()) {
+                     this.level().playSound((Player) null, this.getX(), this.getY(), this.getZ(), SoundEvents.STRIDER_EAT, this.getSoundSource(), 1.0F, 1.0F + (this.random.nextFloat() - this.random.nextFloat()) * 0.2F);
+                 }
+ 
+-                return interactionresult;
++                return enuminteractionresult;
+             }
+         }
+     }
+ 
+     @Override
+-    @Override
+     public Vec3 getLeashOffset() {
+         return new Vec3(0.0D, (double) (0.6F * this.getEyeHeight()), (double) (this.getBbWidth() * 0.4F));
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public SpawnGroupData finalizeSpawn(ServerLevelAccessor serverlevelaccessor, DifficultyInstance difficultyinstance, MobSpawnType mobspawntype, @Nullable SpawnGroupData spawngroupdata, @Nullable CompoundTag compoundtag) {
++    public GroupDataEntity finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, EnumMobSpawn reason, @Nullable GroupDataEntity spawnData, @Nullable CompoundTag dataTag) {
+         if (this.isBaby()) {
+-            return super.finalizeSpawn(serverlevelaccessor, difficultyinstance, mobspawntype, (SpawnGroupData) spawngroupdata, compoundtag);
++            return super.finalizeSpawn(level, difficulty, reason, (GroupDataEntity) spawnData, dataTag);
+         } else {
+-            RandomSource randomsource = serverlevelaccessor.getRandom();
++            RandomSource randomsource = level.getRandom();
+ 
+             if (randomsource.nextInt(30) == 0) {
+-                Mob mob = (Mob) EntityType.ZOMBIFIED_PIGLIN.create(serverlevelaccessor.getLevel());
++                Mob entityinsentient = (Mob) EntityType.ZOMBIFIED_PIGLIN.create(level.getLevel());
+ 
+-                if (mob != null) {
+-                    spawngroupdata = this.spawnJockey(serverlevelaccessor, difficultyinstance, mob, new Zombie.ZombieGroupData(Zombie.getSpawnAsBabyOdds(randomsource), false));
+-                    mob.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WARPED_FUNGUS_ON_A_STICK));
++                if (entityinsentient != null) {
++                    spawnData = this.spawnJockey(level, difficulty, entityinsentient, new Zombie.ZombieGroupData(Zombie.getSpawnAsBabyOdds(randomsource), false));
++                    entityinsentient.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.WARPED_FUNGUS_ON_A_STICK));
+                     this.equipSaddle((SoundSource) null);
+                 }
+             } else if (randomsource.nextInt(10) == 0) {
+-                AgeableMob ageablemob = (AgeableMob) EntityType.STRIDER.create(serverlevelaccessor.getLevel());
++                AgeableMob entityageable = (AgeableMob) EntityType.STRIDER.create(level.getLevel());
+ 
+-                if (ageablemob != null) {
+-                    ageablemob.setAge(-24000);
+-                    spawngroupdata = this.spawnJockey(serverlevelaccessor, difficultyinstance, ageablemob, (SpawnGroupData) null);
++                if (entityageable != null) {
++                    entityageable.setAge(-24000);
++                    spawnData = this.spawnJockey(level, difficulty, entityageable, (GroupDataEntity) null);
+                 }
+             } else {
+-                spawngroupdata = new AgeableMob.AgeableMobGroupData(0.5F);
++                spawnData = new AgeableMob.AgeableMobGroupData(0.5F);
+             }
+ 
+-            return super.finalizeSpawn(serverlevelaccessor, difficultyinstance, mobspawntype, (SpawnGroupData) spawngroupdata, compoundtag);
++            return super.finalizeSpawn(level, difficulty, reason, (GroupDataEntity) spawnData, dataTag);
+         }
+     }
+ 
+-    private SpawnGroupData spawnJockey(ServerLevelAccessor serverlevelaccessor, DifficultyInstance difficultyinstance, Mob mob, @Nullable SpawnGroupData spawngroupdata) {
+-        mob.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), 0.0F);
+-        mob.finalizeSpawn(serverlevelaccessor, difficultyinstance, MobSpawnType.JOCKEY, spawngroupdata, (CompoundTag) null);
+-        mob.startRiding(this, true);
++    private GroupDataEntity spawnJockey(ServerLevelAccessor serverLevel, DifficultyInstance difficulty, Mob jockey, @Nullable GroupDataEntity spawnData) {
++        jockey.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), 0.0F);
++        jockey.finalizeSpawn(serverLevel, difficulty, EnumMobSpawn.JOCKEY, spawnData, (CompoundTag) null);
++        jockey.startRiding(this, true);
+         return new AgeableMob.AgeableMobGroupData(0.0F);
+     }
+ 
+@@ -555,39 +526,34 @@
+ 
+         private final Strider strider;
+ 
+-        StriderGoToLavaGoal(Strider strider, double d0) {
+-            super(strider, d0, 8, 2);
++        StriderGoToLavaGoal(Strider strider, double speedModifier) {
++            super(strider, speedModifier, 8, 2);
+             this.strider = strider;
+         }
+ 
+         @Override
+-        @Override
+         public BlockPos getMoveToTarget() {
+             return this.blockPos;
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             return !this.strider.isInLava() && this.isValidTarget(this.strider.level(), this.blockPos);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canUse() {
+             return !this.strider.isInLava() && super.canUse();
+         }
+ 
+         @Override
+-        @Override
+         public boolean shouldRecalculatePath() {
+             return this.tryTicks % 20 == 0;
+         }
+ 
+         @Override
+-        @Override
+-        protected boolean isValidTarget(LevelReader levelreader, BlockPos blockpos) {
+-            return levelreader.getBlockState(blockpos).is(Blocks.LAVA) && levelreader.getBlockState(blockpos.above()).isPathfindable(levelreader, blockpos, PathComputationType.LAND);
++        protected boolean isValidTarget(LevelReader level, BlockPos pos) {
++            return level.getBlockState(pos).is(Blocks.LAVA) && level.getBlockState(pos.above()).isPathfindable(level, pos, PathMode.LAND);
+         }
+     }
+ 
+@@ -598,23 +564,20 @@
+         }
+ 
+         @Override
+-        @Override
+-        protected PathFinder createPathFinder(int i) {
++        protected PathFinder createPathFinder(int maxVisitedNodes) {
+             this.nodeEvaluator = new WalkNodeEvaluator();
+             this.nodeEvaluator.setCanPassDoors(true);
+-            return new PathFinder(this.nodeEvaluator, i);
++            return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
+         }
+ 
+         @Override
+-        @Override
+-        protected boolean hasValidPathType(BlockPathTypes blockpathtypes) {
+-            return blockpathtypes != BlockPathTypes.LAVA && blockpathtypes != BlockPathTypes.DAMAGE_FIRE && blockpathtypes != BlockPathTypes.DANGER_FIRE ? super.hasValidPathType(blockpathtypes) : true;
++        protected boolean hasValidPathType(BlockPathTypes pathType) {
++            return pathType != BlockPathTypes.LAVA && pathType != BlockPathTypes.DAMAGE_FIRE && pathType != BlockPathTypes.DANGER_FIRE ? super.hasValidPathType(pathType) : true;
+         }
+ 
+         @Override
+-        @Override
+-        public boolean isStableDestination(BlockPos blockpos) {
+-            return this.level.getBlockState(blockpos).is(Blocks.LAVA) || super.isStableDestination(blockpos);
++        public boolean isStableDestination(BlockPos pos) {
++            return this.level.getBlockState(pos).is(Blocks.LAVA) || super.isStableDestination(pos);
+         }
+     }
+ }

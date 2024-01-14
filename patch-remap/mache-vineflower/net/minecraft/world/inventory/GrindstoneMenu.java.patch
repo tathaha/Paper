@@ -1,0 +1,430 @@
+--- a/net/minecraft/world/inventory/GrindstoneMenu.java
++++ b/net/minecraft/world/inventory/GrindstoneMenu.java
+@@ -1,15 +1,14 @@
+ package net.minecraft.world.inventory;
+ 
++import java.util.Iterator;
+ import java.util.Map;
+ import java.util.Map.Entry;
+ import java.util.stream.Collectors;
+-import net.minecraft.core.BlockPos;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.Container;
+ import net.minecraft.world.SimpleContainer;
+ import net.minecraft.world.entity.ExperienceOrb;
+ import net.minecraft.world.entity.player.Inventory;
+-import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.Item;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+@@ -18,8 +17,30 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.inventory.CraftInventoryGrindstone;
++import org.bukkit.craftbukkit.inventory.CraftInventoryView;
++import org.bukkit.entity.Player;
++// CraftBukkit end
+ 
+ public class GrindstoneMenu extends AbstractContainerMenu {
++
++    // CraftBukkit start
++    private CraftInventoryView bukkitEntity = null;
++    private Player player;
++
++    @Override
++    public CraftInventoryView getBukkitView() {
++        if (bukkitEntity != null) {
++            return bukkitEntity;
++        }
++
++        CraftInventoryGrindstone inventory = new CraftInventoryGrindstone(this.repairSlots, this.resultSlots);
++        bukkitEntity = new CraftInventoryView(this.player, inventory, this);
++        return bukkitEntity;
++    }
++    // CraftBukkit end
+     public static final int MAX_NAME_LENGTH = 35;
+     public static final int INPUT_SLOT = 0;
+     public static final int ADDITIONAL_SLOT = 1;
+@@ -28,14 +49,8 @@
+     private static final int INV_SLOT_END = 30;
+     private static final int USE_ROW_SLOT_START = 30;
+     private static final int USE_ROW_SLOT_END = 39;
+-    private final Container resultSlots = new ResultContainer();
+-    final Container repairSlots = new SimpleContainer(2) {
+-        @Override
+-        public void setChanged() {
+-            super.setChanged();
+-            GrindstoneMenu.this.slotsChanged(this);
+-        }
+-    };
++    private final Container resultSlots;
++    final Container repairSlots;
+     private final ContainerLevelAccess access;
+ 
+     public GrindstoneMenu(int containerId, Inventory playerInventory) {
+@@ -44,6 +59,21 @@
+ 
+     public GrindstoneMenu(int containerId, Inventory playerInventory, final ContainerLevelAccess access) {
+         super(MenuType.GRINDSTONE, containerId);
++        this.resultSlots = new ResultContainer();
++        this.repairSlots = new SimpleContainer(2) {
++            @Override
++            public void setChanged() {
++                super.setChanged();
++                GrindstoneMenu.this.slotsChanged(this);
++            }
++
++            // CraftBukkit start
++            @Override
++            public Location getLocation() {
++                return access.getLocation();
++            }
++            // CraftBukkit end
++        };
+         this.access = access;
+         this.addSlot(new Slot(this.repairSlots, 0, 49, 19) {
+             @Override
+@@ -64,55 +94,64 @@
+             }
+ 
+             @Override
+-            public void onTake(Player player, ItemStack stack) {
+-                access.execute((level, blockPos) -> {
+-                    if (level instanceof ServerLevel) {
+-                        ExperienceOrb.award((ServerLevel)level, Vec3.atCenterOf(blockPos), this.getExperienceAmount(level));
++            public void onTake(net.minecraft.world.entity.player.Player player, ItemStack stack) {
++                access.execute((world, blockposition) -> {
++                    if (world instanceof ServerLevel) {
++                        ExperienceOrb.award((ServerLevel) world, Vec3.atCenterOf(blockposition), this.getExperienceAmount(world));
+                     }
+ 
+-                    level.levelEvent(1042, blockPos, 0);
++                    world.levelEvent(1042, blockposition, 0);
+                 });
+                 GrindstoneMenu.this.repairSlots.setItem(0, ItemStack.EMPTY);
+                 GrindstoneMenu.this.repairSlots.setItem(1, ItemStack.EMPTY);
+             }
+ 
+             private int getExperienceAmount(Level level) {
+-                int i2 = 0;
+-                i2 += this.getExperienceFromItem(GrindstoneMenu.this.repairSlots.getItem(0));
+-                int var5 = i2 + this.getExperienceFromItem(GrindstoneMenu.this.repairSlots.getItem(1));
+-                if (var5 > 0) {
+-                    int i3 = (int)Math.ceil((double)var5 / 2.0);
+-                    return i3 + level.random.nextInt(i3);
++                byte b0 = 0;
++                int j = b0 + this.getExperienceFromItem(GrindstoneMenu.this.repairSlots.getItem(0));
++
++                j += this.getExperienceFromItem(GrindstoneMenu.this.repairSlots.getItem(1));
++                if (j > 0) {
++                    int k = (int) Math.ceil((double) j / 2.0D);
++
++                    return k + level.random.nextInt(k);
+                 } else {
+                     return 0;
+                 }
+             }
+ 
+             private int getExperienceFromItem(ItemStack stack) {
+-                int i2 = 0;
+-                Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(stack);
++                int j = 0;
++                Map<Enchantment, Integer> map = EnchantmentHelper.getEnchantments(stack);
++                Iterator iterator = map.entrySet().iterator();
+ 
+-                for (Entry<Enchantment, Integer> entry : enchantments.entrySet()) {
+-                    Enchantment enchantment = entry.getKey();
+-                    Integer integer = entry.getValue();
++                while (iterator.hasNext()) {
++                    Entry<Enchantment, Integer> entry = (Entry) iterator.next();
++                    Enchantment enchantment = (Enchantment) entry.getKey();
++                    Integer integer = (Integer) entry.getValue();
++
+                     if (!enchantment.isCurse()) {
+-                        i2 += enchantment.getMinCost(integer);
++                        j += enchantment.getMinCost(integer);
+                     }
+                 }
+ 
+-                return i2;
++                return j;
+             }
+         });
+ 
+-        for (int i = 0; i < 3; i++) {
+-            for (int i1 = 0; i1 < 9; i1++) {
+-                this.addSlot(new Slot(playerInventory, i1 + i * 9 + 9, 8 + i1 * 18, 84 + i * 18));
++        int j;
++
++        for (j = 0; j < 3; ++j) {
++            for (int k = 0; k < 9; ++k) {
++                this.addSlot(new Slot(playerInventory, k + j * 9 + 9, 8 + k * 18, 84 + j * 18));
+             }
+         }
+ 
+-        for (int i = 0; i < 9; i++) {
+-            this.addSlot(new Slot(playerInventory, i, 8 + i * 18, 142));
++        for (j = 0; j < 9; ++j) {
++            this.addSlot(new Slot(playerInventory, j, 8 + j * 18, 142));
+         }
++
++        player = (Player) playerInventory.player.getBukkitEntity(); // CraftBukkit
+     }
+ 
+     @Override
+@@ -121,161 +160,175 @@
+         if (inventory == this.repairSlots) {
+             this.createResult();
+         }
++
+     }
+ 
+     private void createResult() {
+-        ItemStack item = this.repairSlots.getItem(0);
+-        ItemStack item1 = this.repairSlots.getItem(1);
+-        boolean flag = !item.isEmpty() || !item1.isEmpty();
+-        boolean flag1 = !item.isEmpty() && !item1.isEmpty();
+-        if (!flag) {
+-            this.resultSlots.setItem(0, ItemStack.EMPTY);
+-        } else {
+-            boolean flag2 = !item.isEmpty() && !item.is(Items.ENCHANTED_BOOK) && !item.isEnchanted()
+-                || !item1.isEmpty() && !item1.is(Items.ENCHANTED_BOOK) && !item1.isEnchanted();
+-            if (item.getCount() > 1 || item1.getCount() > 1 || !flag1 && flag2) {
+-                this.resultSlots.setItem(0, ItemStack.EMPTY);
++        ItemStack itemstack = this.repairSlots.getItem(0);
++        ItemStack itemstack1 = this.repairSlots.getItem(1);
++        boolean flag = !itemstack.isEmpty() || !itemstack1.isEmpty();
++        boolean flag1 = !itemstack.isEmpty() && !itemstack1.isEmpty();
++
++        if (flag) {
++            boolean flag2 = !itemstack.isEmpty() && !itemstack.is(Items.ENCHANTED_BOOK) && !itemstack.isEnchanted() || !itemstack1.isEmpty() && !itemstack1.is(Items.ENCHANTED_BOOK) && !itemstack1.isEnchanted();
++
++            if (itemstack.getCount() > 1 || itemstack1.getCount() > 1 || !flag1 && flag2) {
++                org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareGrindstoneEvent(getBukkitView(), ItemStack.EMPTY); // CraftBukkit
+                 this.broadcastChanges();
+                 return;
+             }
+ 
+-            int i = 1;
+-            int max;
+-            ItemStack itemStack;
++            byte b0 = 1;
++            int i;
++            ItemStack itemstack2;
++
+             if (flag1) {
+-                if (!item.is(item1.getItem())) {
+-                    this.resultSlots.setItem(0, ItemStack.EMPTY);
++                if (!itemstack.is(itemstack1.getItem())) {
++                    org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareGrindstoneEvent(getBukkitView(), ItemStack.EMPTY); // CraftBukkit
+                     this.broadcastChanges();
+                     return;
+                 }
+ 
+-                Item item2 = item.getItem();
+-                int i1 = item2.getMaxDamage() - item.getDamageValue();
+-                int i2 = item2.getMaxDamage() - item1.getDamageValue();
+-                int i3 = i1 + i2 + item2.getMaxDamage() * 5 / 100;
+-                max = Math.max(item2.getMaxDamage() - i3, 0);
+-                itemStack = this.mergeEnchants(item, item1);
+-                if (!itemStack.isDamageableItem()) {
+-                    if (!ItemStack.matches(item, item1)) {
+-                        this.resultSlots.setItem(0, ItemStack.EMPTY);
++                Item item = itemstack.getItem();
++                int j = item.getMaxDamage() - itemstack.getDamageValue();
++                int k = item.getMaxDamage() - itemstack1.getDamageValue();
++                int l = j + k + item.getMaxDamage() * 5 / 100;
++
++                i = Math.max(item.getMaxDamage() - l, 0);
++                itemstack2 = this.mergeEnchants(itemstack, itemstack1);
++                if (!itemstack2.isDamageableItem()) {
++                    if (!ItemStack.matches(itemstack, itemstack1)) {
++                        org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareGrindstoneEvent(getBukkitView(), ItemStack.EMPTY); // CraftBukkit
+                         this.broadcastChanges();
+                         return;
+                     }
+ 
+-                    i = 2;
++                    b0 = 2;
+                 }
+             } else {
+-                boolean flag3 = !item.isEmpty();
+-                max = flag3 ? item.getDamageValue() : item1.getDamageValue();
+-                itemStack = flag3 ? item : item1;
+-            }
++                boolean flag3 = !itemstack.isEmpty();
+ 
+-            this.resultSlots.setItem(0, this.removeNonCurses(itemStack, max, i));
++                i = flag3 ? itemstack.getDamageValue() : itemstack1.getDamageValue();
++                itemstack2 = flag3 ? itemstack : itemstack1;
++            }
++            org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareGrindstoneEvent(getBukkitView(), this.removeNonCurses(itemstack2, i, b0)); // CraftBukkit
++        } else {
++            org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareGrindstoneEvent(getBukkitView(), ItemStack.EMPTY); // CraftBukkit
+         }
+ 
++        sendAllDataToRemote(); // CraftBukkit - SPIGOT-6686: Always send completed inventory to stay in sync with client
+         this.broadcastChanges();
+     }
+ 
+     private ItemStack mergeEnchants(ItemStack copyTo, ItemStack copyFrom) {
+-        ItemStack itemStack = copyTo.copy();
+-        Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(copyFrom);
++        ItemStack itemstack2 = copyTo.copy();
++        Map<Enchantment, Integer> map = EnchantmentHelper.getEnchantments(copyFrom);
++        Iterator iterator = map.entrySet().iterator();
+ 
+-        for (Entry<Enchantment, Integer> entry : enchantments.entrySet()) {
+-            Enchantment enchantment = entry.getKey();
+-            if (!enchantment.isCurse() || EnchantmentHelper.getItemEnchantmentLevel(enchantment, itemStack) == 0) {
+-                itemStack.enchant(enchantment, entry.getValue());
++        while (iterator.hasNext()) {
++            Entry<Enchantment, Integer> entry = (Entry) iterator.next();
++            Enchantment enchantment = (Enchantment) entry.getKey();
++
++            if (!enchantment.isCurse() || EnchantmentHelper.getItemEnchantmentLevel(enchantment, itemstack2) == 0) {
++                itemstack2.enchant(enchantment, (Integer) entry.getValue());
+             }
+         }
+ 
+-        return itemStack;
++        return itemstack2;
+     }
+ 
+     private ItemStack removeNonCurses(ItemStack stack, int damage, int count) {
+-        ItemStack itemStack = stack.copyWithCount(count);
+-        itemStack.removeTagKey("Enchantments");
+-        itemStack.removeTagKey("StoredEnchantments");
++        ItemStack itemstack1 = stack.copyWithCount(count);
++
++        itemstack1.removeTagKey("Enchantments");
++        itemstack1.removeTagKey("StoredEnchantments");
+         if (damage > 0) {
+-            itemStack.setDamageValue(damage);
++            itemstack1.setDamageValue(damage);
+         } else {
+-            itemStack.removeTagKey("Damage");
++            itemstack1.removeTagKey("Damage");
+         }
+ 
+-        Map<Enchantment, Integer> map = EnchantmentHelper.getEnchantments(stack)
+-            .entrySet()
+-            .stream()
+-            .filter(enchantment -> enchantment.getKey().isCurse())
+-            .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+-        EnchantmentHelper.setEnchantments(map, itemStack);
+-        itemStack.setRepairCost(0);
+-        if (itemStack.is(Items.ENCHANTED_BOOK) && map.size() == 0) {
+-            itemStack = new ItemStack(Items.BOOK);
++        Map<Enchantment, Integer> map = (Map) EnchantmentHelper.getEnchantments(stack).entrySet().stream().filter((entry) -> {
++            return ((Enchantment) entry.getKey()).isCurse();
++        }).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
++
++        EnchantmentHelper.setEnchantments(map, itemstack1);
++        itemstack1.setRepairCost(0);
++        if (itemstack1.is(Items.ENCHANTED_BOOK) && map.size() == 0) {
++            itemstack1 = new ItemStack(Items.BOOK);
+             if (stack.hasCustomHoverName()) {
+-                itemStack.setHoverName(stack.getHoverName());
++                itemstack1.setHoverName(stack.getHoverName());
+             }
+         }
+ 
+-        for (int i = 0; i < map.size(); i++) {
+-            itemStack.setRepairCost(AnvilMenu.calculateIncreasedRepairCost(itemStack.getBaseRepairCost()));
++        for (int k = 0; k < map.size(); ++k) {
++            itemstack1.setRepairCost(AnvilMenu.calculateIncreasedRepairCost(itemstack1.getBaseRepairCost()));
+         }
+ 
+-        return itemStack;
++        return itemstack1;
+     }
+ 
+     @Override
+-    public void removed(Player player) {
++    public void removed(net.minecraft.world.entity.player.Player player) {
+         super.removed(player);
+-        this.access.execute((level, blockPos) -> this.clearContainer(player, this.repairSlots));
++        this.access.execute((world, blockposition) -> {
++            this.clearContainer(player, this.repairSlots);
++        });
+     }
+ 
+     @Override
+-    public boolean stillValid(Player player) {
++    public boolean stillValid(net.minecraft.world.entity.player.Player player) {
++        if (!this.checkReachable) return true; // CraftBukkit
+         return stillValid(this.access, player, Blocks.GRINDSTONE);
+     }
+ 
+     @Override
+-    public ItemStack quickMoveStack(Player player, int index) {
+-        ItemStack itemStack = ItemStack.EMPTY;
+-        Slot slot = this.slots.get(index);
++    public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player player, int index) {
++        ItemStack itemstack = ItemStack.EMPTY;
++        Slot slot = (Slot) this.slots.get(index);
++
+         if (slot != null && slot.hasItem()) {
+-            ItemStack item = slot.getItem();
+-            itemStack = item.copy();
+-            ItemStack item1 = this.repairSlots.getItem(0);
+-            ItemStack item2 = this.repairSlots.getItem(1);
++            ItemStack itemstack1 = slot.getItem();
++
++            itemstack = itemstack1.copy();
++            ItemStack itemstack2 = this.repairSlots.getItem(0);
++            ItemStack itemstack3 = this.repairSlots.getItem(1);
++
+             if (index == 2) {
+-                if (!this.moveItemStackTo(item, 3, 39, true)) {
++                if (!this.moveItemStackTo(itemstack1, 3, 39, true)) {
+                     return ItemStack.EMPTY;
+                 }
+ 
+-                slot.onQuickCraft(item, itemStack);
++                slot.onQuickCraft(itemstack1, itemstack);
+             } else if (index != 0 && index != 1) {
+-                if (!item1.isEmpty() && !item2.isEmpty()) {
++                if (!itemstack2.isEmpty() && !itemstack3.isEmpty()) {
+                     if (index >= 3 && index < 30) {
+-                        if (!this.moveItemStackTo(item, 30, 39, false)) {
++                        if (!this.moveItemStackTo(itemstack1, 30, 39, false)) {
+                             return ItemStack.EMPTY;
+                         }
+-                    } else if (index >= 30 && index < 39 && !this.moveItemStackTo(item, 3, 30, false)) {
++                    } else if (index >= 30 && index < 39 && !this.moveItemStackTo(itemstack1, 3, 30, false)) {
+                         return ItemStack.EMPTY;
+                     }
+-                } else if (!this.moveItemStackTo(item, 0, 2, false)) {
++                } else if (!this.moveItemStackTo(itemstack1, 0, 2, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (!this.moveItemStackTo(item, 3, 39, false)) {
++            } else if (!this.moveItemStackTo(itemstack1, 3, 39, false)) {
+                 return ItemStack.EMPTY;
+             }
+ 
+-            if (item.isEmpty()) {
++            if (itemstack1.isEmpty()) {
+                 slot.setByPlayer(ItemStack.EMPTY);
+             } else {
+                 slot.setChanged();
+             }
+ 
+-            if (item.getCount() == itemStack.getCount()) {
++            if (itemstack1.getCount() == itemstack.getCount()) {
+                 return ItemStack.EMPTY;
+             }
+ 
+-            slot.onTake(player, item);
++            slot.onTake(player, itemstack1);
+         }
+ 
+-        return itemStack;
++        return itemstack;
+     }
+ }

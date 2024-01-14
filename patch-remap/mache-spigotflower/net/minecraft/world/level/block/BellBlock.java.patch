@@ -1,0 +1,373 @@
+--- a/net/minecraft/world/level/block/BellBlock.java
++++ b/net/minecraft/world/level/block/BellBlock.java
+@@ -8,7 +8,7 @@
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.player.Player;
+@@ -25,7 +25,7 @@
+ import net.minecraft.world.level.block.entity.BlockEntityTicker;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BellAttachType;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+@@ -33,7 +33,7 @@
+ import net.minecraft.world.level.block.state.properties.DirectionProperty;
+ import net.minecraft.world.level.block.state.properties.EnumProperty;
+ import net.minecraft.world.level.gameevent.GameEvent;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+@@ -60,53 +60,49 @@
+     public static final int EVENT_BELL_RING = 1;
+ 
+     @Override
+-    @Override
+     public MapCodec<BellBlock> codec() {
+         return BellBlock.CODEC;
+     }
+ 
+-    public BellBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(BellBlock.FACING, Direction.NORTH)).setValue(BellBlock.ATTACHMENT, BellAttachType.FLOOR)).setValue(BellBlock.POWERED, false));
++    public BellBlock(BlockBehaviour.Properties properties) {
++        super(properties);
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(BellBlock.FACING, Direction.NORTH)).setValue(BellBlock.ATTACHMENT, BellAttachType.FLOOR)).setValue(BellBlock.POWERED, false));
+     }
+ 
+     @Override
+-    @Override
+-    public void neighborChanged(BlockState blockstate, Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-        boolean flag1 = level.hasNeighborSignal(blockpos);
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
++        boolean flag1 = level.hasNeighborSignal(pos);
+ 
+-        if (flag1 != (Boolean) blockstate.getValue(BellBlock.POWERED)) {
++        if (flag1 != (Boolean) state.getValue(BellBlock.POWERED)) {
+             if (flag1) {
+-                this.attemptToRing(level, blockpos, (Direction) null);
++                this.attemptToRing(level, pos, (Direction) null);
+             }
+ 
+-            level.setBlock(blockpos, (BlockState) blockstate.setValue(BellBlock.POWERED, flag1), 3);
++            level.setBlock(pos, (IBlockData) state.setValue(BellBlock.POWERED, flag1), 3);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onProjectileHit(Level level, BlockState blockstate, BlockHitResult blockhitresult, Projectile projectile) {
++    public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {
+         Entity entity = projectile.getOwner();
+-        Player player = entity instanceof Player ? (Player) entity : null;
++        Player entityhuman = entity instanceof Player ? (Player) entity : null;
+ 
+-        this.onHit(level, blockstate, blockhitresult, player, true);
++        this.onHit(level, state, hit, entityhuman, true);
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult use(BlockState blockstate, Level level, BlockPos blockpos, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
+-        return this.onHit(level, blockstate, blockhitresult, player, true) ? InteractionResult.sidedSuccess(level.isClientSide) : InteractionResult.PASS;
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
++        return this.onHit(level, state, hit, player, true) ? InteractionResult.sidedSuccess(level.isClientSide) : InteractionResult.PASS;
+     }
+ 
+-    public boolean onHit(Level level, BlockState blockstate, BlockHitResult blockhitresult, @Nullable Player player, boolean flag) {
+-        Direction direction = blockhitresult.getDirection();
+-        BlockPos blockpos = blockhitresult.getBlockPos();
+-        boolean flag1 = !flag || this.isProperHit(blockstate, direction, blockhitresult.getLocation().y - (double) blockpos.getY());
++    public boolean onHit(Level level, IBlockData state, BlockHitResult result, @Nullable Player player, boolean canRingBell) {
++        Direction enumdirection = result.getDirection();
++        BlockPos blockposition = result.getBlockPos();
++        boolean flag1 = !canRingBell || this.isProperHit(state, enumdirection, result.getLocation().y - (double) blockposition.getY());
+ 
+         if (flag1) {
+-            boolean flag2 = this.attemptToRing(player, level, blockpos, direction);
++            boolean flag2 = this.attemptToRing(player, level, blockposition, enumdirection);
+ 
+             if (flag2 && player != null) {
+                 player.awardStat(Stats.BELL_RING);
+@@ -118,17 +114,17 @@
+         }
+     }
+ 
+-    private boolean isProperHit(BlockState blockstate, Direction direction, double d0) {
+-        if (direction.getAxis() != Direction.Axis.Y && d0 <= 0.8123999834060669D) {
+-            Direction direction1 = (Direction) blockstate.getValue(BellBlock.FACING);
+-            BellAttachType bellattachtype = (BellAttachType) blockstate.getValue(BellBlock.ATTACHMENT);
++    private boolean isProperHit(IBlockData pos, Direction direction, double distanceY) {
++        if (direction.getAxis() != Direction.Axis.Y && distanceY <= 0.8123999834060669D) {
++            Direction enumdirection1 = (Direction) pos.getValue(BellBlock.FACING);
++            BellAttachType blockpropertybellattach = (BellAttachType) pos.getValue(BellBlock.ATTACHMENT);
+ 
+-            switch (bellattachtype) {
++            switch (blockpropertybellattach) {
+                 case FLOOR:
+-                    return direction1.getAxis() == direction.getAxis();
++                    return enumdirection1.getAxis() == direction.getAxis();
+                 case SINGLE_WALL:
+                 case DOUBLE_WALL:
+-                    return direction1.getAxis() != direction.getAxis();
++                    return enumdirection1.getAxis() != direction.getAxis();
+                 case CEILING:
+                     return true;
+                 default:
+@@ -139,80 +135,81 @@
+         }
+     }
+ 
+-    public boolean attemptToRing(Level level, BlockPos blockpos, @Nullable Direction direction) {
+-        return this.attemptToRing((Entity) null, level, blockpos, direction);
++    public boolean attemptToRing(Level level, BlockPos pos, @Nullable Direction direction) {
++        return this.attemptToRing((Entity) null, level, pos, direction);
+     }
+ 
+-    public boolean attemptToRing(@Nullable Entity entity, Level level, BlockPos blockpos, @Nullable Direction direction) {
+-        BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public boolean attemptToRing(@Nullable Entity entity, Level level, BlockPos pos, @Nullable Direction direction) {
++        BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-        if (!level.isClientSide && blockentity instanceof BellBlockEntity) {
++        if (!level.isClientSide && tileentity instanceof BellBlockEntity) {
+             if (direction == null) {
+-                direction = (Direction) level.getBlockState(blockpos).getValue(BellBlock.FACING);
++                direction = (Direction) level.getBlockState(pos).getValue(BellBlock.FACING);
+             }
++            // CraftBukkit start
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.handleBellRingEvent(level, pos, direction, entity)) {
++                return false;
++            }
++            // CraftBukkit end
+ 
+-            ((BellBlockEntity) blockentity).onHit(direction);
+-            level.playSound((Player) null, blockpos, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 2.0F, 1.0F);
+-            level.gameEvent(entity, GameEvent.BLOCK_CHANGE, blockpos);
++            ((BellBlockEntity) tileentity).onHit(direction);
++            level.playSound((Player) null, pos, SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 2.0F, 1.0F);
++            level.gameEvent(entity, GameEvent.BLOCK_CHANGE, pos);
+             return true;
+         } else {
+             return false;
+         }
+     }
+ 
+-    private VoxelShape getVoxelShape(BlockState blockstate) {
+-        Direction direction = (Direction) blockstate.getValue(BellBlock.FACING);
+-        BellAttachType bellattachtype = (BellAttachType) blockstate.getValue(BellBlock.ATTACHMENT);
++    private VoxelShape getVoxelShape(IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(BellBlock.FACING);
++        BellAttachType blockpropertybellattach = (BellAttachType) state.getValue(BellBlock.ATTACHMENT);
+ 
+-        return bellattachtype == BellAttachType.FLOOR ? (direction != Direction.NORTH && direction != Direction.SOUTH ? BellBlock.EAST_WEST_FLOOR_SHAPE : BellBlock.NORTH_SOUTH_FLOOR_SHAPE) : (bellattachtype == BellAttachType.CEILING ? BellBlock.CEILING_SHAPE : (bellattachtype == BellAttachType.DOUBLE_WALL ? (direction != Direction.NORTH && direction != Direction.SOUTH ? BellBlock.EAST_WEST_BETWEEN : BellBlock.NORTH_SOUTH_BETWEEN) : (direction == Direction.NORTH ? BellBlock.TO_NORTH : (direction == Direction.SOUTH ? BellBlock.TO_SOUTH : (direction == Direction.EAST ? BellBlock.TO_EAST : BellBlock.TO_WEST)))));
++        return blockpropertybellattach == BellAttachType.FLOOR ? (enumdirection != Direction.NORTH && enumdirection != Direction.SOUTH ? BellBlock.EAST_WEST_FLOOR_SHAPE : BellBlock.NORTH_SOUTH_FLOOR_SHAPE) : (blockpropertybellattach == BellAttachType.CEILING ? BellBlock.CEILING_SHAPE : (blockpropertybellattach == BellAttachType.DOUBLE_WALL ? (enumdirection != Direction.NORTH && enumdirection != Direction.SOUTH ? BellBlock.EAST_WEST_BETWEEN : BellBlock.NORTH_SOUTH_BETWEEN) : (enumdirection == Direction.NORTH ? BellBlock.TO_NORTH : (enumdirection == Direction.SOUTH ? BellBlock.TO_SOUTH : (enumdirection == Direction.EAST ? BellBlock.TO_EAST : BellBlock.TO_WEST)))));
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getCollisionShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return this.getVoxelShape(blockstate);
++    public VoxelShape getCollisionShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return this.getVoxelShape(state);
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return this.getVoxelShape(blockstate);
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return this.getVoxelShape(state);
+     }
+ 
+     @Override
+-    @Override
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.MODEL;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.MODEL;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        Direction direction = blockplacecontext.getClickedFace();
+-        BlockPos blockpos = blockplacecontext.getClickedPos();
+-        Level level = blockplacecontext.getLevel();
+-        Direction.Axis direction_axis = direction.getAxis();
+-        BlockState blockstate;
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        Direction enumdirection = context.getClickedFace();
++        BlockPos blockposition = context.getClickedPos();
++        Level world = context.getLevel();
++        Direction.Axis enumdirection_enumaxis = enumdirection.getAxis();
++        IBlockData iblockdata;
+ 
+-        if (direction_axis == Direction.Axis.Y) {
+-            blockstate = (BlockState) ((BlockState) this.defaultBlockState().setValue(BellBlock.ATTACHMENT, direction == Direction.DOWN ? BellAttachType.CEILING : BellAttachType.FLOOR)).setValue(BellBlock.FACING, blockplacecontext.getHorizontalDirection());
+-            if (blockstate.canSurvive(blockplacecontext.getLevel(), blockpos)) {
+-                return blockstate;
++        if (enumdirection_enumaxis == Direction.Axis.Y) {
++            iblockdata = (IBlockData) ((IBlockData) this.defaultBlockState().setValue(BellBlock.ATTACHMENT, enumdirection == Direction.DOWN ? BellAttachType.CEILING : BellAttachType.FLOOR)).setValue(BellBlock.FACING, context.getHorizontalDirection());
++            if (iblockdata.canSurvive(context.getLevel(), blockposition)) {
++                return iblockdata;
+             }
+         } else {
+-            boolean flag = direction_axis == Direction.Axis.X && level.getBlockState(blockpos.west()).isFaceSturdy(level, blockpos.west(), Direction.EAST) && level.getBlockState(blockpos.east()).isFaceSturdy(level, blockpos.east(), Direction.WEST) || direction_axis == Direction.Axis.Z && level.getBlockState(blockpos.north()).isFaceSturdy(level, blockpos.north(), Direction.SOUTH) && level.getBlockState(blockpos.south()).isFaceSturdy(level, blockpos.south(), Direction.NORTH);
++            boolean flag = enumdirection_enumaxis == Direction.Axis.X && world.getBlockState(blockposition.west()).isFaceSturdy(world, blockposition.west(), Direction.EAST) && world.getBlockState(blockposition.east()).isFaceSturdy(world, blockposition.east(), Direction.WEST) || enumdirection_enumaxis == Direction.Axis.Z && world.getBlockState(blockposition.north()).isFaceSturdy(world, blockposition.north(), Direction.SOUTH) && world.getBlockState(blockposition.south()).isFaceSturdy(world, blockposition.south(), Direction.NORTH);
+ 
+-            blockstate = (BlockState) ((BlockState) this.defaultBlockState().setValue(BellBlock.FACING, direction.getOpposite())).setValue(BellBlock.ATTACHMENT, flag ? BellAttachType.DOUBLE_WALL : BellAttachType.SINGLE_WALL);
+-            if (blockstate.canSurvive(blockplacecontext.getLevel(), blockplacecontext.getClickedPos())) {
+-                return blockstate;
++            iblockdata = (IBlockData) ((IBlockData) this.defaultBlockState().setValue(BellBlock.FACING, enumdirection.getOpposite())).setValue(BellBlock.ATTACHMENT, flag ? BellAttachType.DOUBLE_WALL : BellAttachType.SINGLE_WALL);
++            if (iblockdata.canSurvive(context.getLevel(), context.getClickedPos())) {
++                return iblockdata;
+             }
+ 
+-            boolean flag1 = level.getBlockState(blockpos.below()).isFaceSturdy(level, blockpos.below(), Direction.UP);
++            boolean flag1 = world.getBlockState(blockposition.below()).isFaceSturdy(world, blockposition.below(), Direction.UP);
+ 
+-            blockstate = (BlockState) blockstate.setValue(BellBlock.ATTACHMENT, flag1 ? BellAttachType.FLOOR : BellAttachType.CEILING);
+-            if (blockstate.canSurvive(blockplacecontext.getLevel(), blockplacecontext.getClickedPos())) {
+-                return blockstate;
++            iblockdata = (IBlockData) iblockdata.setValue(BellBlock.ATTACHMENT, flag1 ? BellAttachType.FLOOR : BellAttachType.CEILING);
++            if (iblockdata.canSurvive(context.getLevel(), context.getClickedPos())) {
++                return iblockdata;
+             }
+         }
+ 
+@@ -220,92 +217,83 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void onExplosionHit(BlockState blockstate, Level level, BlockPos blockpos, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
+-        if (explosion.getBlockInteraction() == Explosion.BlockInteraction.TRIGGER_BLOCK && !level.isClientSide()) {
+-            this.attemptToRing(level, blockpos, (Direction) null);
++    public void onExplosionHit(IBlockData iblockdata, Level world, BlockPos blockposition, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
++        if (explosion.getBlockInteraction() == Explosion.Effect.TRIGGER_BLOCK && !world.isClientSide()) {
++            this.attemptToRing(world, blockposition, (Direction) null);
+         }
+ 
+-        super.onExplosionHit(blockstate, level, blockpos, explosion, biconsumer);
++        super.onExplosionHit(iblockdata, world, blockposition, explosion, biconsumer);
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        BellAttachType bellattachtype = (BellAttachType) blockstate.getValue(BellBlock.ATTACHMENT);
+-        Direction direction1 = getConnectedDirection(blockstate).getOpposite();
++    public IBlockData updateShape(IBlockData state, Direction facing, IBlockData facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
++        BellAttachType blockpropertybellattach = (BellAttachType) state.getValue(BellBlock.ATTACHMENT);
++        Direction enumdirection1 = getConnectedDirection(state).getOpposite();
+ 
+-        if (direction1 == direction && !blockstate.canSurvive(levelaccessor, blockpos) && bellattachtype != BellAttachType.DOUBLE_WALL) {
++        if (enumdirection1 == facing && !state.canSurvive(level, currentPos) && blockpropertybellattach != BellAttachType.DOUBLE_WALL) {
+             return Blocks.AIR.defaultBlockState();
+         } else {
+-            if (direction.getAxis() == ((Direction) blockstate.getValue(BellBlock.FACING)).getAxis()) {
+-                if (bellattachtype == BellAttachType.DOUBLE_WALL && !blockstate1.isFaceSturdy(levelaccessor, blockpos1, direction)) {
+-                    return (BlockState) ((BlockState) blockstate.setValue(BellBlock.ATTACHMENT, BellAttachType.SINGLE_WALL)).setValue(BellBlock.FACING, direction.getOpposite());
++            if (facing.getAxis() == ((Direction) state.getValue(BellBlock.FACING)).getAxis()) {
++                if (blockpropertybellattach == BellAttachType.DOUBLE_WALL && !facingState.isFaceSturdy(level, facingPos, facing)) {
++                    return (IBlockData) ((IBlockData) state.setValue(BellBlock.ATTACHMENT, BellAttachType.SINGLE_WALL)).setValue(BellBlock.FACING, facing.getOpposite());
+                 }
+ 
+-                if (bellattachtype == BellAttachType.SINGLE_WALL && direction1.getOpposite() == direction && blockstate1.isFaceSturdy(levelaccessor, blockpos1, (Direction) blockstate.getValue(BellBlock.FACING))) {
+-                    return (BlockState) blockstate.setValue(BellBlock.ATTACHMENT, BellAttachType.DOUBLE_WALL);
++                if (blockpropertybellattach == BellAttachType.SINGLE_WALL && enumdirection1.getOpposite() == facing && facingState.isFaceSturdy(level, facingPos, (Direction) state.getValue(BellBlock.FACING))) {
++                    return (IBlockData) state.setValue(BellBlock.ATTACHMENT, BellAttachType.DOUBLE_WALL);
+                 }
+             }
+ 
+-            return super.updateShape(blockstate, direction, blockstate1, levelaccessor, blockpos, blockpos1);
++            return super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canSurvive(BlockState blockstate, LevelReader levelreader, BlockPos blockpos) {
+-        Direction direction = getConnectedDirection(blockstate).getOpposite();
++    public boolean canSurvive(IBlockData state, LevelReader level, BlockPos pos) {
++        Direction enumdirection = getConnectedDirection(state).getOpposite();
+ 
+-        return direction == Direction.UP ? Block.canSupportCenter(levelreader, blockpos.above(), Direction.DOWN) : FaceAttachedHorizontalDirectionalBlock.canAttach(levelreader, blockpos, direction);
++        return enumdirection == Direction.UP ? Block.canSupportCenter(level, pos.above(), Direction.DOWN) : FaceAttachedHorizontalDirectionalBlock.canAttach(level, pos, enumdirection);
+     }
+ 
+-    private static Direction getConnectedDirection(BlockState blockstate) {
+-        switch ((BellAttachType) blockstate.getValue(BellBlock.ATTACHMENT)) {
++    private static Direction getConnectedDirection(IBlockData state) {
++        switch ((BellAttachType) state.getValue(BellBlock.ATTACHMENT)) {
+             case FLOOR:
+                 return Direction.UP;
+             case CEILING:
+                 return Direction.DOWN;
+             default:
+-                return ((Direction) blockstate.getValue(BellBlock.FACING)).getOpposite();
++                return ((Direction) state.getValue(BellBlock.FACING)).getOpposite();
+         }
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(BellBlock.FACING, BellBlock.ATTACHMENT, BellBlock.POWERED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(BellBlock.FACING, BellBlock.ATTACHMENT, BellBlock.POWERED);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockEntity newBlockEntity(BlockPos blockpos, BlockState blockstate) {
+-        return new BellBlockEntity(blockpos, blockstate);
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
++        return new BellBlockEntity(pos, state);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState blockstate, BlockEntityType<T> blockentitytype) {
+-        return createTickerHelper(blockentitytype, BlockEntityType.BELL, level.isClientSide ? BellBlockEntity::clientTick : BellBlockEntity::serverTick);
++    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, IBlockData state, BlockEntityType<T> blockEntityType) {
++        return createTickerHelper(blockEntityType, BlockEntityType.BELL, level.isClientSide ? BellBlockEntity::clientTick : BellBlockEntity::serverTick);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState rotate(BlockState blockstate, Rotation rotation) {
+-        return (BlockState) blockstate.setValue(BellBlock.FACING, rotation.rotate((Direction) blockstate.getValue(BellBlock.FACING)));
++    public IBlockData rotate(IBlockData state, Rotation rotation) {
++        return (IBlockData) state.setValue(BellBlock.FACING, rotation.rotate((Direction) state.getValue(BellBlock.FACING)));
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState mirror(BlockState blockstate, Mirror mirror) {
+-        return blockstate.rotate(mirror.getRotation((Direction) blockstate.getValue(BellBlock.FACING)));
++    public IBlockData mirror(IBlockData state, Mirror mirror) {
++        return state.rotate(mirror.getRotation((Direction) state.getValue(BellBlock.FACING)));
+     }
+ }

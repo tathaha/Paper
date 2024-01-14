@@ -1,0 +1,126 @@
+--- a/net/minecraft/server/rcon/thread/RconClient.java
++++ b/net/minecraft/server/rcon/thread/RconClient.java
+@@ -8,9 +8,12 @@
+ import java.net.Socket;
+ import java.nio.charset.StandardCharsets;
+ import java.util.Locale;
++import org.slf4j.Logger;
+ import net.minecraft.server.ServerInterface;
++// CraftBukkit start
++import net.minecraft.server.dedicated.DedicatedServer;
+ import net.minecraft.server.rcon.PktUtils;
+-import org.slf4j.Logger;
++import net.minecraft.server.rcon.RconConsoleSource;
+ 
+ public class RconClient extends GenericThread {
+ 
+@@ -24,12 +27,15 @@
+     private final Socket client;
+     private final byte[] buf = new byte[1460];
+     private final String rconPassword;
+-    private final ServerInterface serverInterface;
++    // CraftBukkit start
++    private final DedicatedServer serverInterface;
++    private final RconConsoleSource rconConsoleSource;
++    // CraftBukkit end
+ 
+-    RconClient(ServerInterface serverinterface, String s, Socket socket) {
+-        super("RCON Client " + socket.getInetAddress());
+-        this.serverInterface = serverinterface;
+-        this.client = socket;
++    RconClient(ServerInterface serverInterface, String rconPassword, Socket client) {
++        super("RCON Client " + client.getInetAddress());
++        this.serverInterface = (DedicatedServer) serverInterface; // CraftBukkit
++        this.client = client;
+ 
+         try {
+             this.client.setSoTimeout(0);
+@@ -37,13 +43,15 @@
+             this.running = false;
+         }
+ 
+-        this.rconPassword = s;
++        this.rconPassword = rconPassword;
++        this.rconConsoleSource = new net.minecraft.server.rcon.RconConsoleSource(this.serverInterface, client.getRemoteSocketAddress()); // CraftBukkit
+     }
+ 
+-    @Override
+     public void run() {
+-        while (true) {
+-            try {
++        // CraftBukkit start - decompile error: switch try / while statement
++        try {
++            while (true) {
++                // CraftBukkit end
+                 if (!this.running) {
+                     return;
+                 }
+@@ -72,7 +80,7 @@
+                                 String s = PktUtils.stringFromByteArray(this.buf, k, i);
+ 
+                                 try {
+-                                    this.sendCmdResponse(l, this.serverInterface.runCommand(s));
++                                    this.sendCmdResponse(l, this.serverInterface.runCommand(this.rconConsoleSource, s)); // CraftBukkit
+                                 } catch (Exception exception) {
+                                     this.sendCmdResponse(l, "Error executing: " + s + " (" + exception.getMessage() + ")");
+                                 }
+@@ -99,6 +107,7 @@
+                             continue;
+                     }
+                 }
++        } // CraftBukkit - decompile error: switch try / while statement
+             } catch (IOException ioexception) {
+                 return;
+             } catch (Exception exception1) {
+@@ -110,17 +119,19 @@
+                 this.running = false;
+             }
+ 
+-            return;
+-        }
++            // CraftBukkit start - decompile error: switch try / while statement
++            // return;
++        // }
++        // CraftBukkit end
+     }
+ 
+-    private void send(int i, int j, String s) throws IOException {
++    private void send(int id, int j, String message) throws IOException {
+         ByteArrayOutputStream bytearrayoutputstream = new ByteArrayOutputStream(1248);
+         DataOutputStream dataoutputstream = new DataOutputStream(bytearrayoutputstream);
+-        byte[] abyte = s.getBytes(StandardCharsets.UTF_8);
++        byte[] abyte = message.getBytes(StandardCharsets.UTF_8);
+ 
+         dataoutputstream.writeInt(Integer.reverseBytes(abyte.length + 10));
+-        dataoutputstream.writeInt(Integer.reverseBytes(i));
++        dataoutputstream.writeInt(Integer.reverseBytes(id));
+         dataoutputstream.writeInt(Integer.reverseBytes(j));
+         dataoutputstream.write(abyte);
+         dataoutputstream.write(0);
+@@ -132,21 +143,20 @@
+         this.send(-1, 2, "");
+     }
+ 
+-    private void sendCmdResponse(int i, String s) throws IOException {
+-        int j = s.length();
++    private void sendCmdResponse(int id, String message) throws IOException {
++        int j = message.length();
+ 
+         do {
+             int k = 4096 <= j ? 4096 : j;
+ 
+-            this.send(i, 0, s.substring(0, k));
+-            s = s.substring(k);
+-            j = s.length();
++            this.send(id, 0, message.substring(0, k));
++            message = message.substring(k);
++            j = message.length();
+         } while (0 != j);
+ 
+     }
+ 
+     @Override
+-    @Override
+     public void stop() {
+         this.running = false;
+         this.closeSocket();

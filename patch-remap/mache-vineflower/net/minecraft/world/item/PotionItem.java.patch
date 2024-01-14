@@ -1,0 +1,162 @@
+--- a/net/minecraft/world/item/PotionItem.java
++++ b/net/minecraft/world/item/PotionItem.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.item;
+ 
++import java.util.Iterator;
+ import java.util.List;
+ import javax.annotation.Nullable;
+ import net.minecraft.advancements.CriteriaTriggers;
+@@ -13,10 +14,11 @@
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+ import net.minecraft.tags.BlockTags;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.InteractionResultHolder;
+ import net.minecraft.world.effect.MobEffectInstance;
++import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.alchemy.PotionUtils;
+@@ -24,10 +26,11 @@
+ import net.minecraft.world.item.context.UseOnContext;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ 
+ public class PotionItem extends Item {
++
+     private static final int DRINK_DURATION = 32;
+ 
+     public PotionItem(Item.Properties properties) {
+@@ -41,35 +44,41 @@
+ 
+     @Override
+     public ItemStack finishUsingItem(ItemStack stack, Level level, LivingEntity entityLiving) {
+-        Player player = entityLiving instanceof Player ? (Player)entityLiving : null;
+-        if (player instanceof ServerPlayer) {
+-            CriteriaTriggers.CONSUME_ITEM.trigger((ServerPlayer)player, stack);
++        Player entityhuman = entityLiving instanceof Player ? (Player) entityLiving : null;
++
++        if (entityhuman instanceof ServerPlayer) {
++            CriteriaTriggers.CONSUME_ITEM.trigger((ServerPlayer) entityhuman, stack);
+         }
+ 
+         if (!level.isClientSide) {
+-            for (MobEffectInstance mobEffectInstance : PotionUtils.getMobEffects(stack)) {
+-                if (mobEffectInstance.getEffect().isInstantenous()) {
+-                    mobEffectInstance.getEffect().applyInstantenousEffect(player, player, entityLiving, mobEffectInstance.getAmplifier(), 1.0);
++            List<MobEffectInstance> list = PotionUtils.getMobEffects(stack);
++            Iterator iterator = list.iterator();
++
++            while (iterator.hasNext()) {
++                MobEffectInstance mobeffect = (MobEffectInstance) iterator.next();
++
++                if (mobeffect.getEffect().isInstantenous()) {
++                    mobeffect.getEffect().applyInstantenousEffect(entityhuman, entityhuman, entityLiving, mobeffect.getAmplifier(), 1.0D);
+                 } else {
+-                    entityLiving.addEffect(new MobEffectInstance(mobEffectInstance));
++                    entityLiving.addEffect(new MobEffectInstance(mobeffect), org.bukkit.event.entity.EntityPotionEffectEvent.Cause.POTION_DRINK); // CraftBukkit
+                 }
+             }
+         }
+ 
+-        if (player != null) {
+-            player.awardStat(Stats.ITEM_USED.get(this));
+-            if (!player.getAbilities().instabuild) {
++        if (entityhuman != null) {
++            entityhuman.awardStat(Stats.ITEM_USED.get(this));
++            if (!entityhuman.getAbilities().instabuild) {
+                 stack.shrink(1);
+             }
+         }
+ 
+-        if (player == null || !player.getAbilities().instabuild) {
++        if (entityhuman == null || !entityhuman.getAbilities().instabuild) {
+             if (stack.isEmpty()) {
+                 return new ItemStack(Items.GLASS_BOTTLE);
+             }
+ 
+-            if (player != null) {
+-                player.getInventory().add(new ItemStack(Items.GLASS_BOTTLE));
++            if (entityhuman != null) {
++                entityhuman.getInventory().add(new ItemStack(Items.GLASS_BOTTLE));
+             }
+         }
+ 
+@@ -79,37 +88,28 @@
+ 
+     @Override
+     public InteractionResult useOn(UseOnContext context) {
+-        Level level = context.getLevel();
+-        BlockPos clickedPos = context.getClickedPos();
+-        Player player = context.getPlayer();
+-        ItemStack itemInHand = context.getItemInHand();
+-        BlockState blockState = level.getBlockState(clickedPos);
+-        if (context.getClickedFace() != Direction.DOWN && blockState.is(BlockTags.CONVERTABLE_TO_MUD) && PotionUtils.getPotion(itemInHand) == Potions.WATER) {
+-            level.playSound(null, clickedPos, SoundEvents.GENERIC_SPLASH, SoundSource.BLOCKS, 1.0F, 1.0F);
+-            player.setItemInHand(context.getHand(), ItemUtils.createFilledResult(itemInHand, player, new ItemStack(Items.GLASS_BOTTLE)));
+-            player.awardStat(Stats.ITEM_USED.get(itemInHand.getItem()));
+-            if (!level.isClientSide) {
+-                ServerLevel serverLevel = (ServerLevel)level;
++        Level world = context.getLevel();
++        BlockPos blockposition = context.getClickedPos();
++        Player entityhuman = context.getPlayer();
++        ItemStack itemstack = context.getItemInHand();
++        IBlockData iblockdata = world.getBlockState(blockposition);
+ 
+-                for (int i = 0; i < 5; i++) {
+-                    serverLevel.sendParticles(
+-                        ParticleTypes.SPLASH,
+-                        (double)clickedPos.getX() + level.random.nextDouble(),
+-                        (double)(clickedPos.getY() + 1),
+-                        (double)clickedPos.getZ() + level.random.nextDouble(),
+-                        1,
+-                        0.0,
+-                        0.0,
+-                        0.0,
+-                        1.0
+-                    );
++        if (context.getClickedFace() != Direction.DOWN && iblockdata.is(BlockTags.CONVERTABLE_TO_MUD) && PotionUtils.getPotion(itemstack) == Potions.WATER) {
++            world.playSound((Player) null, blockposition, SoundEvents.GENERIC_SPLASH, SoundSource.BLOCKS, 1.0F, 1.0F);
++            entityhuman.setItemInHand(context.getHand(), ItemUtils.createFilledResult(itemstack, entityhuman, new ItemStack(Items.GLASS_BOTTLE)));
++            entityhuman.awardStat(Stats.ITEM_USED.get(itemstack.getItem()));
++            if (!world.isClientSide) {
++                ServerLevel worldserver = (ServerLevel) world;
++
++                for (int i = 0; i < 5; ++i) {
++                    worldserver.sendParticles(ParticleTypes.SPLASH, (double) blockposition.getX() + world.random.nextDouble(), (double) (blockposition.getY() + 1), (double) blockposition.getZ() + world.random.nextDouble(), 1, 0.0D, 0.0D, 0.0D, 1.0D);
+                 }
+             }
+ 
+-            level.playSound(null, clickedPos, SoundEvents.BOTTLE_EMPTY, SoundSource.BLOCKS, 1.0F, 1.0F);
+-            level.gameEvent(null, GameEvent.FLUID_PLACE, clickedPos);
+-            level.setBlockAndUpdate(clickedPos, Blocks.MUD.defaultBlockState());
+-            return InteractionResult.sidedSuccess(level.isClientSide);
++            world.playSound((Player) null, blockposition, SoundEvents.BOTTLE_EMPTY, SoundSource.BLOCKS, 1.0F, 1.0F);
++            world.gameEvent((Entity) null, GameEvent.FLUID_PLACE, blockposition);
++            world.setBlockAndUpdate(blockposition, Blocks.MUD.defaultBlockState());
++            return InteractionResult.sidedSuccess(world.isClientSide);
+         } else {
+             return InteractionResult.PASS;
+         }
+@@ -121,12 +121,12 @@
+     }
+ 
+     @Override
+-    public UseAnim getUseAnimation(ItemStack stack) {
+-        return UseAnim.DRINK;
++    public EnumAnimation getUseAnimation(ItemStack stack) {
++        return EnumAnimation.DRINK;
+     }
+ 
+     @Override
+-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
++    public InteractionResultHolder<ItemStack> use(Level level, Player player, EnumHand hand) {
+         return ItemUtils.startUsingInstantly(level, player, hand);
+     }
+ 

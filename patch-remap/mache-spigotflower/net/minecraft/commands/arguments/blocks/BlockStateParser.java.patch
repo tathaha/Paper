@@ -1,0 +1,484 @@
+--- a/net/minecraft/commands/arguments/blocks/BlockStateParser.java
++++ b/net/minecraft/commands/arguments/blocks/BlockStateParser.java
+@@ -31,7 +31,7 @@
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.world.level.block.Block;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.Property;
+ 
+@@ -68,76 +68,76 @@
+     private final StringReader reader;
+     private final boolean forTesting;
+     private final boolean allowNbt;
+-    private final Map<Property<?>, Comparable<?>> properties = Maps.newHashMap();
++    private final Map<Property<?>, Comparable<?>> properties = Maps.newLinkedHashMap(); // CraftBukkit - stable
+     private final Map<String, String> vagueProperties = Maps.newHashMap();
+     private ResourceLocation id = new ResourceLocation("");
+     @Nullable
+-    private StateDefinition<Block, BlockState> definition;
++    private StateDefinition<Block, IBlockData> definition;
+     @Nullable
+-    private BlockState state;
++    private IBlockData state;
+     @Nullable
+     private CompoundTag nbt;
+     @Nullable
+     private HolderSet<Block> tag;
+     private Function<SuggestionsBuilder, CompletableFuture<Suggestions>> suggestions;
+ 
+-    private BlockStateParser(HolderLookup<Block> holderlookup, StringReader stringreader, boolean flag, boolean flag1) {
++    private BlockStateParser(HolderLookup<Block> blocks, StringReader reader, boolean forTesting, boolean allowNbt) {
+         this.suggestions = BlockStateParser.SUGGEST_NOTHING;
+-        this.blocks = holderlookup;
+-        this.reader = stringreader;
+-        this.forTesting = flag;
+-        this.allowNbt = flag1;
++        this.blocks = blocks;
++        this.reader = reader;
++        this.forTesting = forTesting;
++        this.allowNbt = allowNbt;
+     }
+ 
+-    public static BlockStateParser.BlockResult parseForBlock(HolderLookup<Block> holderlookup, String s, boolean flag) throws CommandSyntaxException {
+-        return parseForBlock(holderlookup, new StringReader(s), flag);
++    public static BlockStateParser.a parseForBlock(HolderLookup<Block> lookup, String input, boolean allowNbt) throws CommandSyntaxException {
++        return parseForBlock(lookup, new StringReader(input), allowNbt);
+     }
+ 
+-    public static BlockStateParser.BlockResult parseForBlock(HolderLookup<Block> holderlookup, StringReader stringreader, boolean flag) throws CommandSyntaxException {
+-        int i = stringreader.getCursor();
++    public static BlockStateParser.a parseForBlock(HolderLookup<Block> lookup, StringReader reader, boolean allowNbt) throws CommandSyntaxException {
++        int i = reader.getCursor();
+ 
+         try {
+-            BlockStateParser blockstateparser = new BlockStateParser(holderlookup, stringreader, false, flag);
++            BlockStateParser argumentblock = new BlockStateParser(lookup, reader, false, allowNbt);
+ 
+-            blockstateparser.parse();
+-            return new BlockStateParser.BlockResult(blockstateparser.state, blockstateparser.properties, blockstateparser.nbt);
++            argumentblock.parse();
++            return new BlockStateParser.a(argumentblock.state, argumentblock.properties, argumentblock.nbt);
+         } catch (CommandSyntaxException commandsyntaxexception) {
+-            stringreader.setCursor(i);
++            reader.setCursor(i);
+             throw commandsyntaxexception;
+         }
+     }
+ 
+-    public static Either<BlockStateParser.BlockResult, BlockStateParser.TagResult> parseForTesting(HolderLookup<Block> holderlookup, String s, boolean flag) throws CommandSyntaxException {
+-        return parseForTesting(holderlookup, new StringReader(s), flag);
++    public static Either<BlockStateParser.a, BlockStateParser.b> parseForTesting(HolderLookup<Block> lookup, String input, boolean allowNbt) throws CommandSyntaxException {
++        return parseForTesting(lookup, new StringReader(input), allowNbt);
+     }
+ 
+-    public static Either<BlockStateParser.BlockResult, BlockStateParser.TagResult> parseForTesting(HolderLookup<Block> holderlookup, StringReader stringreader, boolean flag) throws CommandSyntaxException {
+-        int i = stringreader.getCursor();
++    public static Either<BlockStateParser.a, BlockStateParser.b> parseForTesting(HolderLookup<Block> lookup, StringReader reader, boolean allowNbt) throws CommandSyntaxException {
++        int i = reader.getCursor();
+ 
+         try {
+-            BlockStateParser blockstateparser = new BlockStateParser(holderlookup, stringreader, true, flag);
++            BlockStateParser argumentblock = new BlockStateParser(lookup, reader, true, allowNbt);
+ 
+-            blockstateparser.parse();
+-            return blockstateparser.tag != null ? Either.right(new BlockStateParser.TagResult(blockstateparser.tag, blockstateparser.vagueProperties, blockstateparser.nbt)) : Either.left(new BlockStateParser.BlockResult(blockstateparser.state, blockstateparser.properties, blockstateparser.nbt));
++            argumentblock.parse();
++            return argumentblock.tag != null ? Either.right(new BlockStateParser.b(argumentblock.tag, argumentblock.vagueProperties, argumentblock.nbt)) : Either.left(new BlockStateParser.a(argumentblock.state, argumentblock.properties, argumentblock.nbt));
+         } catch (CommandSyntaxException commandsyntaxexception) {
+-            stringreader.setCursor(i);
++            reader.setCursor(i);
+             throw commandsyntaxexception;
+         }
+     }
+ 
+-    public static CompletableFuture<Suggestions> fillSuggestions(HolderLookup<Block> holderlookup, SuggestionsBuilder suggestionsbuilder, boolean flag, boolean flag1) {
+-        StringReader stringreader = new StringReader(suggestionsbuilder.getInput());
++    public static CompletableFuture<Suggestions> fillSuggestions(HolderLookup<Block> lookup, SuggestionsBuilder builder, boolean forTesting, boolean allowNbt) {
++        StringReader stringreader = new StringReader(builder.getInput());
+ 
+-        stringreader.setCursor(suggestionsbuilder.getStart());
+-        BlockStateParser blockstateparser = new BlockStateParser(holderlookup, stringreader, flag, flag1);
++        stringreader.setCursor(builder.getStart());
++        BlockStateParser argumentblock = new BlockStateParser(lookup, stringreader, forTesting, allowNbt);
+ 
+         try {
+-            blockstateparser.parse();
++            argumentblock.parse();
+         } catch (CommandSyntaxException commandsyntaxexception) {
+             ;
+         }
+ 
+-        return (CompletableFuture) blockstateparser.suggestions.apply(suggestionsbuilder.createOffset(stringreader.getCursor()));
++        return (CompletableFuture) argumentblock.suggestions.apply(builder.createOffset(stringreader.getCursor()));
+     }
+ 
+     private void parse() throws CommandSyntaxException {
+@@ -170,39 +170,39 @@
+ 
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestPropertyNameOrEnd(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty()) {
+-            suggestionsbuilder.suggest(String.valueOf(']'));
++    private CompletableFuture<Suggestions> suggestPropertyNameOrEnd(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty()) {
++            builder.suggest(String.valueOf(']'));
+         }
+ 
+-        return this.suggestPropertyName(suggestionsbuilder);
++        return this.suggestPropertyName(builder);
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestVaguePropertyNameOrEnd(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty()) {
+-            suggestionsbuilder.suggest(String.valueOf(']'));
++    private CompletableFuture<Suggestions> suggestVaguePropertyNameOrEnd(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty()) {
++            builder.suggest(String.valueOf(']'));
+         }
+ 
+-        return this.suggestVaguePropertyName(suggestionsbuilder);
++        return this.suggestVaguePropertyName(builder);
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestPropertyName(SuggestionsBuilder suggestionsbuilder) {
+-        String s = suggestionsbuilder.getRemaining().toLowerCase(Locale.ROOT);
++    private CompletableFuture<Suggestions> suggestPropertyName(SuggestionsBuilder builder) {
++        String s = builder.getRemaining().toLowerCase(Locale.ROOT);
+         Iterator iterator = this.state.getProperties().iterator();
+ 
+         while (iterator.hasNext()) {
+-            Property<?> property = (Property) iterator.next();
++            Property<?> iblockstate = (Property) iterator.next();
+ 
+-            if (!this.properties.containsKey(property) && property.getName().startsWith(s)) {
+-                suggestionsbuilder.suggest(property.getName() + "=");
++            if (!this.properties.containsKey(iblockstate) && iblockstate.getName().startsWith(s)) {
++                builder.suggest(iblockstate.getName() + "=");
+             }
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestVaguePropertyName(SuggestionsBuilder suggestionsbuilder) {
+-        String s = suggestionsbuilder.getRemaining().toLowerCase(Locale.ROOT);
++    private CompletableFuture<Suggestions> suggestVaguePropertyName(SuggestionsBuilder builder) {
++        String s = builder.getRemaining().toLowerCase(Locale.ROOT);
+ 
+         if (this.tag != null) {
+             Iterator iterator = this.tag.iterator();
+@@ -212,24 +212,24 @@
+                 Iterator iterator1 = ((Block) holder.value()).getStateDefinition().getProperties().iterator();
+ 
+                 while (iterator1.hasNext()) {
+-                    Property<?> property = (Property) iterator1.next();
++                    Property<?> iblockstate = (Property) iterator1.next();
+ 
+-                    if (!this.vagueProperties.containsKey(property.getName()) && property.getName().startsWith(s)) {
+-                        suggestionsbuilder.suggest(property.getName() + "=");
++                    if (!this.vagueProperties.containsKey(iblockstate.getName()) && iblockstate.getName().startsWith(s)) {
++                        builder.suggest(iblockstate.getName() + "=");
+                     }
+                 }
+             }
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestOpenNbt(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty() && this.hasBlockEntity()) {
+-            suggestionsbuilder.suggest(String.valueOf('{'));
++    private CompletableFuture<Suggestions> suggestOpenNbt(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty() && this.hasBlockEntity()) {
++            builder.suggest(String.valueOf('{'));
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+     private boolean hasBlockEntity() {
+@@ -252,45 +252,45 @@
+         }
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestEquals(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty()) {
+-            suggestionsbuilder.suggest(String.valueOf('='));
++    private CompletableFuture<Suggestions> suggestEquals(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty()) {
++            builder.suggest(String.valueOf('='));
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestNextPropertyOrEnd(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty()) {
+-            suggestionsbuilder.suggest(String.valueOf(']'));
++    private CompletableFuture<Suggestions> suggestNextPropertyOrEnd(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty()) {
++            builder.suggest(String.valueOf(']'));
+         }
+ 
+-        if (suggestionsbuilder.getRemaining().isEmpty() && this.properties.size() < this.state.getProperties().size()) {
+-            suggestionsbuilder.suggest(String.valueOf(','));
++        if (builder.getRemaining().isEmpty() && this.properties.size() < this.state.getProperties().size()) {
++            builder.suggest(String.valueOf(','));
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private static <T extends Comparable<T>> SuggestionsBuilder addSuggestions(SuggestionsBuilder suggestionsbuilder, Property<T> property) {
++    private static <T extends Comparable<T>> SuggestionsBuilder addSuggestions(SuggestionsBuilder builder, Property<T> property) {
+         Iterator iterator = property.getPossibleValues().iterator();
+ 
+         while (iterator.hasNext()) {
+-            T t0 = (Comparable) iterator.next();
++            T t0 = (T) iterator.next(); // CraftBukkit - decompile error
+ 
+             if (t0 instanceof Integer) {
+                 Integer integer = (Integer) t0;
+ 
+-                suggestionsbuilder.suggest(integer);
++                builder.suggest(integer);
+             } else {
+-                suggestionsbuilder.suggest(property.getName(t0));
++                builder.suggest(property.getName(t0));
+             }
+         }
+ 
+-        return suggestionsbuilder;
++        return builder;
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestVaguePropertyValue(SuggestionsBuilder suggestionsbuilder, String s) {
++    private CompletableFuture<Suggestions> suggestVaguePropertyValue(SuggestionsBuilder builder, String propertyName) {
+         boolean flag = false;
+ 
+         if (this.tag != null) {
+@@ -299,19 +299,19 @@
+             while (iterator.hasNext()) {
+                 Holder<Block> holder = (Holder) iterator.next();
+                 Block block = (Block) holder.value();
+-                Property<?> property = block.getStateDefinition().getProperty(s);
++                Property<?> iblockstate = block.getStateDefinition().getProperty(propertyName);
+ 
+-                if (property != null) {
+-                    addSuggestions(suggestionsbuilder, property);
++                if (iblockstate != null) {
++                    addSuggestions(builder, iblockstate);
+                 }
+ 
+                 if (!flag) {
+                     Iterator iterator1 = block.getStateDefinition().getProperties().iterator();
+ 
+                     while (iterator1.hasNext()) {
+-                        Property<?> property1 = (Property) iterator1.next();
++                        Property<?> iblockstate1 = (Property) iterator1.next();
+ 
+-                        if (!this.vagueProperties.containsKey(property1.getName())) {
++                        if (!this.vagueProperties.containsKey(iblockstate1.getName())) {
+                             flag = true;
+                             break;
+                         }
+@@ -321,15 +321,15 @@
+         }
+ 
+         if (flag) {
+-            suggestionsbuilder.suggest(String.valueOf(','));
++            builder.suggest(String.valueOf(','));
+         }
+ 
+-        suggestionsbuilder.suggest(String.valueOf(']'));
+-        return suggestionsbuilder.buildFuture();
++        builder.suggest(String.valueOf(']'));
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestOpenVaguePropertiesOrNbt(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty() && this.tag != null) {
++    private CompletableFuture<Suggestions> suggestOpenVaguePropertiesOrNbt(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty() && this.tag != null) {
+             boolean flag = false;
+             boolean flag1 = false;
+             Iterator iterator = this.tag.iterator();
+@@ -346,43 +346,43 @@
+             }
+ 
+             if (flag) {
+-                suggestionsbuilder.suggest(String.valueOf('['));
++                builder.suggest(String.valueOf('['));
+             }
+ 
+             if (flag1) {
+-                suggestionsbuilder.suggest(String.valueOf('{'));
++                builder.suggest(String.valueOf('{'));
+             }
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestOpenPropertiesOrNbt(SuggestionsBuilder suggestionsbuilder) {
+-        if (suggestionsbuilder.getRemaining().isEmpty()) {
++    private CompletableFuture<Suggestions> suggestOpenPropertiesOrNbt(SuggestionsBuilder builder) {
++        if (builder.getRemaining().isEmpty()) {
+             if (!this.definition.getProperties().isEmpty()) {
+-                suggestionsbuilder.suggest(String.valueOf('['));
++                builder.suggest(String.valueOf('['));
+             }
+ 
+             if (this.state.hasBlockEntity()) {
+-                suggestionsbuilder.suggest(String.valueOf('{'));
++                builder.suggest(String.valueOf('{'));
+             }
+         }
+ 
+-        return suggestionsbuilder.buildFuture();
++        return builder.buildFuture();
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestTag(SuggestionsBuilder suggestionsbuilder) {
+-        return SharedSuggestionProvider.suggestResource(this.blocks.listTagIds().map(TagKey::location), suggestionsbuilder, String.valueOf('#'));
++    private CompletableFuture<Suggestions> suggestTag(SuggestionsBuilder builder) {
++        return SharedSuggestionProvider.suggestResource(this.blocks.listTagIds().map(TagKey::location), builder, String.valueOf('#'));
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestItem(SuggestionsBuilder suggestionsbuilder) {
+-        return SharedSuggestionProvider.suggestResource(this.blocks.listElementIds().map(ResourceKey::location), suggestionsbuilder);
++    private CompletableFuture<Suggestions> suggestItem(SuggestionsBuilder builder) {
++        return SharedSuggestionProvider.suggestResource(this.blocks.listElementIds().map(ResourceKey::location), builder);
+     }
+ 
+-    private CompletableFuture<Suggestions> suggestBlockIdOrTag(SuggestionsBuilder suggestionsbuilder) {
+-        this.suggestTag(suggestionsbuilder);
+-        this.suggestItem(suggestionsbuilder);
+-        return suggestionsbuilder.buildFuture();
++    private CompletableFuture<Suggestions> suggestBlockIdOrTag(SuggestionsBuilder builder) {
++        this.suggestTag(builder);
++        this.suggestItem(builder);
++        return builder.buildFuture();
+     }
+ 
+     private void readBlock() throws CommandSyntaxException {
+@@ -406,11 +406,11 @@
+ 
+             this.reader.expect('#');
+             this.suggestions = this::suggestTag;
+-            ResourceLocation resourcelocation = ResourceLocation.read(this.reader);
++            ResourceLocation minecraftkey = ResourceLocation.read(this.reader);
+ 
+-            this.tag = (HolderSet) this.blocks.get(TagKey.create(Registries.BLOCK, resourcelocation)).orElseThrow(() -> {
++            this.tag = (HolderSet) this.blocks.get(TagKey.create(Registries.BLOCK, minecraftkey)).orElseThrow(() -> {
+                 this.reader.setCursor(i);
+-                return BlockStateParser.ERROR_UNKNOWN_TAG.createWithContext(this.reader, resourcelocation.toString());
++                return BlockStateParser.ERROR_UNKNOWN_TAG.createWithContext(this.reader, minecraftkey.toString());
+             });
+         }
+     }
+@@ -425,14 +425,14 @@
+                 this.reader.skipWhitespace();
+                 int i = this.reader.getCursor();
+                 String s = this.reader.readString();
+-                Property<?> property = this.definition.getProperty(s);
++                Property<?> iblockstate = this.definition.getProperty(s);
+ 
+-                if (property == null) {
++                if (iblockstate == null) {
+                     this.reader.setCursor(i);
+                     throw BlockStateParser.ERROR_UNKNOWN_PROPERTY.createWithContext(this.reader, this.id.toString(), s);
+                 }
+ 
+-                if (this.properties.containsKey(property)) {
++                if (this.properties.containsKey(iblockstate)) {
+                     this.reader.setCursor(i);
+                     throw BlockStateParser.ERROR_DUPLICATE_PROPERTY.createWithContext(this.reader, this.id.toString(), s);
+                 }
+@@ -446,11 +446,11 @@
+                 this.reader.skip();
+                 this.reader.skipWhitespace();
+                 this.suggestions = (suggestionsbuilder) -> {
+-                    return addSuggestions(suggestionsbuilder, property).buildFuture();
++                    return addSuggestions(suggestionsbuilder, iblockstate).buildFuture();
+                 };
+                 int j = this.reader.getCursor();
+ 
+-                this.setValue(property, this.reader.readString(), j);
++                this.setValue(iblockstate, this.reader.readString(), j);
+                 this.suggestions = this::suggestNextPropertyOrEnd;
+                 this.reader.skipWhitespace();
+                 if (!this.reader.canRead()) {
+@@ -544,28 +544,28 @@
+         this.nbt = (new TagParser(this.reader)).readStruct();
+     }
+ 
+-    private <T extends Comparable<T>> void setValue(Property<T> property, String s, int i) throws CommandSyntaxException {
+-        Optional<T> optional = property.getValue(s);
++    private <T extends Comparable<T>> void setValue(Property<T> property, String value, int valuePosition) throws CommandSyntaxException {
++        Optional<T> optional = property.getValue(value);
+ 
+         if (optional.isPresent()) {
+-            this.state = (BlockState) this.state.setValue(property, (Comparable) optional.get());
++            this.state = (IBlockData) this.state.setValue(property, (T) optional.get()); // CraftBukkit - decompile error
+             this.properties.put(property, (Comparable) optional.get());
+         } else {
+-            this.reader.setCursor(i);
+-            throw BlockStateParser.ERROR_INVALID_VALUE.createWithContext(this.reader, this.id.toString(), property.getName(), s);
++            this.reader.setCursor(valuePosition);
++            throw BlockStateParser.ERROR_INVALID_VALUE.createWithContext(this.reader, this.id.toString(), property.getName(), value);
+         }
+     }
+ 
+-    public static String serialize(BlockState blockstate) {
+-        StringBuilder stringbuilder = new StringBuilder((String) blockstate.getBlockHolder().unwrapKey().map((resourcekey) -> {
++    public static String serialize(IBlockData state) {
++        StringBuilder stringbuilder = new StringBuilder((String) state.getBlockHolder().unwrapKey().map((resourcekey) -> {
+             return resourcekey.location().toString();
+         }).orElse("air"));
+ 
+-        if (!blockstate.getProperties().isEmpty()) {
++        if (!state.getProperties().isEmpty()) {
+             stringbuilder.append('[');
+             boolean flag = false;
+ 
+-            for (UnmodifiableIterator unmodifiableiterator = blockstate.getValues().entrySet().iterator(); unmodifiableiterator.hasNext(); flag = true) {
++            for (UnmodifiableIterator unmodifiableiterator = state.getValues().entrySet().iterator(); unmodifiableiterator.hasNext(); flag = true) {
+                 Entry<Property<?>, Comparable<?>> entry = (Entry) unmodifiableiterator.next();
+ 
+                 if (flag) {
+@@ -581,17 +581,17 @@
+         return stringbuilder.toString();
+     }
+ 
+-    private static <T extends Comparable<T>> void appendProperty(StringBuilder stringbuilder, Property<T> property, Comparable<?> comparable) {
+-        stringbuilder.append(property.getName());
+-        stringbuilder.append('=');
+-        stringbuilder.append(property.getName(comparable));
++    private static <T extends Comparable<T>> void appendProperty(StringBuilder builder, Property<T> property, Comparable<?> value) {
++        builder.append(property.getName());
++        builder.append('=');
++        builder.append(property.getName((T) value)); // CraftBukkit - decompile error
+     }
+ 
+-    public static record BlockResult(BlockState blockState, Map<Property<?>, Comparable<?>> properties, @Nullable CompoundTag nbt) {
++    public static record a(IBlockData blockState, Map<Property<?>, Comparable<?>> properties, @Nullable CompoundTag nbt) {
+ 
+     }
+ 
+-    public static record TagResult(HolderSet<Block> tag, Map<String, String> vagueProperties, @Nullable CompoundTag nbt) {
++    public static record b(HolderSet<Block> tag, Map<String, String> vagueProperties, @Nullable CompoundTag nbt) {
+ 
+     }
+ }

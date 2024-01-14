@@ -1,0 +1,118 @@
+--- a/net/minecraft/world/level/block/EndPortalBlock.java
++++ b/net/minecraft/world/level/block/EndPortalBlock.java
+@@ -5,6 +5,7 @@
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.resources.ResourceKey;
+ import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.item.ItemStack;
+@@ -14,12 +15,16 @@
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.TheEndPortalBlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.event.entity.EntityPortalEnterEvent;
++import org.bukkit.event.player.PlayerTeleportEvent;
++// CraftBukkit end
+ 
+ public class EndPortalBlock extends BaseEntityBlock {
+ 
+@@ -27,62 +32,64 @@
+     protected static final VoxelShape SHAPE = Block.box(0.0D, 6.0D, 0.0D, 16.0D, 12.0D, 16.0D);
+ 
+     @Override
+-    @Override
+     public MapCodec<EndPortalBlock> codec() {
+         return EndPortalBlock.CODEC;
+     }
+ 
+-    protected EndPortalBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
++    protected EndPortalBlock(BlockBehaviour.Properties properties) {
++        super(properties);
+     }
+ 
+     @Override
+-    @Override
+-    public BlockEntity newBlockEntity(BlockPos blockpos, BlockState blockstate) {
+-        return new TheEndPortalBlockEntity(blockpos, blockstate);
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
++        return new TheEndPortalBlockEntity(pos, state);
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return EndPortalBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public void entityInside(BlockState blockstate, Level level, BlockPos blockpos, Entity entity) {
+-        if (level instanceof ServerLevel && entity.canChangeDimensions() && Shapes.joinIsNotEmpty(Shapes.create(entity.getBoundingBox().move((double) (-blockpos.getX()), (double) (-blockpos.getY()), (double) (-blockpos.getZ()))), blockstate.getShape(level, blockpos), BooleanOp.AND)) {
+-            ResourceKey<Level> resourcekey = level.dimension() == Level.END ? Level.OVERWORLD : Level.END;
+-            ServerLevel serverlevel = ((ServerLevel) level).getServer().getLevel(resourcekey);
++    public void entityInside(IBlockData state, Level level, BlockPos pos, Entity entity) {
++        if (level instanceof ServerLevel && entity.canChangeDimensions() && Shapes.joinIsNotEmpty(Shapes.create(entity.getBoundingBox().move((double) (-pos.getX()), (double) (-pos.getY()), (double) (-pos.getZ()))), state.getShape(level, pos), BooleanOp.AND)) {
++            ResourceKey<Level> resourcekey = level.getTypeKey() == LevelStem.END ? Level.OVERWORLD : Level.END; // CraftBukkit - SPIGOT-6152: send back to main overworld in custom ends
++            ServerLevel worldserver = ((ServerLevel) level).getServer().getLevel(resourcekey);
+ 
+-            if (serverlevel == null) {
+-                return;
++            if (worldserver == null) {
++                // return; // CraftBukkit - always fire event in case plugins wish to change it
+             }
+ 
+-            entity.changeDimension(serverlevel);
++            // CraftBukkit start - Entity in portal
++            EntityPortalEnterEvent event = new EntityPortalEnterEvent(entity.getBukkitEntity(), new org.bukkit.Location(level.getWorld(), pos.getX(), pos.getY(), pos.getZ()));
++            level.getCraftServer().getPluginManager().callEvent(event);
++
++            if (entity instanceof ServerPlayer) {
++                ((ServerPlayer) entity).changeDimension(worldserver, PlayerTeleportEvent.TeleportCause.END_PORTAL);
++                return;
++            }
++            // CraftBukkit end
++            entity.changeDimension(worldserver);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void animateTick(BlockState blockstate, Level level, BlockPos blockpos, RandomSource randomsource) {
+-        double d0 = (double) blockpos.getX() + randomsource.nextDouble();
+-        double d1 = (double) blockpos.getY() + 0.8D;
+-        double d2 = (double) blockpos.getZ() + randomsource.nextDouble();
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        double d0 = (double) pos.getX() + random.nextDouble();
++        double d1 = (double) pos.getY() + 0.8D;
++        double d2 = (double) pos.getZ() + random.nextDouble();
+ 
+         level.addParticle(ParticleTypes.SMOKE, d0, d1, d2, 0.0D, 0.0D, 0.0D);
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack getCloneItemStack(LevelReader levelreader, BlockPos blockpos, BlockState blockstate) {
++    public ItemStack getCloneItemStack(LevelReader iworldreader, BlockPos blockposition, IBlockData iblockdata) {
+         return ItemStack.EMPTY;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canBeReplaced(BlockState blockstate, Fluid fluid) {
++    public boolean canBeReplaced(IBlockData state, Fluid fluid) {
+         return false;
+     }
+ }

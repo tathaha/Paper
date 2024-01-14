@@ -1,0 +1,268 @@
+--- a/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity.java
+@@ -44,6 +45,19 @@
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.entity.CraftHumanEntity;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.entity.HumanEntity;
++import org.bukkit.entity.Player;
++import org.bukkit.event.block.BlockExpEvent;
++import org.bukkit.event.inventory.FurnaceBurnEvent;
++import org.bukkit.event.inventory.FurnaceExtractEvent;
++import org.bukkit.event.inventory.FurnaceSmeltEvent;
++import org.bukkit.event.inventory.FurnaceStartSmeltEvent;
++import org.bukkit.inventory.CookingRecipe;
++// CraftBukkit end
+ 
+ public abstract class AbstractFurnaceBlockEntity extends BaseContainerBlockEntity implements WorldlyContainer, RecipeCraftingHolder, StackedContentsCompatible {
+     protected static final int SLOT_INPUT = 0;
+@@ -175,6 +195,40 @@
+         return map;
+     }
+ 
++    // CraftBukkit start - add fields and methods
++    private int maxStack = MAX_STACK;
++    public List<HumanEntity> transaction = new java.util.ArrayList<HumanEntity>();
++
++    public List<ItemStack> getContents() {
++        return this.items;
++    }
++
++    public void onOpen(CraftHumanEntity who) {
++        transaction.add(who);
++    }
++
++    public void onClose(CraftHumanEntity who) {
++        transaction.remove(who);
++    }
++
++    public List<HumanEntity> getViewers() {
++        return transaction;
++    }
++
++    @Override
++    public int getMaxStackSize() {
++        return maxStack;
++    }
++
++    public void setMaxStackSize(int size) {
++        maxStack = size;
++    }
++
++    public Object2IntOpenHashMap<ResourceLocation> getRecipesUsed() {
++        return this.recipesUsed; // PAIL private -> public
++    }
++    // CraftBukkit end
++
+     private static boolean isNeverAFurnaceFuel(Item item) {
+         return item.builtInRegistryHolder().is(ItemTags.NON_FLAMMABLE_WOOD);
+     }
+@@ -252,30 +322,56 @@
+                 recipeHolder = null;
+             }
+ 
+-            int maxStackSize = blockEntity.getMaxStackSize();
+-            if (!blockEntity.isLit() && canBurn(level.registryAccess(), recipeHolder, blockEntity.items, maxStackSize)) {
+-                blockEntity.litTime = blockEntity.getBurnDuration(itemStack);
++            int i = blockEntity.getMaxStackSize();
++
++            if (!blockEntity.isLit() && canBurn(level.registryAccess(), recipeholder, blockEntity.items, i)) {
++                // CraftBukkit start
++                CraftItemStack fuel = CraftItemStack.asCraftMirror(itemstack);
++
++                FurnaceBurnEvent furnaceBurnEvent = new FurnaceBurnEvent(CraftBlock.at(level, pos), fuel, blockEntity.getBurnDuration(itemstack));
++                level.getCraftServer().getPluginManager().callEvent(furnaceBurnEvent);
++
++                if (furnaceBurnEvent.isCancelled()) {
++                    return;
++                }
++
++                blockEntity.litTime = furnaceBurnEvent.getBurnTime();
+                 blockEntity.litDuration = blockEntity.litTime;
+-                if (blockEntity.isLit()) {
+-                    flag = true;
+-                    if (flag2) {
+-                        Item item = itemStack.getItem();
+-                        itemStack.shrink(1);
+-                        if (itemStack.isEmpty()) {
+-                            Item craftingRemainingItem = item.getCraftingRemainingItem();
+-                            blockEntity.items.set(1, craftingRemainingItem == null ? ItemStack.EMPTY : new ItemStack(craftingRemainingItem));
++                if (blockEntity.isLit() && furnaceBurnEvent.isBurning()) {
++                    // CraftBukkit end
++                    flag1 = true;
++                    if (flag3) {
++                        Item item = itemstack.getItem();
++
++                        itemstack.shrink(1);
++                        if (itemstack.isEmpty()) {
++                            Item item1 = item.getCraftingRemainingItem();
++
++                            blockEntity.items.set(1, item1 == null ? ItemStack.EMPTY : new ItemStack(item1));
+                         }
+                     }
+                 }
+             }
+ 
+-            if (blockEntity.isLit() && canBurn(level.registryAccess(), recipeHolder, blockEntity.items, maxStackSize)) {
+-                blockEntity.cookingProgress++;
++            if (blockEntity.isLit() && canBurn(level.registryAccess(), recipeholder, blockEntity.items, i)) {
++                // CraftBukkit start
++                if (recipeholder != null && blockEntity.cookingProgress == 0) {
++                    CraftItemStack source = CraftItemStack.asCraftMirror(blockEntity.items.get(0));
++                    CookingRecipe<?> recipe = (CookingRecipe<?>) recipeholder.toBukkitRecipe();
++
++                    FurnaceStartSmeltEvent event = new FurnaceStartSmeltEvent(CraftBlock.at(level, pos), source, recipe);
++                    level.getCraftServer().getPluginManager().callEvent(event);
++
++                    blockEntity.cookingTotalTime = event.getTotalCookTime();
++                }
++                // CraftBukkit end
++
++                ++blockEntity.cookingProgress;
+                 if (blockEntity.cookingProgress == blockEntity.cookingTotalTime) {
+                     blockEntity.cookingProgress = 0;
+                     blockEntity.cookingTotalTime = getTotalCookTime(level, blockEntity);
+-                    if (burn(level.registryAccess(), recipeHolder, blockEntity.items, maxStackSize)) {
+-                        blockEntity.setRecipeUsed(recipeHolder);
++                    if (burn(blockEntity.level, blockEntity.worldPosition, level.registryAccess(), recipeholder, blockEntity.items, i)) { // CraftBukkit
++                        blockEntity.setRecipeUsed(recipeholder);
+                     }
+ 
+                     flag = true;
+@@ -317,22 +409,41 @@
+         }
+     }
+ 
+-    private static boolean burn(RegistryAccess registryAccess, @Nullable RecipeHolder<?> recipeHolder, NonNullList<ItemStack> list, int i) {
+-        if (recipeHolder != null && canBurn(registryAccess, recipeHolder, list, i)) {
+-            ItemStack itemStack = list.get(0);
+-            ItemStack resultItem = recipeHolder.value().getResultItem(registryAccess);
+-            ItemStack itemStack1 = list.get(2);
+-            if (itemStack1.isEmpty()) {
+-                list.set(2, resultItem.copy());
+-            } else if (itemStack1.is(resultItem.getItem())) {
+-                itemStack1.grow(1);
++    private static boolean burn(Level world, BlockPos blockposition, RegistryAccess iregistrycustom, @Nullable RecipeHolder<?> recipeholder, NonNullList<ItemStack> nonnulllist, int i) { // CraftBukkit
++        if (recipeholder != null && canBurn(iregistrycustom, recipeholder, nonnulllist, i)) {
++            ItemStack itemstack = (ItemStack) nonnulllist.get(0);
++            ItemStack itemstack1 = recipeholder.value().getResultItem(iregistrycustom);
++            ItemStack itemstack2 = (ItemStack) nonnulllist.get(2);
++
++            // CraftBukkit start - fire FurnaceSmeltEvent
++            CraftItemStack source = CraftItemStack.asCraftMirror(itemstack);
++            org.bukkit.inventory.ItemStack result = CraftItemStack.asBukkitCopy(itemstack1);
++
++            FurnaceSmeltEvent furnaceSmeltEvent = new FurnaceSmeltEvent(CraftBlock.at(world, blockposition), source, result);
++            world.getCraftServer().getPluginManager().callEvent(furnaceSmeltEvent);
++
++            if (furnaceSmeltEvent.isCancelled()) {
++                return false;
+             }
+ 
+             if (itemStack.is(Blocks.WET_SPONGE.asItem()) && !list.get(1).isEmpty() && list.get(1).is(Items.BUCKET)) {
+                 list.set(1, new ItemStack(Items.WATER_BUCKET));
+             }
+ 
+-            itemStack.shrink(1);
++            /*
++            if (itemstack2.isEmpty()) {
++                nonnulllist.set(2, itemstack1.copy());
++            } else if (itemstack2.is(itemstack1.getItem())) {
++                itemstack2.grow(1);
++            }
++            */
++            // CraftBukkit end
++
++            if (itemstack.is(Blocks.WET_SPONGE.asItem()) && !((ItemStack) nonnulllist.get(1)).isEmpty() && ((ItemStack) nonnulllist.get(1)).is(Items.BUCKET)) {
++                nonnulllist.set(1, new ItemStack(Items.WATER_BUCKET));
++            }
++
++            itemstack.shrink(1);
+             return true;
+         } else {
+             return false;
+@@ -349,7 +470,10 @@
+     }
+ 
+     private static int getTotalCookTime(Level level, AbstractFurnaceBlockEntity blockEntity) {
+-        return blockEntity.quickCheck.getRecipeFor(blockEntity, level).map(recipeHolder -> recipeHolder.value().getCookingTime()).orElse(200);
++        if (level == null) return 200; // CraftBukkit - SPIGOT-4302
++        return (Integer) blockEntity.quickCheck.getRecipeFor(blockEntity, level).map((recipeholder) -> {
++            return ((AbstractCookingRecipe) recipeholder.value()).getCookingTime();
++        }).orElse(200);
+     }
+ 
+     public static boolean isFuel(ItemStack stack) {
+@@ -462,9 +592,8 @@
+     public void awardUsedRecipes(Player player, List<ItemStack> items) {
+     }
+ 
+-    public void awardUsedRecipesAndPopExperience(ServerPlayer player) {
+-        List<RecipeHolder<?>> recipesToAwardAndPopExperience = this.getRecipesToAwardAndPopExperience(player.serverLevel(), player.position());
+-        player.awardRecipes(recipesToAwardAndPopExperience);
++    public void awardUsedRecipesAndPopExperience(ServerPlayer entityplayer, ItemStack itemstack, int amount) { // CraftBukkit
++        List<RecipeHolder<?>> list = this.getRecipesToAwardAndPopExperience(entityplayer.serverLevel(), entityplayer.position(), this.worldPosition, entityplayer, itemstack, amount); // CraftBukkit
+ 
+         for (RecipeHolder<?> recipeHolder : recipesToAwardAndPopExperience) {
+             if (recipeHolder != null) {
+@@ -476,26 +610,46 @@
+     }
+ 
+     public List<RecipeHolder<?>> getRecipesToAwardAndPopExperience(ServerLevel level, Vec3 popVec) {
++        // CraftBukkit start
++        return this.getRecipesToAwardAndPopExperience(level, popVec, this.worldPosition, null, null, 0);
++    }
++
++    public List<RecipeHolder<?>> getRecipesToAwardAndPopExperience(ServerLevel worldserver, Vec3 vec3d, BlockPos blockposition, ServerPlayer entityplayer, ItemStack itemstack, int amount) {
++        // CraftBukkit end
+         List<RecipeHolder<?>> list = Lists.newArrayList();
+ 
+-        for (Entry<ResourceLocation> entry : this.recipesUsed.object2IntEntrySet()) {
+-            level.getRecipeManager().byKey(entry.getKey()).ifPresent(recipeHolder -> {
+-                list.add((RecipeHolder<?>)recipeHolder);
+-                createExperience(level, popVec, entry.getIntValue(), ((AbstractCookingRecipe)recipeHolder.value()).getExperience());
++        while (objectiterator.hasNext()) {
++            Entry<ResourceLocation> entry = (Entry) objectiterator.next();
++
++            worldserver.getRecipeManager().byKey((ResourceLocation) entry.getKey()).ifPresent((recipeholder) -> {
++                list.add(recipeholder);
++                createExperience(worldserver, vec3d, entry.getIntValue(), ((AbstractCookingRecipe) recipeholder.value()).getExperience(), blockposition, entityplayer, itemstack, amount); // CraftBukkit
+             });
+         }
+ 
+         return list;
+     }
+ 
+-    private static void createExperience(ServerLevel level, Vec3 popVec, int recipeIndex, float experience) {
+-        int floor = Mth.floor((float)recipeIndex * experience);
+-        float fraction = Mth.frac((float)recipeIndex * experience);
+-        if (fraction != 0.0F && Math.random() < (double)fraction) {
+-            floor++;
++    private static void createExperience(ServerLevel worldserver, Vec3 vec3d, int i, float f, BlockPos blockposition, net.minecraft.world.entity.player.Player entityhuman, ItemStack itemstack, int amount) { // CraftBukkit
++        int j = Mth.floor((float) i * f);
++        float f1 = Mth.frac((float) i * f);
++
++        if (f1 != 0.0F && Math.random() < (double) f1) {
++            ++j;
+         }
+ 
+-        ExperienceOrb.award(level, popVec, floor);
++        // CraftBukkit start - fire FurnaceExtractEvent / BlockExpEvent
++        BlockExpEvent event;
++        if (amount != 0) {
++            event = new FurnaceExtractEvent((Player) entityhuman.getBukkitEntity(), CraftBlock.at(worldserver, blockposition), org.bukkit.craftbukkit.util.CraftMagicNumbers.getMaterial(itemstack.getItem()), amount, j);
++        } else {
++            event = new BlockExpEvent(CraftBlock.at(worldserver, blockposition), j);
++        }
++        worldserver.getCraftServer().getPluginManager().callEvent(event);
++        j = event.getExpToDrop();
++        // CraftBukkit end
++
++        ExperienceOrb.award(worldserver, vec3d, j);
+     }
+ 
+     @Override

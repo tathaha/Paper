@@ -1,0 +1,133 @@
+--- a/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
++++ b/net/minecraft/world/entity/projectile/ThrownEnderpearl.java
+@@ -17,34 +17,37 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
++// CraftBukkit start
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.CreatureSpawnEvent;
++import org.bukkit.event.player.PlayerTeleportEvent;
++// CraftBukkit end
+ 
+ public class ThrownEnderpearl extends ThrowableItemProjectile {
+ 
+-    public ThrownEnderpearl(EntityType<? extends ThrownEnderpearl> entitytype, Level level) {
+-        super(entitytype, level);
++    public ThrownEnderpearl(EntityType<? extends ThrownEnderpearl> entityType, Level level) {
++        super(entityType, level);
+     }
+ 
+-    public ThrownEnderpearl(Level level, LivingEntity livingentity) {
+-        super(EntityType.ENDER_PEARL, livingentity, level);
++    public ThrownEnderpearl(Level level, LivingEntity shooter) {
++        super(EntityType.ENDER_PEARL, shooter, level);
+     }
+ 
+     @Override
+-    @Override
+     protected Item getDefaultItem() {
+         return Items.ENDER_PEARL;
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitEntity(EntityHitResult entityhitresult) {
+-        super.onHitEntity(entityhitresult);
+-        entityhitresult.getEntity().hurt(this.damageSources().thrown(this, this.getOwner()), 0.0F);
++    protected void onHitEntity(EntityHitResult result) {
++        super.onHitEntity(result);
++        result.getEntity().hurt(this.damageSources().thrown(this, this.getOwner()), 0.0F);
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHit(HitResult hitresult) {
+-        super.onHit(hitresult);
++    protected void onHit(HitResult result) {
++        super.onHit(result);
+ 
+         for (int i = 0; i < 32; ++i) {
+             this.level().addParticle(ParticleTypes.PORTAL, this.getX(), this.getY() + this.random.nextDouble() * 2.0D, this.getZ(), this.random.nextGaussian(), 0.0D, this.random.nextGaussian());
+@@ -54,26 +57,39 @@
+             Entity entity = this.getOwner();
+ 
+             if (entity instanceof ServerPlayer) {
+-                ServerPlayer serverplayer = (ServerPlayer) entity;
++                ServerPlayer entityplayer = (ServerPlayer) entity;
+ 
+-                if (serverplayer.connection.isAcceptingMessages() && serverplayer.level() == this.level() && !serverplayer.isSleeping()) {
+-                    if (this.random.nextFloat() < 0.05F && this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)) {
+-                        Endermite endermite = (Endermite) EntityType.ENDERMITE.create(this.level());
++                if (entityplayer.connection.isAcceptingMessages() && entityplayer.level() == this.level() && !entityplayer.isSleeping()) {
++                    // CraftBukkit start - Fire PlayerTeleportEvent
++                    org.bukkit.craftbukkit.entity.CraftPlayer player = entityplayer.getBukkitEntity();
++                    org.bukkit.Location location = getBukkitEntity().getLocation();
++                    location.setPitch(player.getLocation().getPitch());
++                    location.setYaw(player.getLocation().getYaw());
+ 
+-                        if (endermite != null) {
+-                            endermite.moveTo(entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot());
+-                            this.level().addFreshEntity(endermite);
++                    PlayerTeleportEvent teleEvent = new PlayerTeleportEvent(player, player.getLocation(), location, PlayerTeleportEvent.TeleportCause.ENDER_PEARL);
++                    Bukkit.getPluginManager().callEvent(teleEvent);
++
++                    if (!teleEvent.isCancelled() && entityplayer.connection.isAcceptingMessages()) {
++                        if (this.random.nextFloat() < 0.05F && this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING)) {
++                            Endermite entityendermite = (Endermite) EntityType.ENDERMITE.create(this.level());
++
++                            if (entityendermite != null) {
++                                entityendermite.moveTo(entity.getX(), entity.getY(), entity.getZ(), entity.getYRot(), entity.getXRot());
++                                this.level().addFreshEntity(entityendermite, CreatureSpawnEvent.SpawnReason.ENDER_PEARL);
++                            }
+                         }
+-                    }
+ 
+-                    if (entity.isPassenger()) {
+-                        serverplayer.dismountTo(this.getX(), this.getY(), this.getZ());
+-                    } else {
+-                        entity.teleportTo(this.getX(), this.getY(), this.getZ());
+-                    }
++                        if (entity.isPassenger()) {
++                            entity.stopRiding();
++                        }
+ 
+-                    entity.resetFallDistance();
+-                    entity.hurt(this.damageSources().fall(), 5.0F);
++                        entityplayer.connection.teleport(teleEvent.getTo());
++                        entity.resetFallDistance();
++                        CraftEventFactory.entityDamage = this;
++                        entity.hurt(this.damageSources().fall(), 5.0F);
++                        CraftEventFactory.entityDamage = null;
++                    }
++                    // CraftBukkit end
+                     this.level().playSound((Player) null, this.getX(), this.getY(), this.getZ(), SoundEvents.PLAYER_TELEPORT, SoundSource.PLAYERS);
+                 }
+             } else if (entity != null) {
+@@ -87,7 +103,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         Entity entity = this.getOwner();
+ 
+@@ -101,14 +116,13 @@
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public Entity changeDimension(ServerLevel serverlevel) {
++    public Entity changeDimension(ServerLevel server) {
+         Entity entity = this.getOwner();
+ 
+-        if (entity != null && entity.level().dimension() != serverlevel.dimension()) {
++        if (entity != null && server != null && entity.level().dimension() != server.dimension()) { // CraftBukkit - SPIGOT-6113
+             this.setOwner((Entity) null);
+         }
+ 
+-        return super.changeDimension(serverlevel);
++        return super.changeDimension(server);
+     }
+ }

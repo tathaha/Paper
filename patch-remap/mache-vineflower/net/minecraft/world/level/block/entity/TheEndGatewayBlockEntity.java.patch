@@ -1,0 +1,425 @@
+--- a/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/TheEndGatewayBlockEntity.java
+@@ -1,13 +1,12 @@
+ package net.minecraft.world.level.block.entity;
+ 
+ import com.mojang.logging.LogUtils;
++import java.util.Iterator;
+ import java.util.List;
+ import javax.annotation.Nullable;
+ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.Holder;
+-import net.minecraft.core.Registry;
+ import net.minecraft.core.registries.Registries;
+ import net.minecraft.data.worldgen.features.EndFeatures;
+ import net.minecraft.nbt.CompoundTag;
+@@ -25,28 +24,36 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.chunk.LevelChunk;
++import net.minecraft.world.level.dimension.LevelStem;
++import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+ import net.minecraft.world.level.levelgen.feature.Feature;
+ import net.minecraft.world.level.levelgen.feature.configurations.EndGatewayConfiguration;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++import org.bukkit.craftbukkit.util.CraftLocation;
++import org.bukkit.event.player.PlayerTeleportEvent;
++// CraftBukkit end
+ 
+ public class TheEndGatewayBlockEntity extends TheEndPortalBlockEntity {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final int SPAWN_TIME = 200;
+     private static final int COOLDOWN_TIME = 40;
+     private static final int ATTENTION_INTERVAL = 2400;
+     private static final int EVENT_COOLDOWN = 1;
+     private static final int GATEWAY_HEIGHT_ABOVE_SURFACE = 10;
+-    private long age;
++    public long age;
+     private int teleportCooldown;
+     @Nullable
+-    private BlockPos exitPortal;
+-    private boolean exactTeleport;
++    public BlockPos exitPortal;
++    public boolean exactTeleport;
+ 
+-    public TheEndGatewayBlockEntity(BlockPos pos, BlockState blockState) {
++    public TheEndGatewayBlockEntity(BlockPos pos, IBlockData blockState) {
+         super(BlockEntityType.END_GATEWAY, pos, blockState);
+     }
+ 
+@@ -61,6 +68,7 @@
+         if (this.exactTeleport) {
+             tag.putBoolean("ExactTeleport", true);
+         }
++
+     }
+ 
+     @Override
+@@ -68,32 +76,36 @@
+         super.load(tag);
+         this.age = tag.getLong("Age");
+         if (tag.contains("ExitPortal", 10)) {
+-            BlockPos blockPos = NbtUtils.readBlockPos(tag.getCompound("ExitPortal"));
+-            if (Level.isInSpawnableBounds(blockPos)) {
+-                this.exitPortal = blockPos;
++            BlockPos blockposition = NbtUtils.readBlockPos(tag.getCompound("ExitPortal"));
++
++            if (Level.isInSpawnableBounds(blockposition)) {
++                this.exitPortal = blockposition;
+             }
+         }
+ 
+         this.exactTeleport = tag.getBoolean("ExactTeleport");
+     }
+ 
+-    public static void beamAnimationTick(Level level, BlockPos pos, BlockState state, TheEndGatewayBlockEntity blockEntity) {
+-        blockEntity.age++;
++    public static void beamAnimationTick(Level level, BlockPos pos, IBlockData state, TheEndGatewayBlockEntity blockEntity) {
++        ++blockEntity.age;
+         if (blockEntity.isCoolingDown()) {
+-            blockEntity.teleportCooldown--;
++            --blockEntity.teleportCooldown;
+         }
++
+     }
+ 
+-    public static void teleportTick(Level level, BlockPos pos, BlockState state, TheEndGatewayBlockEntity blockEntity) {
+-        boolean isSpawning = blockEntity.isSpawning();
+-        boolean isCoolingDown = blockEntity.isCoolingDown();
+-        blockEntity.age++;
+-        if (isCoolingDown) {
+-            blockEntity.teleportCooldown--;
++    public static void teleportTick(Level level, BlockPos pos, IBlockData state, TheEndGatewayBlockEntity blockEntity) {
++        boolean flag = blockEntity.isSpawning();
++        boolean flag1 = blockEntity.isCoolingDown();
++
++        ++blockEntity.age;
++        if (flag1) {
++            --blockEntity.teleportCooldown;
+         } else {
+-            List<Entity> entitiesOfClass = level.getEntitiesOfClass(Entity.class, new AABB(pos), TheEndGatewayBlockEntity::canEntityTeleport);
+-            if (!entitiesOfClass.isEmpty()) {
+-                teleportEntity(level, pos, state, entitiesOfClass.get(level.random.nextInt(entitiesOfClass.size())), blockEntity);
++            List<Entity> list = level.getEntitiesOfClass(Entity.class, new AABB(pos), TheEndGatewayBlockEntity::canEntityTeleport);
++
++            if (!list.isEmpty()) {
++                teleportEntity(level, pos, state, (Entity) list.get(level.random.nextInt(list.size())), blockEntity);
+             }
+ 
+             if (blockEntity.age % 2400L == 0L) {
+@@ -101,9 +113,10 @@
+             }
+         }
+ 
+-        if (isSpawning != blockEntity.isSpawning() || isCoolingDown != blockEntity.isCoolingDown()) {
++        if (flag != blockEntity.isSpawning() || flag1 != blockEntity.isCoolingDown()) {
+             setChanged(level, pos, state);
+         }
++
+     }
+ 
+     public static boolean canEntityTeleport(Entity entity) {
+@@ -119,11 +132,11 @@
+     }
+ 
+     public float getSpawnPercent(float partialTicks) {
+-        return Mth.clamp(((float)this.age + partialTicks) / 200.0F, 0.0F, 1.0F);
++        return Mth.clamp(((float) this.age + partialTicks) / 200.0F, 0.0F, 1.0F);
+     }
+ 
+     public float getCooldownPercent(float partialTicks) {
+-        return 1.0F - Mth.clamp(((float)this.teleportCooldown - partialTicks) / 40.0F, 0.0F, 1.0F);
++        return 1.0F - Mth.clamp(((float) this.teleportCooldown - partialTicks) / 40.0F, 0.0F, 1.0F);
+     }
+ 
+     @Override
+@@ -136,12 +149,13 @@
+         return this.saveWithoutMetadata();
+     }
+ 
+-    private static void triggerCooldown(Level level, BlockPos pos, BlockState state, TheEndGatewayBlockEntity blockEntity) {
++    private static void triggerCooldown(Level level, BlockPos pos, IBlockData state, TheEndGatewayBlockEntity blockEntity) {
+         if (!level.isClientSide) {
+             blockEntity.teleportCooldown = 40;
+             level.blockEvent(pos, state.getBlock(), 1, 0);
+             setChanged(level, pos, state);
+         }
++
+     }
+ 
+     @Override
+@@ -154,29 +168,34 @@
+         }
+     }
+ 
+-    public static void teleportEntity(Level level, BlockPos pos, BlockState state, Entity entity, TheEndGatewayBlockEntity blockEntity) {
++    public static void teleportEntity(Level level, BlockPos pos, IBlockData state, Entity entity, TheEndGatewayBlockEntity blockEntity) {
+         if (level instanceof ServerLevel && !blockEntity.isCoolingDown()) {
+-            ServerLevel serverLevel = (ServerLevel)level;
++            ServerLevel worldserver = (ServerLevel) level;
++
+             blockEntity.teleportCooldown = 100;
+-            if (blockEntity.exitPortal == null && level.dimension() == Level.END) {
+-                BlockPos blockPos = findOrCreateValidTeleportPos(serverLevel, pos);
+-                blockPos = blockPos.above(10);
+-                LOGGER.debug("Creating portal at {}", blockPos);
+-                spawnGatewayPortal(serverLevel, blockPos, EndGatewayConfiguration.knownExit(pos, false));
+-                blockEntity.exitPortal = blockPos;
++            BlockPos blockposition1;
++
++            if (blockEntity.exitPortal == null && level.getTypeKey() == LevelStem.END) { // CraftBukkit - work in alternate worlds
++                blockposition1 = findOrCreateValidTeleportPos(worldserver, pos);
++                blockposition1 = blockposition1.above(10);
++                TheEndGatewayBlockEntity.LOGGER.debug("Creating portal at {}", blockposition1);
++                spawnGatewayPortal(worldserver, blockposition1, EndGatewayConfiguration.knownExit(pos, false));
++                blockEntity.exitPortal = blockposition1;
+             }
+ 
+             if (blockEntity.exitPortal != null) {
+-                BlockPos blockPos = blockEntity.exactTeleport ? blockEntity.exitPortal : findExitPosition(level, blockEntity.exitPortal);
++                blockposition1 = blockEntity.exactTeleport ? blockEntity.exitPortal : findExitPosition(level, blockEntity.exitPortal);
+                 Entity entity1;
++
+                 if (entity instanceof ThrownEnderpearl) {
+-                    Entity owner = ((ThrownEnderpearl)entity).getOwner();
+-                    if (owner instanceof ServerPlayer) {
+-                        CriteriaTriggers.ENTER_BLOCK.trigger((ServerPlayer)owner, state);
++                    Entity entity2 = ((ThrownEnderpearl) entity).getOwner();
++
++                    if (entity2 instanceof ServerPlayer) {
++                        CriteriaTriggers.ENTER_BLOCK.trigger((ServerPlayer) entity2, state);
+                     }
+ 
+-                    if (owner != null) {
+-                        entity1 = owner;
++                    if (entity2 != null) {
++                        entity1 = entity2;
+                         entity.discard();
+                     } else {
+                         entity1 = entity;
+@@ -185,8 +204,34 @@
+                     entity1 = entity.getRootVehicle();
+                 }
+ 
++                // CraftBukkit start - Fire PlayerTeleportEvent/EntityTeleportEvent
++                if (entity1 instanceof ServerPlayer) {
++                    org.bukkit.craftbukkit.entity.CraftPlayer player = (CraftPlayer) entity1.getBukkitEntity();
++                    org.bukkit.Location location = CraftLocation.toBukkit(blockposition1, level.getWorld()).add(0.5D, 0.5D, 0.5D);
++                    location.setPitch(player.getLocation().getPitch());
++                    location.setYaw(player.getLocation().getYaw());
++
++                    PlayerTeleportEvent teleEvent = new PlayerTeleportEvent(player, player.getLocation(), location, PlayerTeleportEvent.TeleportCause.END_GATEWAY);
++                    Bukkit.getPluginManager().callEvent(teleEvent);
++                    if (teleEvent.isCancelled()) {
++                        return;
++                    }
++
++                    entity1.setPortalCooldown();
++                    ((ServerPlayer) entity1).connection.teleport(teleEvent.getTo());
++                    triggerCooldown(level, pos, state, blockEntity); // CraftBukkit - call at end of method
++                    return;
++
++                }
++
++                org.bukkit.event.entity.EntityTeleportEvent teleEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callEntityTeleportEvent(entity1, blockposition1.getX() + 0.5, blockposition1.getY() + 0.5, blockposition1.getZ() + 0.5);
++                if (teleEvent.isCancelled()) {
++                    return;
++                }
++
+                 entity1.setPortalCooldown();
+-                entity1.teleportToWithTicket((double)blockPos.getX() + 0.5, (double)blockPos.getY(), (double)blockPos.getZ() + 0.5);
++                entity1.teleportToWithTicket(teleEvent.getTo().getX(), teleEvent.getTo().getY(), teleEvent.getTo().getZ());
++                // CraftBukkit end
+             }
+ 
+             triggerCooldown(level, pos, state, blockEntity);
+@@ -194,45 +239,51 @@
+     }
+ 
+     private static BlockPos findExitPosition(Level level, BlockPos pos) {
+-        BlockPos blockPos = findTallestBlock(level, pos.offset(0, 2, 0), 5, false);
+-        LOGGER.debug("Best exit position for portal at {} is {}", pos, blockPos);
+-        return blockPos.above();
++        BlockPos blockposition1 = findTallestBlock(level, pos.offset(0, 2, 0), 5, false);
++
++        TheEndGatewayBlockEntity.LOGGER.debug("Best exit position for portal at {} is {}", pos, blockposition1);
++        return blockposition1.above();
+     }
+ 
+     private static BlockPos findOrCreateValidTeleportPos(ServerLevel level, BlockPos pos) {
+-        Vec3 vec3 = findExitPortalXZPosTentative(level, pos);
+-        LevelChunk chunk = getChunk(level, vec3);
+-        BlockPos blockPos = findValidSpawnInChunk(chunk);
+-        if (blockPos == null) {
+-            BlockPos blockPos1 = BlockPos.containing(vec3.x + 0.5, 75.0, vec3.z + 0.5);
+-            LOGGER.debug("Failed to find a suitable block to teleport to, spawning an island on {}", blockPos1);
+-            level.registryAccess()
+-                .registry(Registries.CONFIGURED_FEATURE)
+-                .flatMap(configuredFeatureRegistry -> configuredFeatureRegistry.getHolder(EndFeatures.END_ISLAND))
+-                .ifPresent(feature -> feature.value().place(level, level.getChunkSource().getGenerator(), RandomSource.create(blockPos1.asLong()), blockPos1));
+-            blockPos = blockPos1;
++        Vec3 vec3d = findExitPortalXZPosTentative(level, pos);
++        LevelChunk chunk = getChunk(level, vec3d);
++        BlockPos blockposition1 = findValidSpawnInChunk(chunk);
++
++        if (blockposition1 == null) {
++            BlockPos blockposition2 = BlockPos.containing(vec3d.x + 0.5D, 75.0D, vec3d.z + 0.5D);
++
++            TheEndGatewayBlockEntity.LOGGER.debug("Failed to find a suitable block to teleport to, spawning an island on {}", blockposition2);
++            level.registryAccess().registry(Registries.CONFIGURED_FEATURE).flatMap((iregistry) -> {
++                return iregistry.getHolder(EndFeatures.END_ISLAND);
++            }).ifPresent((holder_c) -> {
++                ((ConfiguredFeature) holder_c.value()).place(level, level.getChunkSource().getGenerator(), RandomSource.create(blockposition2.asLong()), blockposition2);
++            });
++            blockposition1 = blockposition2;
+         } else {
+-            LOGGER.debug("Found suitable block to teleport to: {}", blockPos);
++            TheEndGatewayBlockEntity.LOGGER.debug("Found suitable block to teleport to: {}", blockposition1);
+         }
+ 
+-        return findTallestBlock(level, blockPos, 16, true);
++        return findTallestBlock(level, blockposition1, 16, true);
+     }
+ 
+     private static Vec3 findExitPortalXZPosTentative(ServerLevel level, BlockPos pos) {
+-        Vec3 vec3 = new Vec3((double)pos.getX(), 0.0, (double)pos.getZ()).normalize();
+-        int i = 1024;
+-        Vec3 vec31 = vec3.scale(1024.0);
++        Vec3 vec3d = (new Vec3((double) pos.getX(), 0.0D, (double) pos.getZ())).normalize();
++        boolean flag = true;
++        Vec3 vec3d1 = vec3d.scale(1024.0D);
+ 
+-        for (int i1 = 16; !isChunkEmpty(level, vec31) && i1-- > 0; vec31 = vec31.add(vec3.scale(-16.0))) {
+-            LOGGER.debug("Skipping backwards past nonempty chunk at {}", vec31);
++        int i;
++
++        for (i = 16; !isChunkEmpty(level, vec3d1) && i-- > 0; vec3d1 = vec3d1.add(vec3d.scale(-16.0D))) {
++            TheEndGatewayBlockEntity.LOGGER.debug("Skipping backwards past nonempty chunk at {}", vec3d1);
+         }
+ 
+-        for (int var6 = 16; isChunkEmpty(level, vec31) && var6-- > 0; vec31 = vec31.add(vec3.scale(16.0))) {
+-            LOGGER.debug("Skipping forward past empty chunk at {}", vec31);
++        for (i = 16; isChunkEmpty(level, vec3d1) && i-- > 0; vec3d1 = vec3d1.add(vec3d.scale(16.0D))) {
++            TheEndGatewayBlockEntity.LOGGER.debug("Skipping forward past empty chunk at {}", vec3d1);
+         }
+ 
+-        LOGGER.debug("Found chunk at {}", vec31);
+-        return vec31;
++        TheEndGatewayBlockEntity.LOGGER.debug("Found chunk at {}", vec3d1);
++        return vec3d1;
+     }
+ 
+     private static boolean isChunkEmpty(ServerLevel level, Vec3 pos) {
+@@ -240,16 +291,17 @@
+     }
+ 
+     private static BlockPos findTallestBlock(BlockGetter level, BlockPos pos, int radius, boolean allowBedrock) {
+-        BlockPos blockPos = null;
++        BlockPos blockposition1 = null;
+ 
+-        for (int i = -radius; i <= radius; i++) {
+-            for (int i1 = -radius; i1 <= radius; i1++) {
+-                if (i != 0 || i1 != 0 || allowBedrock) {
+-                    for (int i2 = level.getMaxBuildHeight() - 1; i2 > (blockPos == null ? level.getMinBuildHeight() : blockPos.getY()); i2--) {
+-                        BlockPos blockPos1 = new BlockPos(pos.getX() + i, i2, pos.getZ() + i1);
+-                        BlockState blockState = level.getBlockState(blockPos1);
+-                        if (blockState.isCollisionShapeFullBlock(level, blockPos1) && (allowBedrock || !blockState.is(Blocks.BEDROCK))) {
+-                            blockPos = blockPos1;
++        for (int j = -radius; j <= radius; ++j) {
++            for (int k = -radius; k <= radius; ++k) {
++                if (j != 0 || k != 0 || allowBedrock) {
++                    for (int l = level.getMaxBuildHeight() - 1; l > (blockposition1 == null ? level.getMinBuildHeight() : blockposition1.getY()); --l) {
++                        BlockPos blockposition2 = new BlockPos(pos.getX() + j, l, pos.getZ() + k);
++                        IBlockData iblockdata = level.getBlockState(blockposition2);
++
++                        if (iblockdata.isCollisionShapeFullBlock(level, blockposition2) && (allowBedrock || !iblockdata.is(Blocks.BEDROCK))) {
++                            blockposition1 = blockposition2;
+                             break;
+                         }
+                     }
+@@ -257,38 +309,40 @@
+             }
+         }
+ 
+-        return blockPos == null ? pos : blockPos;
++        return blockposition1 == null ? pos : blockposition1;
+     }
+ 
+     private static LevelChunk getChunk(Level level, Vec3 pos) {
+-        return level.getChunk(Mth.floor(pos.x / 16.0), Mth.floor(pos.z / 16.0));
++        return level.getChunk(Mth.floor(pos.x / 16.0D), Mth.floor(pos.z / 16.0D));
+     }
+ 
+     @Nullable
+     private static BlockPos findValidSpawnInChunk(LevelChunk chunk) {
+-        ChunkPos pos = chunk.getPos();
+-        BlockPos blockPos = new BlockPos(pos.getMinBlockX(), 30, pos.getMinBlockZ());
++        ChunkPos chunkcoordintpair = chunk.getPos();
++        BlockPos blockposition = new BlockPos(chunkcoordintpair.getMinBlockX(), 30, chunkcoordintpair.getMinBlockZ());
+         int i = chunk.getHighestSectionPosition() + 16 - 1;
+-        BlockPos blockPos1 = new BlockPos(pos.getMaxBlockX(), i, pos.getMaxBlockZ());
+-        BlockPos blockPos2 = null;
+-        double d = 0.0;
++        BlockPos blockposition1 = new BlockPos(chunkcoordintpair.getMaxBlockX(), i, chunkcoordintpair.getMaxBlockZ());
++        BlockPos blockposition2 = null;
++        double d0 = 0.0D;
++        Iterator iterator = BlockPos.betweenClosed(blockposition, blockposition1).iterator();
+ 
+-        for (BlockPos blockPos3 : BlockPos.betweenClosed(blockPos, blockPos1)) {
+-            BlockState blockState = chunk.getBlockState(blockPos3);
+-            BlockPos blockPos4 = blockPos3.above();
+-            BlockPos blockPos5 = blockPos3.above(2);
+-            if (blockState.is(Blocks.END_STONE)
+-                && !chunk.getBlockState(blockPos4).isCollisionShapeFullBlock(chunk, blockPos4)
+-                && !chunk.getBlockState(blockPos5).isCollisionShapeFullBlock(chunk, blockPos5)) {
+-                double d1 = blockPos3.distToCenterSqr(0.0, 0.0, 0.0);
+-                if (blockPos2 == null || d1 < d) {
+-                    blockPos2 = blockPos3;
+-                    d = d1;
++        while (iterator.hasNext()) {
++            BlockPos blockposition3 = (BlockPos) iterator.next();
++            IBlockData iblockdata = chunk.getBlockState(blockposition3);
++            BlockPos blockposition4 = blockposition3.above();
++            BlockPos blockposition5 = blockposition3.above(2);
++
++            if (iblockdata.is(Blocks.END_STONE) && !chunk.getBlockState(blockposition4).isCollisionShapeFullBlock(chunk, blockposition4) && !chunk.getBlockState(blockposition5).isCollisionShapeFullBlock(chunk, blockposition5)) {
++                double d1 = blockposition3.distToCenterSqr(0.0D, 0.0D, 0.0D);
++
++                if (blockposition2 == null || d1 < d0) {
++                    blockposition2 = blockposition3;
++                    d0 = d1;
+                 }
+             }
+         }
+ 
+-        return blockPos2;
++        return blockposition2;
+     }
+ 
+     private static void spawnGatewayPortal(ServerLevel level, BlockPos pos, EndGatewayConfiguration config) {
+@@ -302,9 +356,13 @@
+ 
+     public int getParticleAmount() {
+         int i = 0;
++        Direction[] aenumdirection = Direction.values();
++        int j = aenumdirection.length;
+ 
+-        for (Direction direction : Direction.values()) {
+-            i += this.shouldRenderFace(direction) ? 1 : 0;
++        for (int k = 0; k < j; ++k) {
++            Direction enumdirection = aenumdirection[k];
++
++            i += this.shouldRenderFace(enumdirection) ? 1 : 0;
+         }
+ 
+         return i;

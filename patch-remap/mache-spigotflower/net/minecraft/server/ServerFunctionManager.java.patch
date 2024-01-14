@@ -1,0 +1,114 @@
+--- a/net/minecraft/server/ServerFunctionManager.java
++++ b/net/minecraft/server/ServerFunctionManager.java
+@@ -10,7 +10,6 @@
+ import java.util.Optional;
+ import net.minecraft.commands.CommandResultCallback;
+ import net.minecraft.commands.CommandSourceStack;
+-import net.minecraft.commands.Commands;
+ import net.minecraft.commands.FunctionInstantiationException;
+ import net.minecraft.commands.execution.ExecutionContext;
+ import net.minecraft.commands.functions.CommandFunction;
+@@ -30,14 +29,14 @@
+     private boolean postReload;
+     private ServerFunctionLibrary library;
+ 
+-    public ServerFunctionManager(MinecraftServer minecraftserver, ServerFunctionLibrary serverfunctionlibrary) {
+-        this.server = minecraftserver;
+-        this.library = serverfunctionlibrary;
+-        this.postReload(serverfunctionlibrary);
++    public ServerFunctionManager(MinecraftServer server, ServerFunctionLibrary library) {
++        this.server = server;
++        this.library = library;
++        this.postReload(library);
+     }
+ 
+     public CommandDispatcher<CommandSourceStack> getDispatcher() {
+-        return this.server.getCommands().getDispatcher();
++        return this.server.vanillaCommandDispatcher.getDispatcher(); // CraftBukkit
+     }
+ 
+     public void tick() {
+@@ -53,12 +52,12 @@
+         }
+     }
+ 
+-    private void executeTagFunctions(Collection<CommandFunction<CommandSourceStack>> collection, ResourceLocation resourcelocation) {
+-        ProfilerFiller profilerfiller = this.server.getProfiler();
++    private void executeTagFunctions(Collection<CommandFunction<CommandSourceStack>> functionObjects, ResourceLocation identifier) {
++        ProfilerFiller gameprofilerfiller = this.server.getProfiler();
+ 
+-        Objects.requireNonNull(resourcelocation);
+-        profilerfiller.push(resourcelocation::toString);
+-        Iterator iterator = collection.iterator();
++        Objects.requireNonNull(identifier);
++        gameprofilerfiller.push(identifier::toString);
++        Iterator iterator = functionObjects.iterator();
+ 
+         while (iterator.hasNext()) {
+             CommandFunction<CommandSourceStack> commandfunction = (CommandFunction) iterator.next();
+@@ -69,36 +68,36 @@
+         this.server.getProfiler().pop();
+     }
+ 
+-    public void execute(CommandFunction<CommandSourceStack> commandfunction, CommandSourceStack commandsourcestack) {
+-        ProfilerFiller profilerfiller = this.server.getProfiler();
++    public void execute(CommandFunction<CommandSourceStack> commandfunction, CommandSourceStack commandlistenerwrapper) {
++        ProfilerFiller gameprofilerfiller = this.server.getProfiler();
+ 
+-        profilerfiller.push(() -> {
++        gameprofilerfiller.push(() -> {
+             return "function " + commandfunction.id();
+         });
+ 
+         try {
+-            InstantiatedFunction<CommandSourceStack> instantiatedfunction = commandfunction.instantiate((CompoundTag) null, this.getDispatcher(), commandsourcestack);
++            InstantiatedFunction<CommandSourceStack> instantiatedfunction = commandfunction.instantiate((CompoundTag) null, this.getDispatcher(), commandlistenerwrapper);
+ 
+-            Commands.executeCommandInContext(commandsourcestack, (executioncontext) -> {
+-                ExecutionContext.queueInitialFunctionCall(executioncontext, instantiatedfunction, commandsourcestack, CommandResultCallback.EMPTY);
++            net.minecraft.commands.Commands.executeCommandInContext(commandlistenerwrapper, (executioncontext) -> {
++                ExecutionContext.queueInitialFunctionCall(executioncontext, instantiatedfunction, commandlistenerwrapper, CommandResultCallback.EMPTY);
+             });
+         } catch (FunctionInstantiationException functioninstantiationexception) {
+             ;
+         } catch (Exception exception) {
+             ServerFunctionManager.LOGGER.warn("Failed to execute function {}", commandfunction.id(), exception);
+         } finally {
+-            profilerfiller.pop();
++            gameprofilerfiller.pop();
+         }
+ 
+     }
+ 
+-    public void replaceLibrary(ServerFunctionLibrary serverfunctionlibrary) {
+-        this.library = serverfunctionlibrary;
+-        this.postReload(serverfunctionlibrary);
++    public void replaceLibrary(ServerFunctionLibrary reloader) {
++        this.library = reloader;
++        this.postReload(reloader);
+     }
+ 
+-    private void postReload(ServerFunctionLibrary serverfunctionlibrary) {
+-        this.ticking = ImmutableList.copyOf(serverfunctionlibrary.getTag(ServerFunctionManager.TICK_FUNCTION_TAG));
++    private void postReload(ServerFunctionLibrary reloader) {
++        this.ticking = ImmutableList.copyOf(reloader.getTag(ServerFunctionManager.TICK_FUNCTION_TAG));
+         this.postReload = true;
+     }
+ 
+@@ -106,12 +105,12 @@
+         return this.server.createCommandSourceStack().withPermission(2).withSuppressedOutput();
+     }
+ 
+-    public Optional<CommandFunction<CommandSourceStack>> get(ResourceLocation resourcelocation) {
+-        return this.library.getFunction(resourcelocation);
++    public Optional<CommandFunction<CommandSourceStack>> get(ResourceLocation functionIdentifier) {
++        return this.library.getFunction(functionIdentifier);
+     }
+ 
+-    public Collection<CommandFunction<CommandSourceStack>> getTag(ResourceLocation resourcelocation) {
+-        return this.library.getTag(resourcelocation);
++    public Collection<CommandFunction<CommandSourceStack>> getTag(ResourceLocation functionTagIdentifier) {
++        return this.library.getTag(functionTagIdentifier);
+     }
+ 
+     public Iterable<ResourceLocation> getFunctionNames() {

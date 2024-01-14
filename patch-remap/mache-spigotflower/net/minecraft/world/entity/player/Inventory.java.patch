@@ -1,0 +1,735 @@
+--- a/net/minecraft/world/entity/player/Inventory.java
++++ b/net/minecraft/world/entity/player/Inventory.java
+@@ -17,17 +17,24 @@
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.world.Container;
+ import net.minecraft.world.ContainerHelper;
+-import net.minecraft.world.Nameable;
++import net.minecraft.world.INamableTileEntity;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EquipmentSlot;
+ import net.minecraft.world.item.ArmorItem;
+ import net.minecraft.world.item.Item;
+ import net.minecraft.world.item.ItemStack;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ 
+-public class Inventory implements Container, Nameable {
++// CraftBukkit start
++import java.util.ArrayList;
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.entity.CraftHumanEntity;
++import org.bukkit.entity.HumanEntity;
++// CraftBukkit end
+ 
++public class Inventory implements Container, INamableTileEntity {
++
+     public static final int POP_TIME_DURATION = 5;
+     public static final int INVENTORY_SIZE = 36;
+     private static final int SELECTION_SIZE = 9;
+@@ -43,6 +50,54 @@
+     public final Player player;
+     private int timesChanged;
+ 
++    // CraftBukkit start - add fields and methods
++    public List<HumanEntity> transaction = new java.util.ArrayList<HumanEntity>();
++    private int maxStack = MAX_STACK;
++
++    public List<ItemStack> getContents() {
++        List<ItemStack> combined = new ArrayList<ItemStack>(items.size() + armor.size() + offhand.size());
++        for (List<net.minecraft.world.item.ItemStack> sub : this.compartments) {
++            combined.addAll(sub);
++        }
++
++        return combined;
++    }
++
++    public List<ItemStack> getArmorContents() {
++        return this.armor;
++    }
++
++    public void onOpen(CraftHumanEntity who) {
++        transaction.add(who);
++    }
++
++    public void onClose(CraftHumanEntity who) {
++        transaction.remove(who);
++    }
++
++    public List<HumanEntity> getViewers() {
++        return transaction;
++    }
++
++    public org.bukkit.inventory.InventoryHolder getOwner() {
++        return this.player.getBukkitEntity();
++    }
++
++    @Override
++    public int getMaxStackSize() {
++        return maxStack;
++    }
++
++    public void setMaxStackSize(int size) {
++        maxStack = size;
++    }
++
++    @Override
++    public Location getLocation() {
++        return player.getBukkitEntity().getLocation();
++    }
++    // CraftBukkit end
++
+     public Inventory(Player player) {
+         this.items = NonNullList.withSize(36, ItemStack.EMPTY);
+         this.armor = NonNullList.withSize(4, ItemStack.EMPTY);
+@@ -59,10 +114,32 @@
+         return 9;
+     }
+ 
+-    private boolean hasRemainingSpaceForItem(ItemStack itemstack, ItemStack itemstack1) {
+-        return !itemstack.isEmpty() && ItemStack.isSameItemSameTags(itemstack, itemstack1) && itemstack.isStackable() && itemstack.getCount() < itemstack.getMaxStackSize() && itemstack.getCount() < this.getMaxStackSize();
++    private boolean hasRemainingSpaceForItem(ItemStack destination, ItemStack origin) {
++        return !destination.isEmpty() && ItemStack.isSameItemSameTags(destination, origin) && destination.isStackable() && destination.getCount() < destination.getMaxStackSize() && destination.getCount() < this.getMaxStackSize();
+     }
+ 
++    // CraftBukkit start - Watch method above! :D
++    public int canHold(ItemStack itemstack) {
++        int remains = itemstack.getCount();
++        for (int i = 0; i < this.items.size(); ++i) {
++            ItemStack itemstack1 = this.getItem(i);
++            if (itemstack1.isEmpty()) return itemstack.getCount();
++
++            if (this.hasRemainingSpaceForItem(itemstack1, itemstack)) {
++                remains -= (itemstack1.getMaxStackSize() < this.getMaxStackSize() ? itemstack1.getMaxStackSize() : this.getMaxStackSize()) - itemstack1.getCount();
++            }
++            if (remains <= 0) return itemstack.getCount();
++        }
++        ItemStack offhandItemStack = this.getItem(this.items.size() + this.armor.size());
++        if (this.hasRemainingSpaceForItem(offhandItemStack, itemstack)) {
++            remains -= (offhandItemStack.getMaxStackSize() < this.getMaxStackSize() ? offhandItemStack.getMaxStackSize() : this.getMaxStackSize()) - offhandItemStack.getCount();
++        }
++        if (remains <= 0) return itemstack.getCount();
++
++        return itemstack.getCount() - remains;
++    }
++    // CraftBukkit end
++
+     public int getFreeSlot() {
+         for (int i = 0; i < this.items.size(); ++i) {
+             if (((ItemStack) this.items.get(i)).isEmpty()) {
+@@ -73,8 +150,8 @@
+         return -1;
+     }
+ 
+-    public void setPickedItem(ItemStack itemstack) {
+-        int i = this.findSlotMatchingItem(itemstack);
++    public void setPickedItem(ItemStack stack) {
++        int i = this.findSlotMatchingItem(stack);
+ 
+         if (isHotbarSlot(i)) {
+             this.selected = i;
+@@ -89,7 +166,7 @@
+                     }
+                 }
+ 
+-                this.items.set(this.selected, itemstack);
++                this.items.set(this.selected, stack);
+             } else {
+                 this.pickSlot(i);
+             }
+@@ -97,21 +174,21 @@
+         }
+     }
+ 
+-    public void pickSlot(int i) {
++    public void pickSlot(int index) {
+         this.selected = this.getSuitableHotbarSlot();
+         ItemStack itemstack = (ItemStack) this.items.get(this.selected);
+ 
+-        this.items.set(this.selected, (ItemStack) this.items.get(i));
+-        this.items.set(i, itemstack);
++        this.items.set(this.selected, (ItemStack) this.items.get(index));
++        this.items.set(index, itemstack);
+     }
+ 
+-    public static boolean isHotbarSlot(int i) {
+-        return i >= 0 && i < 9;
++    public static boolean isHotbarSlot(int index) {
++        return index >= 0 && index < 9;
+     }
+ 
+-    public int findSlotMatchingItem(ItemStack itemstack) {
++    public int findSlotMatchingItem(ItemStack stack) {
+         for (int i = 0; i < this.items.size(); ++i) {
+-            if (!((ItemStack) this.items.get(i)).isEmpty() && ItemStack.isSameItemSameTags(itemstack, (ItemStack) this.items.get(i))) {
++            if (!((ItemStack) this.items.get(i)).isEmpty() && ItemStack.isSameItemSameTags(stack, (ItemStack) this.items.get(i))) {
+                 return i;
+             }
+         }
+@@ -119,11 +196,11 @@
+         return -1;
+     }
+ 
+-    public int findSlotMatchingUnusedItem(ItemStack itemstack) {
++    public int findSlotMatchingUnusedItem(ItemStack stack) {
+         for (int i = 0; i < this.items.size(); ++i) {
+             ItemStack itemstack1 = (ItemStack) this.items.get(i);
+ 
+-            if (!((ItemStack) this.items.get(i)).isEmpty() && ItemStack.isSameItemSameTags(itemstack, (ItemStack) this.items.get(i)) && !((ItemStack) this.items.get(i)).isDamaged() && !itemstack1.isEnchanted() && !itemstack1.hasCustomHoverName()) {
++            if (!((ItemStack) this.items.get(i)).isEmpty() && ItemStack.isSameItemSameTags(stack, (ItemStack) this.items.get(i)) && !((ItemStack) this.items.get(i)).isDamaged() && !itemstack1.isEnchanted() && !itemstack1.hasCustomHoverName()) {
+                 return i;
+             }
+         }
+@@ -152,8 +229,8 @@
+         return this.selected;
+     }
+ 
+-    public void swapPaint(double d0) {
+-        int i = (int) Math.signum(d0);
++    public void swapPaint(double direction) {
++        int i = (int) Math.signum(direction);
+ 
+         for (this.selected -= i; this.selected < 0; this.selected += 9) {
+             ;
+@@ -165,15 +242,15 @@
+ 
+     }
+ 
+-    public int clearOrCountMatchingItems(Predicate<ItemStack> predicate, int i, Container container) {
++    public int clearOrCountMatchingItems(Predicate<ItemStack> stackPredicate, int maxCount, Container inventory) {
+         byte b0 = 0;
+-        boolean flag = i == 0;
+-        int j = b0 + ContainerHelper.clearOrCountMatchingItems((Container) this, predicate, i - b0, flag);
++        boolean flag = maxCount == 0;
++        int j = b0 + ContainerHelper.clearOrCountMatchingItems((Container) this, stackPredicate, maxCount - b0, flag);
+ 
+-        j += ContainerHelper.clearOrCountMatchingItems(container, predicate, i - j, flag);
++        j += ContainerHelper.clearOrCountMatchingItems(inventory, stackPredicate, maxCount - j, flag);
+         ItemStack itemstack = this.player.containerMenu.getCarried();
+ 
+-        j += ContainerHelper.clearOrCountMatchingItems(itemstack, predicate, i - j, flag);
++        j += ContainerHelper.clearOrCountMatchingItems(itemstack, stackPredicate, maxCount - j, flag);
+         if (itemstack.isEmpty()) {
+             this.player.containerMenu.setCarried(ItemStack.EMPTY);
+         }
+@@ -181,28 +258,28 @@
+         return j;
+     }
+ 
+-    private int addResource(ItemStack itemstack) {
+-        int i = this.getSlotWithRemainingSpace(itemstack);
++    private int addResource(ItemStack stack) {
++        int i = this.getSlotWithRemainingSpace(stack);
+ 
+         if (i == -1) {
+             i = this.getFreeSlot();
+         }
+ 
+-        return i == -1 ? itemstack.getCount() : this.addResource(i, itemstack);
++        return i == -1 ? stack.getCount() : this.addResource(i, stack);
+     }
+ 
+-    private int addResource(int i, ItemStack itemstack) {
+-        Item item = itemstack.getItem();
+-        int j = itemstack.getCount();
+-        ItemStack itemstack1 = this.getItem(i);
++    private int addResource(int slot, ItemStack stack) {
++        Item item = stack.getItem();
++        int j = stack.getCount();
++        ItemStack itemstack1 = this.getItem(slot);
+ 
+         if (itemstack1.isEmpty()) {
+             itemstack1 = new ItemStack(item, 0);
+-            if (itemstack.hasTag()) {
+-                itemstack1.setTag(itemstack.getTag().copy());
++            if (stack.hasTag()) {
++                itemstack1.setTag(stack.getTag().copy());
+             }
+ 
+-            this.setItem(i, itemstack1);
++            this.setItem(slot, itemstack1);
+         }
+ 
+         int k = j;
+@@ -225,14 +302,14 @@
+         }
+     }
+ 
+-    public int getSlotWithRemainingSpace(ItemStack itemstack) {
+-        if (this.hasRemainingSpaceForItem(this.getItem(this.selected), itemstack)) {
++    public int getSlotWithRemainingSpace(ItemStack stack) {
++        if (this.hasRemainingSpaceForItem(this.getItem(this.selected), stack)) {
+             return this.selected;
+-        } else if (this.hasRemainingSpaceForItem(this.getItem(40), itemstack)) {
++        } else if (this.hasRemainingSpaceForItem(this.getItem(40), stack)) {
+             return 40;
+         } else {
+             for (int i = 0; i < this.items.size(); ++i) {
+-                if (this.hasRemainingSpaceForItem((ItemStack) this.items.get(i), itemstack)) {
++                if (this.hasRemainingSpaceForItem((ItemStack) this.items.get(i), stack)) {
+                     return i;
+                 }
+             }
+@@ -256,26 +333,26 @@
+ 
+     }
+ 
+-    public boolean add(ItemStack itemstack) {
+-        return this.add(-1, itemstack);
++    public boolean add(ItemStack stack) {
++        return this.add(-1, stack);
+     }
+ 
+-    public boolean add(int i, ItemStack itemstack) {
+-        if (itemstack.isEmpty()) {
++    public boolean add(int slot, ItemStack stack) {
++        if (stack.isEmpty()) {
+             return false;
+         } else {
+             try {
+-                if (itemstack.isDamaged()) {
+-                    if (i == -1) {
+-                        i = this.getFreeSlot();
++                if (stack.isDamaged()) {
++                    if (slot == -1) {
++                        slot = this.getFreeSlot();
+                     }
+ 
+-                    if (i >= 0) {
+-                        this.items.set(i, itemstack.copyAndClear());
+-                        ((ItemStack) this.items.get(i)).setPopTime(5);
++                    if (slot >= 0) {
++                        this.items.set(slot, stack.copyAndClear());
++                        ((ItemStack) this.items.get(slot)).setPopTime(5);
+                         return true;
+                     } else if (this.player.getAbilities().instabuild) {
+-                        itemstack.setCount(0);
++                        stack.setCount(0);
+                         return true;
+                     } else {
+                         return false;
+@@ -284,58 +361,58 @@
+                     int j;
+ 
+                     do {
+-                        j = itemstack.getCount();
+-                        if (i == -1) {
+-                            itemstack.setCount(this.addResource(itemstack));
++                        j = stack.getCount();
++                        if (slot == -1) {
++                            stack.setCount(this.addResource(stack));
+                         } else {
+-                            itemstack.setCount(this.addResource(i, itemstack));
++                            stack.setCount(this.addResource(slot, stack));
+                         }
+-                    } while (!itemstack.isEmpty() && itemstack.getCount() < j);
++                    } while (!stack.isEmpty() && stack.getCount() < j);
+ 
+-                    if (itemstack.getCount() == j && this.player.getAbilities().instabuild) {
+-                        itemstack.setCount(0);
++                    if (stack.getCount() == j && this.player.getAbilities().instabuild) {
++                        stack.setCount(0);
+                         return true;
+                     } else {
+-                        return itemstack.getCount() < j;
++                        return stack.getCount() < j;
+                     }
+                 }
+             } catch (Throwable throwable) {
+                 CrashReport crashreport = CrashReport.forThrowable(throwable, "Adding item to inventory");
+-                CrashReportCategory crashreportcategory = crashreport.addCategory("Item being added");
++                CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Item being added");
+ 
+-                crashreportcategory.setDetail("Item ID", (Object) Item.getId(itemstack.getItem()));
+-                crashreportcategory.setDetail("Item data", (Object) itemstack.getDamageValue());
+-                crashreportcategory.setDetail("Item name", () -> {
+-                    return itemstack.getHoverName().getString();
++                crashreportsystemdetails.setDetail("Item ID", (Object) Item.getId(stack.getItem()));
++                crashreportsystemdetails.setDetail("Item data", (Object) stack.getDamageValue());
++                crashreportsystemdetails.setDetail("Item name", () -> {
++                    return stack.getHoverName().getString();
+                 });
+                 throw new ReportedException(crashreport);
+             }
+         }
+     }
+ 
+-    public void placeItemBackInInventory(ItemStack itemstack) {
+-        this.placeItemBackInInventory(itemstack, true);
++    public void placeItemBackInInventory(ItemStack stack) {
++        this.placeItemBackInInventory(stack, true);
+     }
+ 
+-    public void placeItemBackInInventory(ItemStack itemstack, boolean flag) {
++    public void placeItemBackInInventory(ItemStack stack, boolean sendPacket) {
+         while (true) {
+-            if (!itemstack.isEmpty()) {
+-                int i = this.getSlotWithRemainingSpace(itemstack);
++            if (!stack.isEmpty()) {
++                int i = this.getSlotWithRemainingSpace(stack);
+ 
+                 if (i == -1) {
+                     i = this.getFreeSlot();
+                 }
+ 
+                 if (i != -1) {
+-                    int j = itemstack.getMaxStackSize() - this.getItem(i).getCount();
++                    int j = stack.getMaxStackSize() - this.getItem(i).getCount();
+ 
+-                    if (this.add(i, itemstack.split(j)) && flag && this.player instanceof ServerPlayer) {
++                    if (this.add(i, stack.split(j)) && sendPacket && this.player instanceof ServerPlayer) {
+                         ((ServerPlayer) this.player).connection.send(new ClientboundContainerSetSlotPacket(-2, 0, i, this.getItem(i)));
+                     }
+                     continue;
+                 }
+ 
+-                this.player.drop(itemstack, false);
++                this.player.drop(stack, false);
+             }
+ 
+             return;
+@@ -343,31 +420,30 @@
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack removeItem(int i, int j) {
++    public ItemStack removeItem(int index, int count) {
+         List<ItemStack> list = null;
+ 
+         NonNullList nonnulllist;
+ 
+-        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); i -= nonnulllist.size()) {
++        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); index -= nonnulllist.size()) {
+             nonnulllist = (NonNullList) iterator.next();
+-            if (i < nonnulllist.size()) {
++            if (index < nonnulllist.size()) {
+                 list = nonnulllist;
+                 break;
+             }
+         }
+ 
+-        return list != null && !((ItemStack) list.get(i)).isEmpty() ? ContainerHelper.removeItem(list, i, j) : ItemStack.EMPTY;
++        return list != null && !((ItemStack) list.get(index)).isEmpty() ? ContainerHelper.removeItem(list, index, count) : ItemStack.EMPTY;
+     }
+ 
+-    public void removeItem(ItemStack itemstack) {
++    public void removeItem(ItemStack stack) {
+         Iterator iterator = this.compartments.iterator();
+ 
+         while (iterator.hasNext()) {
+             NonNullList<ItemStack> nonnulllist = (NonNullList) iterator.next();
+ 
+             for (int i = 0; i < nonnulllist.size(); ++i) {
+-                if (nonnulllist.get(i) == itemstack) {
++                if (nonnulllist.get(i) == stack) {
+                     nonnulllist.set(i, ItemStack.EMPTY);
+                     break;
+                 }
+@@ -377,24 +453,23 @@
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack removeItemNoUpdate(int i) {
++    public ItemStack removeItemNoUpdate(int index) {
+         NonNullList<ItemStack> nonnulllist = null;
+ 
+         NonNullList nonnulllist1;
+ 
+-        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); i -= nonnulllist1.size()) {
++        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); index -= nonnulllist1.size()) {
+             nonnulllist1 = (NonNullList) iterator.next();
+-            if (i < nonnulllist1.size()) {
++            if (index < nonnulllist1.size()) {
+                 nonnulllist = nonnulllist1;
+                 break;
+             }
+         }
+ 
+-        if (nonnulllist != null && !((ItemStack) nonnulllist.get(i)).isEmpty()) {
+-            ItemStack itemstack = (ItemStack) nonnulllist.get(i);
++        if (nonnulllist != null && !((ItemStack) nonnulllist.get(index)).isEmpty()) {
++            ItemStack itemstack = (ItemStack) nonnulllist.get(index);
+ 
+-            nonnulllist.set(i, ItemStack.EMPTY);
++            nonnulllist.set(index, ItemStack.EMPTY);
+             return itemstack;
+         } else {
+             return ItemStack.EMPTY;
+@@ -402,73 +477,72 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void setItem(int i, ItemStack itemstack) {
++    public void setItem(int index, ItemStack stack) {
+         NonNullList<ItemStack> nonnulllist = null;
+ 
+         NonNullList nonnulllist1;
+ 
+-        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); i -= nonnulllist1.size()) {
++        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); index -= nonnulllist1.size()) {
+             nonnulllist1 = (NonNullList) iterator.next();
+-            if (i < nonnulllist1.size()) {
++            if (index < nonnulllist1.size()) {
+                 nonnulllist = nonnulllist1;
+                 break;
+             }
+         }
+ 
+         if (nonnulllist != null) {
+-            nonnulllist.set(i, itemstack);
++            nonnulllist.set(index, stack);
+         }
+ 
+     }
+ 
+-    public float getDestroySpeed(BlockState blockstate) {
+-        return ((ItemStack) this.items.get(this.selected)).getDestroySpeed(blockstate);
++    public float getDestroySpeed(IBlockData state) {
++        return ((ItemStack) this.items.get(this.selected)).getDestroySpeed(state);
+     }
+ 
+-    public ListTag save(ListTag listtag) {
+-        CompoundTag compoundtag;
++    public ListTag save(ListTag listTag) {
++        CompoundTag nbttagcompound;
+         int i;
+ 
+         for (i = 0; i < this.items.size(); ++i) {
+             if (!((ItemStack) this.items.get(i)).isEmpty()) {
+-                compoundtag = new CompoundTag();
+-                compoundtag.putByte("Slot", (byte) i);
+-                ((ItemStack) this.items.get(i)).save(compoundtag);
+-                listtag.add(compoundtag);
++                nbttagcompound = new CompoundTag();
++                nbttagcompound.putByte("Slot", (byte) i);
++                ((ItemStack) this.items.get(i)).save(nbttagcompound);
++                listTag.add(nbttagcompound);
+             }
+         }
+ 
+         for (i = 0; i < this.armor.size(); ++i) {
+             if (!((ItemStack) this.armor.get(i)).isEmpty()) {
+-                compoundtag = new CompoundTag();
+-                compoundtag.putByte("Slot", (byte) (i + 100));
+-                ((ItemStack) this.armor.get(i)).save(compoundtag);
+-                listtag.add(compoundtag);
++                nbttagcompound = new CompoundTag();
++                nbttagcompound.putByte("Slot", (byte) (i + 100));
++                ((ItemStack) this.armor.get(i)).save(nbttagcompound);
++                listTag.add(nbttagcompound);
+             }
+         }
+ 
+         for (i = 0; i < this.offhand.size(); ++i) {
+             if (!((ItemStack) this.offhand.get(i)).isEmpty()) {
+-                compoundtag = new CompoundTag();
+-                compoundtag.putByte("Slot", (byte) (i + 150));
+-                ((ItemStack) this.offhand.get(i)).save(compoundtag);
+-                listtag.add(compoundtag);
++                nbttagcompound = new CompoundTag();
++                nbttagcompound.putByte("Slot", (byte) (i + 150));
++                ((ItemStack) this.offhand.get(i)).save(nbttagcompound);
++                listTag.add(nbttagcompound);
+             }
+         }
+ 
+-        return listtag;
++        return listTag;
+     }
+ 
+-    public void load(ListTag listtag) {
++    public void load(ListTag listTag) {
+         this.items.clear();
+         this.armor.clear();
+         this.offhand.clear();
+ 
+-        for (int i = 0; i < listtag.size(); ++i) {
+-            CompoundTag compoundtag = listtag.getCompound(i);
+-            int j = compoundtag.getByte("Slot") & 255;
+-            ItemStack itemstack = ItemStack.of(compoundtag);
++        for (int i = 0; i < listTag.size(); ++i) {
++            CompoundTag nbttagcompound = listTag.getCompound(i);
++            int j = nbttagcompound.getByte("Slot") & 255;
++            ItemStack itemstack = ItemStack.of(nbttagcompound);
+ 
+             if (!itemstack.isEmpty()) {
+                 if (j >= 0 && j < this.items.size()) {
+@@ -484,13 +558,11 @@
+     }
+ 
+     @Override
+-    @Override
+     public int getContainerSize() {
+         return this.items.size() + this.armor.size() + this.offhand.size();
+     }
+ 
+     @Override
+-    @Override
+     public boolean isEmpty() {
+         Iterator iterator = this.items.iterator();
+ 
+@@ -528,50 +600,48 @@
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack getItem(int i) {
++    public ItemStack getItem(int index) {
+         List<ItemStack> list = null;
+ 
+         NonNullList nonnulllist;
+ 
+-        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); i -= nonnulllist.size()) {
++        for (Iterator iterator = this.compartments.iterator(); iterator.hasNext(); index -= nonnulllist.size()) {
+             nonnulllist = (NonNullList) iterator.next();
+-            if (i < nonnulllist.size()) {
++            if (index < nonnulllist.size()) {
+                 list = nonnulllist;
+                 break;
+             }
+         }
+ 
+-        return list == null ? ItemStack.EMPTY : (ItemStack) list.get(i);
++        return list == null ? ItemStack.EMPTY : (ItemStack) list.get(index);
+     }
+ 
+     @Override
+-    @Override
+     public Component getName() {
+         return Component.translatable("container.inventory");
+     }
+ 
+-    public ItemStack getArmor(int i) {
+-        return (ItemStack) this.armor.get(i);
++    public ItemStack getArmor(int slot) {
++        return (ItemStack) this.armor.get(slot);
+     }
+ 
+-    public void hurtArmor(DamageSource damagesource, float f, int[] aint) {
+-        if (f > 0.0F) {
+-            f /= 4.0F;
+-            if (f < 1.0F) {
+-                f = 1.0F;
++    public void hurtArmor(DamageSource source, float damage, int[] armorPieces) {
++        if (damage > 0.0F) {
++            damage /= 4.0F;
++            if (damage < 1.0F) {
++                damage = 1.0F;
+             }
+ 
+-            int[] aint1 = aint;
+-            int i = aint.length;
++            int[] aint1 = armorPieces;
++            int i = armorPieces.length;
+ 
+             for (int j = 0; j < i; ++j) {
+                 int k = aint1[j];
+                 ItemStack itemstack = (ItemStack) this.armor.get(k);
+ 
+-                if ((!damagesource.is(DamageTypeTags.IS_FIRE) || !itemstack.getItem().isFireResistant()) && itemstack.getItem() instanceof ArmorItem) {
+-                    itemstack.hurtAndBreak((int) f, this.player, (player) -> {
+-                        player.broadcastBreakEvent(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, k));
++                if ((!source.is(DamageTypeTags.IS_FIRE) || !itemstack.getItem().isFireResistant()) && itemstack.getItem() instanceof ArmorItem) {
++                    itemstack.hurtAndBreak((int) damage, this.player, (entityhuman) -> {
++                        entityhuman.broadcastBreakEvent(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Function.ARMOR, k));
+                     });
+                 }
+             }
+@@ -598,7 +668,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void setChanged() {
+         ++this.timesChanged;
+     }
+@@ -608,12 +677,11 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean stillValid(Player player) {
+         return this.player.isRemoved() ? false : player.distanceToSqr((Entity) this.player) <= 64.0D;
+     }
+ 
+-    public boolean contains(ItemStack itemstack) {
++    public boolean contains(ItemStack stack) {
+         Iterator iterator = this.compartments.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -623,7 +691,7 @@
+             while (iterator1.hasNext()) {
+                 ItemStack itemstack1 = (ItemStack) iterator1.next();
+ 
+-                if (!itemstack1.isEmpty() && ItemStack.isSameItemSameTags(itemstack1, itemstack)) {
++                if (!itemstack1.isEmpty() && ItemStack.isSameItemSameTags(itemstack1, stack)) {
+                     return true;
+                 }
+             }
+@@ -632,7 +700,7 @@
+         return false;
+     }
+ 
+-    public boolean contains(TagKey<Item> tagkey) {
++    public boolean contains(TagKey<Item> tag) {
+         Iterator iterator = this.compartments.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -642,7 +710,7 @@
+             while (iterator1.hasNext()) {
+                 ItemStack itemstack = (ItemStack) iterator1.next();
+ 
+-                if (!itemstack.isEmpty() && itemstack.is(tagkey)) {
++                if (!itemstack.isEmpty() && itemstack.is(tag)) {
+                     return true;
+                 }
+             }
+@@ -651,16 +719,15 @@
+         return false;
+     }
+ 
+-    public void replaceWith(Inventory inventory) {
++    public void replaceWith(Inventory playerInventory) {
+         for (int i = 0; i < this.getContainerSize(); ++i) {
+-            this.setItem(i, inventory.getItem(i));
++            this.setItem(i, playerInventory.getItem(i));
+         }
+ 
+-        this.selected = inventory.selected;
++        this.selected = playerInventory.selected;
+     }
+ 
+     @Override
+-    @Override
+     public void clearContent() {
+         Iterator iterator = this.compartments.iterator();
+ 
+@@ -672,20 +739,20 @@
+ 
+     }
+ 
+-    public void fillStackedContents(StackedContents stackedcontents) {
++    public void fillStackedContents(StackedContents stackedContent) {
+         Iterator iterator = this.items.iterator();
+ 
+         while (iterator.hasNext()) {
+             ItemStack itemstack = (ItemStack) iterator.next();
+ 
+-            stackedcontents.accountSimpleStack(itemstack);
++            stackedContent.accountSimpleStack(itemstack);
+         }
+ 
+     }
+ 
+-    public ItemStack removeFromSelected(boolean flag) {
++    public ItemStack removeFromSelected(boolean removeStack) {
+         ItemStack itemstack = this.getSelected();
+ 
+-        return itemstack.isEmpty() ? ItemStack.EMPTY : this.removeItem(this.selected, flag ? itemstack.getCount() : 1);
++        return itemstack.isEmpty() ? ItemStack.EMPTY : this.removeItem(this.selected, removeStack ? itemstack.getCount() : 1);
+     }
+ }

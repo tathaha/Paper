@@ -1,0 +1,101 @@
+--- a/net/minecraft/world/level/NaturalSpawner.java
++++ b/net/minecraft/world/level/NaturalSpawner.java
+@@ -48,6 +49,10 @@
+ import net.minecraft.world.level.pathfinder.PathComputationType;
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
++import org.bukkit.craftbukkit.util.CraftSpawnCategory;
++import org.bukkit.entity.SpawnCategory;
++import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason;
++// CraftBukkit end
+ 
+ public final class NaturalSpawner {
+ 
+@@ -113,15 +118,30 @@
+         MobCategory[] amobcategory = NaturalSpawner.SPAWNING_CATEGORIES;
+         int i = amobcategory.length;
+ 
++        LevelData worlddata = level.getLevelData(); // CraftBukkit - Other mob type spawn tick rate
++
+         for (int j = 0; j < i; ++j) {
+-            MobCategory mobcategory = amobcategory[j];
++            MobCategory enumcreaturetype = aenumcreaturetype[j];
++            // CraftBukkit start - Use per-world spawn limits
++            boolean spawnThisTick = true;
++            int limit = enumcreaturetype.getMaxInstancesPerChunk();
++            SpawnCategory spawnCategory = CraftSpawnCategory.toBukkit(enumcreaturetype);
++            if (CraftSpawnCategory.isValidForLimits(spawnCategory)) {
++                spawnThisTick = level.ticksPerSpawnCategory.getLong(spawnCategory) != 0 && worlddata.getGameTime() % level.ticksPerSpawnCategory.getLong(spawnCategory) == 0;
++                limit = level.getWorld().getSpawnLimit(spawnCategory);
++            }
+ 
+             if ((flag || !mobcategory.isFriendly()) && (flag1 || mobcategory.isFriendly()) && (flag2 || !mobcategory.isPersistent()) && naturalspawner_spawnstate.canSpawnForCategory(mobcategory, levelchunk.getPos())) {
+                 Objects.requireNonNull(naturalspawner_spawnstate);
+                 NaturalSpawner.SpawnPredicate naturalspawner_spawnpredicate = naturalspawner_spawnstate::canSpawn;
+ 
+-                Objects.requireNonNull(naturalspawner_spawnstate);
+-                spawnCategoryForChunk(mobcategory, serverlevel, levelchunk, naturalspawner_spawnpredicate, naturalspawner_spawnstate::afterSpawn);
++            if ((spawnFriendlies || !enumcreaturetype.isFriendly()) && (spawnMonsters || enumcreaturetype.isFriendly()) && (forcedDespawn || !enumcreaturetype.isPersistent()) && spawnState.canSpawnForCategory(enumcreaturetype, chunk.getPos(), limit)) {
++                // CraftBukkit end
++                Objects.requireNonNull(spawnState);
++                NaturalSpawner.SpawnPredicate spawnercreature_c = spawnState::canSpawn;
++
++                Objects.requireNonNull(spawnState);
++                spawnCategoryForChunk(enumcreaturetype, level, chunk, spawnercreature_c, spawnState::afterSpawn);
+             }
+         }
+ 
+@@ -198,14 +218,19 @@
+                                             return;
+                                         }
+ 
+-                                        mob.moveTo(d0, (double) i, d1, serverlevel.random.nextFloat() * 360.0F, 0.0F);
+-                                        if (isValidPositionForMob(serverlevel, mob, d2)) {
+-                                            spawngroupdata = mob.finalizeSpawn(serverlevel, serverlevel.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.NATURAL, spawngroupdata, (CompoundTag) null);
+-                                            ++j;
+-                                            ++k1;
+-                                            serverlevel.addFreshEntityWithPassengers(mob);
+-                                            naturalspawner_afterspawncallback.run(mob, chunkaccess);
+-                                            if (j >= mob.getMaxSpawnClusterSize()) {
++                                        entityinsentient.moveTo(d0, (double) i, d1, level.random.nextFloat() * 360.0F, 0.0F);
++                                        if (isValidPositionForMob(level, entityinsentient, d2)) {
++                                            groupdataentity = entityinsentient.finalizeSpawn(level, level.getCurrentDifficultyAt(entityinsentient.blockPosition()), EnumMobSpawn.NATURAL, groupdataentity, (CompoundTag) null);
++                                            // CraftBukkit start
++                                            // SPIGOT-7045: Give ocelot babies back their special spawn reason. Note: This is the only modification required as ocelots count as monsters which means they only spawn during normal chunk ticking and do not spawn during chunk generation as starter mobs.
++                                            level.addFreshEntityWithPassengers(entityinsentient, (entityinsentient instanceof net.minecraft.world.entity.animal.Ocelot && !((org.bukkit.entity.Ageable) entityinsentient.getBukkitEntity()).isAdult()) ? SpawnReason.OCELOT_BABY : SpawnReason.NATURAL);
++                                            if (!entityinsentient.isRemoved()) {
++                                                ++j;
++                                                ++k1;
++                                                callback.run(entityinsentient, chunk);
++                                            }
++                                            // CraftBukkit end
++                                            if (j >= entityinsentient.getMaxSpawnClusterSize()) {
+                                                 return;
+                                             }
+ 
+@@ -388,9 +413,9 @@
+                                 if (entity instanceof Mob) {
+                                     Mob mob = (Mob) entity;
+ 
+-                                    if (mob.checkSpawnRules(serverlevelaccessor, MobSpawnType.CHUNK_GENERATION) && mob.checkSpawnObstruction(serverlevelaccessor)) {
+-                                        spawngroupdata = mob.finalizeSpawn(serverlevelaccessor, serverlevelaccessor.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.CHUNK_GENERATION, spawngroupdata, (CompoundTag) null);
+-                                        serverlevelaccessor.addFreshEntityWithPassengers(mob);
++                                    if (entityinsentient.checkSpawnRules(levelAccessor, EnumMobSpawn.CHUNK_GENERATION) && entityinsentient.checkSpawnObstruction(levelAccessor)) {
++                                        groupdataentity = entityinsentient.finalizeSpawn(levelAccessor, levelAccessor.getCurrentDifficultyAt(entityinsentient.blockPosition()), EnumMobSpawn.CHUNK_GENERATION, groupdataentity, (CompoundTag) null);
++                                        levelAccessor.addFreshEntityWithPassengers(entityinsentient, SpawnReason.CHUNK_GEN); // CraftBukkit
+                                         flag = true;
+                                     }
+                                 }
+@@ -511,8 +536,10 @@
+             return this.unmodifiableMobCategoryCounts;
+         }
+ 
+-        boolean canSpawnForCategory(MobCategory mobcategory, ChunkPos chunkpos) {
+-            int i = mobcategory.getMaxInstancesPerChunk() * this.spawnableChunkCount / NaturalSpawner.MAGIC_NUMBER;
++        // CraftBukkit start
++        boolean canSpawnForCategory(MobCategory enumcreaturetype, ChunkPos chunkcoordintpair, int limit) {
++            int i = limit * this.spawnableChunkCount / NaturalSpawner.MAGIC_NUMBER;
++            // CraftBukkit end
+ 
+             return this.mobCategoryCounts.getInt(mobcategory) >= i ? false : this.localMobCapCalculator.canSpawn(mobcategory, chunkpos);
+         }

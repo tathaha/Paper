@@ -1,0 +1,532 @@
+--- a/net/minecraft/world/level/block/ChestBlock.java
++++ b/net/minecraft/world/level/block/ChestBlock.java
+@@ -20,9 +20,9 @@
+ import net.minecraft.world.CompoundContainer;
+ import net.minecraft.world.Container;
+ import net.minecraft.world.Containers;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
++import net.minecraft.world.ITileInventory;
+ import net.minecraft.world.InteractionResult;
+-import net.minecraft.world.MenuProvider;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.animal.Cat;
+ import net.minecraft.world.entity.monster.piglin.PiglinAi;
+@@ -41,7 +41,7 @@
+ import net.minecraft.world.level.block.entity.ChestBlockEntity;
+ import net.minecraft.world.level.block.entity.LidBlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+@@ -51,7 +51,7 @@
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+@@ -59,8 +59,8 @@
+ 
+ public class ChestBlock extends AbstractChestBlock<ChestBlockEntity> implements SimpleWaterloggedBlock {
+ 
+-    public static final MapCodec<ChestBlock> CODEC = simpleCodec((blockbehaviour_properties) -> {
+-        return new ChestBlock(blockbehaviour_properties, () -> {
++    public static final MapCodec<ChestBlock> CODEC = simpleCodec((blockbase_info) -> {
++        return new ChestBlock(blockbase_info, () -> {
+             return BlockEntityType.CHEST;
+         });
+     });
+@@ -76,111 +76,114 @@
+     protected static final VoxelShape EAST_AABB = Block.box(1.0D, 0.0D, 1.0D, 16.0D, 14.0D, 15.0D);
+     protected static final VoxelShape AABB = Block.box(1.0D, 0.0D, 1.0D, 15.0D, 14.0D, 15.0D);
+     private static final DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<Container>> CHEST_COMBINER = new DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<Container>>() {
+-        @Override
+-        public Optional<Container> acceptDouble(ChestBlockEntity chestblockentity, ChestBlockEntity chestblockentity1) {
+-            return Optional.of(new CompoundContainer(chestblockentity, chestblockentity1));
++        public Optional<Container> acceptDouble(ChestBlockEntity tileentitychest, ChestBlockEntity tileentitychest1) {
++            return Optional.of(new CompoundContainer(tileentitychest, tileentitychest1));
+         }
+ 
+-        @Override
+-        public Optional<Container> acceptSingle(ChestBlockEntity chestblockentity) {
+-            return Optional.of(chestblockentity);
++        public Optional<Container> acceptSingle(ChestBlockEntity tileentitychest) {
++            return Optional.of(tileentitychest);
+         }
+ 
+         @Override
+-        @Override
+         public Optional<Container> acceptNone() {
+             return Optional.empty();
+         }
+     };
+-    private static final DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<MenuProvider>> MENU_PROVIDER_COMBINER = new DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<MenuProvider>>() {
++    private static final DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<ITileInventory>> MENU_PROVIDER_COMBINER = new DoubleBlockCombiner.Combiner<ChestBlockEntity, Optional<ITileInventory>>() {
++        public Optional<ITileInventory> acceptDouble(final ChestBlockEntity tileentitychest, final ChestBlockEntity tileentitychest1) {
++            final CompoundContainer inventorylargechest = new CompoundContainer(tileentitychest, tileentitychest1);
++
++            return Optional.of(new DoubleInventory(tileentitychest, tileentitychest1, inventorylargechest)); // CraftBukkit
++        }
++
++        public Optional<ITileInventory> acceptSingle(ChestBlockEntity tileentitychest) {
++            return Optional.of(tileentitychest);
++        }
++
+         @Override
+-        public Optional<MenuProvider> acceptDouble(final ChestBlockEntity chestblockentity, final ChestBlockEntity chestblockentity1) {
+-            final CompoundContainer compoundcontainer = new CompoundContainer(chestblockentity, chestblockentity1);
++        public Optional<ITileInventory> acceptNone() {
++            return Optional.empty();
++        }
++    };
+ 
+-            return Optional.of(new MenuProvider() {
+-                @Nullable
+-                @Override
+-                @Override
+-                public AbstractContainerMenu createMenu(int i, Inventory inventory, Player player) {
+-                    if (chestblockentity.canOpen(player) && chestblockentity1.canOpen(player)) {
+-                        chestblockentity.unpackLootTable(inventory.player);
+-                        chestblockentity1.unpackLootTable(inventory.player);
+-                        return ChestMenu.sixRows(i, inventory, compoundcontainer);
+-                    } else {
+-                        return null;
+-                    }
+-                }
++    // CraftBukkit start
++    public static class DoubleInventory implements ITileInventory {
+ 
+-                @Override
+-                @Override
+-                public Component getDisplayName() {
+-                    return (Component) (chestblockentity.hasCustomName() ? chestblockentity.getDisplayName() : (chestblockentity1.hasCustomName() ? chestblockentity1.getDisplayName() : Component.translatable("container.chestDouble")));
+-                }
+-            });
++        private final ChestBlockEntity tileentitychest;
++        private final ChestBlockEntity tileentitychest1;
++        public final CompoundContainer inventorylargechest;
++
++        public DoubleInventory(ChestBlockEntity tileentitychest, ChestBlockEntity tileentitychest1, CompoundContainer inventorylargechest) {
++            this.tileentitychest = tileentitychest;
++            this.tileentitychest1 = tileentitychest1;
++            this.inventorylargechest = inventorylargechest;
+         }
+ 
++        @Nullable
+         @Override
+-        public Optional<MenuProvider> acceptSingle(ChestBlockEntity chestblockentity) {
+-            return Optional.of(chestblockentity);
++        public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
++            if (tileentitychest.canOpen(player) && tileentitychest1.canOpen(player)) {
++                tileentitychest.unpackLootTable(playerInventory.player);
++                tileentitychest1.unpackLootTable(playerInventory.player);
++                return ChestMenu.sixRows(containerId, playerInventory, inventorylargechest);
++            } else {
++                return null;
++            }
+         }
+ 
+         @Override
+-        @Override
+-        public Optional<MenuProvider> acceptNone() {
+-            return Optional.empty();
++        public Component getDisplayName() {
++            return (Component) (tileentitychest.hasCustomName() ? tileentitychest.getDisplayName() : (tileentitychest1.hasCustomName() ? tileentitychest1.getDisplayName() : Component.translatable("container.chestDouble")));
+         }
+     };
++    // CraftBukkit end
+ 
+     @Override
+-    @Override
+     public MapCodec<? extends ChestBlock> codec() {
+         return ChestBlock.CODEC;
+     }
+ 
+-    protected ChestBlock(BlockBehaviour.Properties blockbehaviour_properties, Supplier<BlockEntityType<? extends ChestBlockEntity>> supplier) {
+-        super(blockbehaviour_properties, supplier);
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(ChestBlock.FACING, Direction.NORTH)).setValue(ChestBlock.TYPE, ChestType.SINGLE)).setValue(ChestBlock.WATERLOGGED, false));
++    protected ChestBlock(BlockBehaviour.Properties properties, Supplier<BlockEntityType<? extends ChestBlockEntity>> blockEntityType) {
++        super(properties, blockEntityType);
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(ChestBlock.FACING, Direction.NORTH)).setValue(ChestBlock.TYPE, ChestType.SINGLE)).setValue(ChestBlock.WATERLOGGED, false));
+     }
+ 
+-    public static DoubleBlockCombiner.BlockType getBlockType(BlockState blockstate) {
+-        ChestType chesttype = (ChestType) blockstate.getValue(ChestBlock.TYPE);
++    public static DoubleBlockCombiner.BlockType getBlockType(IBlockData state) {
++        ChestType blockpropertychesttype = (ChestType) state.getValue(ChestBlock.TYPE);
+ 
+-        return chesttype == ChestType.SINGLE ? DoubleBlockCombiner.BlockType.SINGLE : (chesttype == ChestType.RIGHT ? DoubleBlockCombiner.BlockType.FIRST : DoubleBlockCombiner.BlockType.SECOND);
++        return blockpropertychesttype == ChestType.SINGLE ? DoubleBlockCombiner.BlockType.SINGLE : (blockpropertychesttype == ChestType.RIGHT ? DoubleBlockCombiner.BlockType.FIRST : DoubleBlockCombiner.BlockType.SECOND);
+     }
+ 
+     @Override
+-    @Override
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.ENTITYBLOCK_ANIMATED;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.ENTITYBLOCK_ANIMATED;
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        if ((Boolean) blockstate.getValue(ChestBlock.WATERLOGGED)) {
+-            levelaccessor.scheduleTick(blockpos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(levelaccessor));
++    public IBlockData updateShape(IBlockData state, Direction facing, IBlockData facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
++        if ((Boolean) state.getValue(ChestBlock.WATERLOGGED)) {
++            level.scheduleTick(currentPos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(level));
+         }
+ 
+-        if (blockstate1.is((Block) this) && direction.getAxis().isHorizontal()) {
+-            ChestType chesttype = (ChestType) blockstate1.getValue(ChestBlock.TYPE);
++        if (facingState.is((Block) this) && facing.getAxis().isHorizontal()) {
++            ChestType blockpropertychesttype = (ChestType) facingState.getValue(ChestBlock.TYPE);
+ 
+-            if (blockstate.getValue(ChestBlock.TYPE) == ChestType.SINGLE && chesttype != ChestType.SINGLE && blockstate.getValue(ChestBlock.FACING) == blockstate1.getValue(ChestBlock.FACING) && getConnectedDirection(blockstate1) == direction.getOpposite()) {
+-                return (BlockState) blockstate.setValue(ChestBlock.TYPE, chesttype.getOpposite());
++            if (state.getValue(ChestBlock.TYPE) == ChestType.SINGLE && blockpropertychesttype != ChestType.SINGLE && state.getValue(ChestBlock.FACING) == facingState.getValue(ChestBlock.FACING) && getConnectedDirection(facingState) == facing.getOpposite()) {
++                return (IBlockData) state.setValue(ChestBlock.TYPE, blockpropertychesttype.getOpposite());
+             }
+-        } else if (getConnectedDirection(blockstate) == direction) {
+-            return (BlockState) blockstate.setValue(ChestBlock.TYPE, ChestType.SINGLE);
++        } else if (getConnectedDirection(state) == facing) {
++            return (IBlockData) state.setValue(ChestBlock.TYPE, ChestType.SINGLE);
+         }
+ 
+-        return super.updateShape(blockstate, direction, blockstate1, levelaccessor, blockpos, blockpos1);
++        return super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        if (blockstate.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        if (state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
+             return ChestBlock.AABB;
+         } else {
+-            switch (getConnectedDirection(blockstate)) {
++            switch (getConnectedDirection(state)) {
+                 case NORTH:
+                 default:
+                     return ChestBlock.NORTH_AABB;
+@@ -194,84 +197,79 @@
+         }
+     }
+ 
+-    public static Direction getConnectedDirection(BlockState blockstate) {
+-        Direction direction = (Direction) blockstate.getValue(ChestBlock.FACING);
++    public static Direction getConnectedDirection(IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(ChestBlock.FACING);
+ 
+-        return blockstate.getValue(ChestBlock.TYPE) == ChestType.LEFT ? direction.getClockWise() : direction.getCounterClockWise();
++        return state.getValue(ChestBlock.TYPE) == ChestType.LEFT ? enumdirection.getClockWise() : enumdirection.getCounterClockWise();
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        ChestType chesttype = ChestType.SINGLE;
+-        Direction direction = blockplacecontext.getHorizontalDirection().getOpposite();
+-        FluidState fluidstate = blockplacecontext.getLevel().getFluidState(blockplacecontext.getClickedPos());
+-        boolean flag = blockplacecontext.isSecondaryUseActive();
+-        Direction direction1 = blockplacecontext.getClickedFace();
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        ChestType blockpropertychesttype = ChestType.SINGLE;
++        Direction enumdirection = context.getHorizontalDirection().getOpposite();
++        FluidState fluid = context.getLevel().getFluidState(context.getClickedPos());
++        boolean flag = context.isSecondaryUseActive();
++        Direction enumdirection1 = context.getClickedFace();
+ 
+-        if (direction1.getAxis().isHorizontal() && flag) {
+-            Direction direction2 = this.candidatePartnerFacing(blockplacecontext, direction1.getOpposite());
++        if (enumdirection1.getAxis().isHorizontal() && flag) {
++            Direction enumdirection2 = this.candidatePartnerFacing(context, enumdirection1.getOpposite());
+ 
+-            if (direction2 != null && direction2.getAxis() != direction1.getAxis()) {
+-                direction = direction2;
+-                chesttype = direction2.getCounterClockWise() == direction1.getOpposite() ? ChestType.RIGHT : ChestType.LEFT;
++            if (enumdirection2 != null && enumdirection2.getAxis() != enumdirection1.getAxis()) {
++                enumdirection = enumdirection2;
++                blockpropertychesttype = enumdirection2.getCounterClockWise() == enumdirection1.getOpposite() ? ChestType.RIGHT : ChestType.LEFT;
+             }
+         }
+ 
+-        if (chesttype == ChestType.SINGLE && !flag) {
+-            if (direction == this.candidatePartnerFacing(blockplacecontext, direction.getClockWise())) {
+-                chesttype = ChestType.LEFT;
+-            } else if (direction == this.candidatePartnerFacing(blockplacecontext, direction.getCounterClockWise())) {
+-                chesttype = ChestType.RIGHT;
++        if (blockpropertychesttype == ChestType.SINGLE && !flag) {
++            if (enumdirection == this.candidatePartnerFacing(context, enumdirection.getClockWise())) {
++                blockpropertychesttype = ChestType.LEFT;
++            } else if (enumdirection == this.candidatePartnerFacing(context, enumdirection.getCounterClockWise())) {
++                blockpropertychesttype = ChestType.RIGHT;
+             }
+         }
+ 
+-        return (BlockState) ((BlockState) ((BlockState) this.defaultBlockState().setValue(ChestBlock.FACING, direction)).setValue(ChestBlock.TYPE, chesttype)).setValue(ChestBlock.WATERLOGGED, fluidstate.getType() == Fluids.WATER);
++        return (IBlockData) ((IBlockData) ((IBlockData) this.defaultBlockState().setValue(ChestBlock.FACING, enumdirection)).setValue(ChestBlock.TYPE, blockpropertychesttype)).setValue(ChestBlock.WATERLOGGED, fluid.getType() == Fluids.WATER);
+     }
+ 
+     @Override
+-    @Override
+-    public FluidState getFluidState(BlockState blockstate) {
+-        return (Boolean) blockstate.getValue(ChestBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(blockstate);
++    public FluidState getFluidState(IBlockData state) {
++        return (Boolean) state.getValue(ChestBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+     }
+ 
+     @Nullable
+-    private Direction candidatePartnerFacing(BlockPlaceContext blockplacecontext, Direction direction) {
+-        BlockState blockstate = blockplacecontext.getLevel().getBlockState(blockplacecontext.getClickedPos().relative(direction));
++    private Direction candidatePartnerFacing(BlockPlaceContext context, Direction direction) {
++        IBlockData iblockdata = context.getLevel().getBlockState(context.getClickedPos().relative(direction));
+ 
+-        return blockstate.is((Block) this) && blockstate.getValue(ChestBlock.TYPE) == ChestType.SINGLE ? (Direction) blockstate.getValue(ChestBlock.FACING) : null;
++        return iblockdata.is((Block) this) && iblockdata.getValue(ChestBlock.TYPE) == ChestType.SINGLE ? (Direction) iblockdata.getValue(ChestBlock.FACING) : null;
+     }
+ 
+     @Override
+-    @Override
+-    public void setPlacedBy(Level level, BlockPos blockpos, BlockState blockstate, LivingEntity livingentity, ItemStack itemstack) {
+-        if (itemstack.hasCustomHoverName()) {
+-            BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public void setPlacedBy(Level level, BlockPos pos, IBlockData state, LivingEntity placer, ItemStack stack) {
++        if (stack.hasCustomHoverName()) {
++            BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-            if (blockentity instanceof ChestBlockEntity) {
+-                ((ChestBlockEntity) blockentity).setCustomName(itemstack.getHoverName());
++            if (tileentity instanceof ChestBlockEntity) {
++                ((ChestBlockEntity) tileentity).setCustomName(stack.getHoverName());
+             }
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        Containers.dropContentsOnDestroy(blockstate, blockstate1, level, blockpos);
+-        super.onRemove(blockstate, level, blockpos, blockstate1, flag);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean isMoving) {
++        Containers.dropContentsOnDestroy(state, newState, level, pos);
++        super.onRemove(state, level, pos, newState, isMoving);
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult use(BlockState blockstate, Level level, BlockPos blockpos, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
+         if (level.isClientSide) {
+             return InteractionResult.SUCCESS;
+         } else {
+-            MenuProvider menuprovider = this.getMenuProvider(blockstate, level, blockpos);
++            ITileInventory itileinventory = this.getMenuProvider(state, level, pos);
+ 
+-            if (menuprovider != null) {
+-                player.openMenu(menuprovider);
++            if (itileinventory != null) {
++                player.openMenu(itileinventory);
+                 player.awardStat(this.getOpenChestStat());
+                 PiglinAi.angerNearbyPiglins(player, true);
+             }
+@@ -289,92 +287,92 @@
+     }
+ 
+     @Nullable
+-    public static Container getContainer(ChestBlock chestblock, BlockState blockstate, Level level, BlockPos blockpos, boolean flag) {
+-        return (Container) ((Optional) chestblock.combine(blockstate, level, blockpos, flag).apply(ChestBlock.CHEST_COMBINER)).orElse((Object) null);
++    public static Container getContainer(ChestBlock chest, IBlockData state, Level level, BlockPos pos, boolean override) {
++        return (Container) ((Optional) chest.combine(state, level, pos, override).apply(ChestBlock.CHEST_COMBINER)).orElse((Object) null);
+     }
+ 
+     @Override
+-    @Override
+-    public DoubleBlockCombiner.NeighborCombineResult<? extends ChestBlockEntity> combine(BlockState blockstate, Level level, BlockPos blockpos, boolean flag) {
+-        BiPredicate bipredicate;
++    public DoubleBlockCombiner.NeighborCombineResult<? extends ChestBlockEntity> combine(IBlockData state, Level level, BlockPos pos, boolean override) {
++        BiPredicate<LevelAccessor, BlockPos> bipredicate; // CraftBukkit - decompile error
+ 
+-        if (flag) {
+-            bipredicate = (levelaccessor, blockpos1) -> {
++        if (override) {
++            bipredicate = (generatoraccess, blockposition1) -> {
+                 return false;
+             };
+         } else {
+             bipredicate = ChestBlock::isChestBlockedAt;
+         }
+ 
+-        return DoubleBlockCombiner.combineWithNeigbour((BlockEntityType) this.blockEntityType.get(), ChestBlock::getBlockType, ChestBlock::getConnectedDirection, ChestBlock.FACING, blockstate, level, blockpos, bipredicate);
++        return DoubleBlockCombiner.combineWithNeigbour((BlockEntityType) this.blockEntityType.get(), ChestBlock::getBlockType, ChestBlock::getConnectedDirection, ChestBlock.FACING, state, level, pos, bipredicate);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public MenuProvider getMenuProvider(BlockState blockstate, Level level, BlockPos blockpos) {
+-        return (MenuProvider) ((Optional) this.combine(blockstate, level, blockpos, false).apply(ChestBlock.MENU_PROVIDER_COMBINER)).orElse((Object) null);
++    public ITileInventory getMenuProvider(IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        return getMenuProvider(state, level, pos, false);
+     }
+ 
+-    public static DoubleBlockCombiner.Combiner<ChestBlockEntity, Float2FloatFunction> opennessCombiner(final LidBlockEntity lidblockentity) {
++    @Nullable
++    public ITileInventory getMenuProvider(IBlockData iblockdata, Level world, BlockPos blockposition, boolean ignoreObstructions) {
++        return (ITileInventory) ((Optional) this.combine(iblockdata, world, blockposition, ignoreObstructions).apply(ChestBlock.MENU_PROVIDER_COMBINER)).orElse((Object) null);
++        // CraftBukkit end
++    }
++
++    public static DoubleBlockCombiner.Combiner<ChestBlockEntity, Float2FloatFunction> opennessCombiner(final LidBlockEntity lid) {
+         return new DoubleBlockCombiner.Combiner<ChestBlockEntity, Float2FloatFunction>() {
+-            @Override
+-            public Float2FloatFunction acceptDouble(ChestBlockEntity chestblockentity, ChestBlockEntity chestblockentity1) {
++            public Float2FloatFunction acceptDouble(ChestBlockEntity first, ChestBlockEntity second) {
+                 return (f) -> {
+-                    return Math.max(chestblockentity.getOpenNess(f), chestblockentity1.getOpenNess(f));
++                    return Math.max(first.getOpenNess(f), second.getOpenNess(f));
+                 };
+             }
+ 
+-            @Override
+-            public Float2FloatFunction acceptSingle(ChestBlockEntity chestblockentity) {
+-                Objects.requireNonNull(chestblockentity);
+-                return chestblockentity::getOpenNess;
++            public Float2FloatFunction acceptSingle(ChestBlockEntity single) {
++                Objects.requireNonNull(single);
++                return single::getOpenNess;
+             }
+ 
+             @Override
+-            @Override
+             public Float2FloatFunction acceptNone() {
+-                LidBlockEntity lidblockentity1 = lidblockentity;
++                LidBlockEntity lidblockentity1 = lid;
+ 
+-                Objects.requireNonNull(lidblockentity);
++                Objects.requireNonNull(lid);
+                 return lidblockentity1::getOpenNess;
+             }
+         };
+     }
+ 
+     @Override
+-    @Override
+-    public BlockEntity newBlockEntity(BlockPos blockpos, BlockState blockstate) {
+-        return new ChestBlockEntity(blockpos, blockstate);
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
++        return new ChestBlockEntity(pos, state);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState blockstate, BlockEntityType<T> blockentitytype) {
+-        return level.isClientSide ? createTickerHelper(blockentitytype, this.blockEntityType(), ChestBlockEntity::lidAnimateTick) : null;
++    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, IBlockData state, BlockEntityType<T> blockEntityType) {
++        return level.isClientSide ? createTickerHelper(blockEntityType, this.blockEntityType(), ChestBlockEntity::lidAnimateTick) : null;
+     }
+ 
+-    public static boolean isChestBlockedAt(LevelAccessor levelaccessor, BlockPos blockpos) {
+-        return isBlockedChestByBlock(levelaccessor, blockpos) || isCatSittingOnChest(levelaccessor, blockpos);
++    public static boolean isChestBlockedAt(LevelAccessor level, BlockPos pos) {
++        return isBlockedChestByBlock(level, pos) || isCatSittingOnChest(level, pos);
+     }
+ 
+-    private static boolean isBlockedChestByBlock(BlockGetter blockgetter, BlockPos blockpos) {
+-        BlockPos blockpos1 = blockpos.above();
++    private static boolean isBlockedChestByBlock(BlockGetter level, BlockPos pos) {
++        BlockPos blockposition1 = pos.above();
+ 
+-        return blockgetter.getBlockState(blockpos1).isRedstoneConductor(blockgetter, blockpos1);
++        return level.getBlockState(blockposition1).isRedstoneConductor(level, blockposition1);
+     }
+ 
+-    private static boolean isCatSittingOnChest(LevelAccessor levelaccessor, BlockPos blockpos) {
+-        List<Cat> list = levelaccessor.getEntitiesOfClass(Cat.class, new AABB((double) blockpos.getX(), (double) (blockpos.getY() + 1), (double) blockpos.getZ(), (double) (blockpos.getX() + 1), (double) (blockpos.getY() + 2), (double) (blockpos.getZ() + 1)));
++    private static boolean isCatSittingOnChest(LevelAccessor level, BlockPos pos) {
++        List<Cat> list = level.getEntitiesOfClass(Cat.class, new AABB((double) pos.getX(), (double) (pos.getY() + 1), (double) pos.getZ(), (double) (pos.getX() + 1), (double) (pos.getY() + 2), (double) (pos.getZ() + 1)));
+ 
+         if (!list.isEmpty()) {
+             Iterator iterator = list.iterator();
+ 
+             while (iterator.hasNext()) {
+-                Cat cat = (Cat) iterator.next();
++                Cat entitycat = (Cat) iterator.next();
+ 
+-                if (cat.isInSittingPose()) {
++                if (entitycat.isInSittingPose()) {
+                     return true;
+                 }
+             }
+@@ -384,48 +382,41 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hasAnalogOutputSignal(BlockState blockstate) {
++    public boolean hasAnalogOutputSignal(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public int getAnalogOutputSignal(BlockState blockstate, Level level, BlockPos blockpos) {
+-        return AbstractContainerMenu.getRedstoneSignalFromContainer(getContainer(this, blockstate, level, blockpos, false));
++    public int getAnalogOutputSignal(IBlockData blockState, Level level, BlockPos pos) {
++        return AbstractContainerMenu.getRedstoneSignalFromContainer(getContainer(this, blockState, level, pos, false));
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState rotate(BlockState blockstate, Rotation rotation) {
+-        return (BlockState) blockstate.setValue(ChestBlock.FACING, rotation.rotate((Direction) blockstate.getValue(ChestBlock.FACING)));
++    public IBlockData rotate(IBlockData state, Rotation rotation) {
++        return (IBlockData) state.setValue(ChestBlock.FACING, rotation.rotate((Direction) state.getValue(ChestBlock.FACING)));
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState mirror(BlockState blockstate, Mirror mirror) {
+-        return blockstate.rotate(mirror.getRotation((Direction) blockstate.getValue(ChestBlock.FACING)));
++    public IBlockData mirror(IBlockData state, Mirror mirror) {
++        return state.rotate(mirror.getRotation((Direction) state.getValue(ChestBlock.FACING)));
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(ChestBlock.FACING, ChestBlock.TYPE, ChestBlock.WATERLOGGED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(ChestBlock.FACING, ChestBlock.TYPE, ChestBlock.WATERLOGGED);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public void tick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        BlockEntity blockentity = serverlevel.getBlockEntity(blockpos);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-        if (blockentity instanceof ChestBlockEntity) {
+-            ((ChestBlockEntity) blockentity).recheckOpen();
++        if (tileentity instanceof ChestBlockEntity) {
++            ((ChestBlockEntity) tileentity).recheckOpen();
+         }
+ 
+     }

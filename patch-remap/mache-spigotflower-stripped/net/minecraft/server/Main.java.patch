@@ -1,0 +1,194 @@
+--- a/net/minecraft/server/Main.java
++++ b/net/minecraft/server/Main.java
+@@ -60,6 +60,14 @@
+ import net.minecraft.world.level.storage.WorldData;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import com.google.common.base.Charsets;
++import java.io.InputStreamReader;
++import java.util.concurrent.atomic.AtomicReference;
++import net.minecraft.SharedConstants;
++import org.bukkit.configuration.file.YamlConfiguration;
++// CraftBukkit end
++
+ public class Main {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -67,8 +75,9 @@
+     public Main() {}
+ 
+     @DontObfuscate
+-    public static void main(String[] astring) {
++    public static void main(final OptionSet optionset) { // CraftBukkit - replaces main(String[] astring)
+         SharedConstants.tryDetectVersion();
++        /* CraftBukkit start - Replace everything
+         OptionParser optionparser = new OptionParser();
+         OptionSpec<Void> optionspec = optionparser.accepts("nogui");
+         OptionSpec<Void> optionspec1 = optionparser.accepts("initSettings", "Initializes 'server.properties' and 'eula.txt', then quits");
+@@ -93,15 +102,18 @@
+                 optionparser.printHelpOn(System.err);
+                 return;
+             }
++            */ // CraftBukkit end
+ 
+             Path path = (Path) optionset.valueOf(optionspec13);
+ 
++            Path path = (Path) optionset.valueOf("pidFile"); // CraftBukkit
++
+             if (path != null) {
+                 writePidFile(path);
+             }
+ 
+             CrashReport.preload();
+-            if (optionset.has(optionspec12)) {
++            if (optionset.has("jfrProfile")) { // CraftBukkit
+                 JvmProfiler.INSTANCE.start(Environment.SERVER);
+             }
+ 
+@@ -109,13 +121,26 @@
+             Bootstrap.validate();
+             Util.startTimerHackThread();
+             Path path1 = Paths.get("server.properties");
+-            DedicatedServerSettings dedicatedserversettings = new DedicatedServerSettings(path1);
++            DedicatedServerSettings dedicatedserversettings = new DedicatedServerSettings(optionset); // CraftBukkit - CLI argument support
+ 
+             dedicatedserversettings.forceSave();
+             Path path2 = Paths.get("eula.txt");
+             Eula eula = new Eula(path2);
+ 
+-            if (optionset.has(optionspec1)) {
++            if (optionset.has("initSettings")) { // CraftBukkit
++                // CraftBukkit start - SPIGOT-5761: Create bukkit.yml and commands.yml if not present
++                File configFile = (File) optionset.valueOf("bukkit-settings");
++                YamlConfiguration configuration = YamlConfiguration.loadConfiguration(configFile);
++                configuration.options().copyDefaults(true);
++                configuration.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(Main.class.getClassLoader().getResourceAsStream("configurations/bukkit.yml"), Charsets.UTF_8)));
++                configuration.save(configFile);
++
++                File commandFile = (File) optionset.valueOf("commands-settings");
++                YamlConfiguration commandsConfiguration = YamlConfiguration.loadConfiguration(commandFile);
++                commandsConfiguration.options().copyDefaults(true);
++                commandsConfiguration.setDefaults(YamlConfiguration.loadConfiguration(new InputStreamReader(Main.class.getClassLoader().getResourceAsStream("configurations/commands.yml"), Charsets.UTF_8)));
++                commandsConfiguration.save(commandFile);
++                // CraftBukkit end
+                 Main.LOGGER.info("Initialized '{}' and '{}'", path1.toAbsolutePath(), path2.toAbsolutePath());
+                 return;
+             }
+@@ -125,11 +150,13 @@
+                 return;
+             }
+ 
+-            File file = new File((String) optionset.valueOf(optionspec8));
++            File file = (File) optionset.valueOf("universe"); // CraftBukkit
+             Services services = Services.create(new YggdrasilAuthenticationService(Proxy.NO_PROXY), file);
+-            String s = (String) Optional.ofNullable((String) optionset.valueOf(optionspec9)).orElse(dedicatedserversettings.getProperties().levelName);
+-            LevelStorageSource levelstoragesource = LevelStorageSource.createDefault(file.toPath());
+-            LevelStorageSource.LevelStorageAccess levelstoragesource_levelstorageaccess = levelstoragesource.validateAndCreateAccess(s);
++            // CraftBukkit start
++            String s = (String) Optional.ofNullable((String) optionset.valueOf("world")).orElse(dedicatedserversettings.getProperties().levelName);
++            LevelStorageSource convertable = LevelStorageSource.createDefault(file.toPath());
++            LevelStorageSource.LevelStorageAccess convertable_conversionsession = convertable.validateAndCreateAccess(s, LevelStem.OVERWORLD);
++            // CraftBukkit end
+             Dynamic dynamic;
+ 
+             if (levelstoragesource_levelstorageaccess.hasWorldData()) {
+@@ -170,13 +197,31 @@
+             }
+ 
+             Dynamic<?> dynamic1 = dynamic;
+-            boolean flag = optionset.has(optionspec6);
++            boolean flag = optionset.has("safeMode"); // CraftBukkit
+ 
+             if (flag) {
+                 Main.LOGGER.warn("Safe mode active, only vanilla datapack will be loaded");
+             }
+ 
+-            PackRepository packrepository = ServerPacksSource.createPackRepository(levelstoragesource_levelstorageaccess);
++            PackRepository resourcepackrepository = ServerPacksSource.createPackRepository(convertable_conversionsession);
++            // CraftBukkit start
++            File bukkitDataPackFolder = new File(convertable_conversionsession.getLevelPath(LevelResource.DATAPACK_DIR).toFile(), "bukkit");
++            if (!bukkitDataPackFolder.exists()) {
++                bukkitDataPackFolder.mkdirs();
++            }
++            File mcMeta = new File(bukkitDataPackFolder, "pack.mcmeta");
++            try {
++                com.google.common.io.Files.write("{\n"
++                        + "    \"pack\": {\n"
++                        + "        \"description\": \"Data pack for resources provided by Bukkit plugins\",\n"
++                        + "        \"pack_format\": " + SharedConstants.getCurrentVersion().getPackVersion(PackType.SERVER_DATA) + "\n"
++                        + "    }\n"
++                        + "}\n", mcMeta, com.google.common.base.Charsets.UTF_8);
++            } catch (java.io.IOException ex) {
++                throw new RuntimeException("Could not initialize Bukkit datapack", ex);
++            }
++            AtomicReference<WorldLoader.a> worldLoader = new AtomicReference<>();
++            // CraftBukkit end
+ 
+             WorldStem worldstem;
+ 
+@@ -184,8 +229,9 @@
+                 WorldLoader.InitConfig worldloader_initconfig = loadOrCreateConfig(dedicatedserversettings.getProperties(), dynamic1, flag, packrepository);
+ 
+                 worldstem = (WorldStem) Util.blockUntilDone((executor) -> {
+-                    return WorldLoader.load(worldloader_initconfig, (worldloader_dataloadcontext) -> {
+-                        Registry<LevelStem> registry = worldloader_dataloadcontext.datapackDimensions().registryOrThrow(Registries.LEVEL_STEM);
++                    return WorldLoader.load(worldloader_c, (worldloader_a) -> {
++                        worldLoader.set(worldloader_a); // CraftBukkit
++                        Registry<LevelStem> iregistry = worldloader_a.datapackDimensions().registryOrThrow(Registries.LEVEL_STEM);
+ 
+                         if (dynamic1 != null) {
+                             LevelDataAndDimensions leveldataanddimensions = LevelStorageSource.getLevelDataAndDimensions(dynamic1, worldloader_dataloadcontext.dataConfiguration(), registry, worldloader_dataloadcontext.datapackWorldgen());
+@@ -197,16 +243,16 @@
+                             WorldOptions worldoptions;
+                             WorldDimensions worlddimensions;
+ 
+-                            if (optionset.has(optionspec2)) {
+-                                levelsettings = MinecraftServer.DEMO_SETTINGS;
++                            if (optionset.has("demo")) { // CraftBukkit
++                                worldsettings = MinecraftServer.DEMO_SETTINGS;
+                                 worldoptions = WorldOptions.DEMO_OPTIONS;
+                                 worlddimensions = WorldPresets.createNormalWorldDimensions(worldloader_dataloadcontext.datapackWorldgen());
+                             } else {
+                                 DedicatedServerProperties dedicatedserverproperties = dedicatedserversettings.getProperties();
+ 
+-                                levelsettings = new LevelSettings(dedicatedserverproperties.levelName, dedicatedserverproperties.gamemode, dedicatedserverproperties.hardcore, dedicatedserverproperties.difficulty, false, new GameRules(), worldloader_dataloadcontext.dataConfiguration());
+-                                worldoptions = optionset.has(optionspec3) ? dedicatedserverproperties.worldOptions.withBonusChest(true) : dedicatedserverproperties.worldOptions;
+-                                worlddimensions = dedicatedserverproperties.createDimensions(worldloader_dataloadcontext.datapackWorldgen());
++                                worldsettings = new LevelSettings(dedicatedserverproperties.levelName, dedicatedserverproperties.gamemode, dedicatedserverproperties.hardcore, dedicatedserverproperties.difficulty, false, new GameRules(), worldloader_a.dataConfiguration());
++                                worldoptions = optionset.has("bonusChest") ? dedicatedserverproperties.worldOptions.withBonusChest(true) : dedicatedserverproperties.worldOptions; // CraftBukkit
++                                worlddimensions = dedicatedserverproperties.createDimensions(worldloader_a.datapackWorldgen());
+                             }
+ 
+                             WorldDimensions.Complete worlddimensions_complete = worlddimensions.bake(registry);
+@@ -246,6 +303,7 @@
+ 
+                 return dedicatedserver1;
+             });
++            /* CraftBukkit start
+             Thread thread = new Thread("Server Shutdown Thread") {
+                 @Override
+                 public void run() {
+@@ -255,6 +312,7 @@
+ 
+             thread.setUncaughtExceptionHandler(new DefaultUncaughtExceptionHandler(Main.LOGGER));
+             Runtime.getRuntime().addShutdownHook(thread);
++            */ // CraftBukkit end
+         } catch (Exception exception1) {
+             Main.LOGGER.error(LogUtils.FATAL_MARKER, "Failed to start the minecraft server", exception1);
+         }
+@@ -290,10 +348,10 @@
+         return new WorldLoader.InitConfig(worldloader_packconfig, Commands.CommandSelection.DEDICATED, dedicatedserverproperties.functionPermissionLevel);
+     }
+ 
+-    private static void forceUpgrade(LevelStorageSource.LevelStorageAccess levelstoragesource_levelstorageaccess, DataFixer datafixer, boolean flag, BooleanSupplier booleansupplier, Registry<LevelStem> registry) {
+-        Main.LOGGER.info("Forcing world upgrade!");
+-        WorldUpgrader worldupgrader = new WorldUpgrader(levelstoragesource_levelstorageaccess, datafixer, registry, flag);
+-        Component component = null;
++    public static void forceUpgrade(LevelStorageSource.LevelStorageAccess levelStorage, DataFixer dataFixer, boolean eraseCache, BooleanSupplier upgradeWorld, Registry<LevelStem> dimesions) {
++        Main.LOGGER.info("Forcing world upgrade! {}", levelStorage.getLevelId()); // CraftBukkit
++        WorldUpgrader worldupgrader = new WorldUpgrader(levelStorage, dataFixer, dimesions, eraseCache);
++        Component ichatbasecomponent = null;
+ 
+         while (!worldupgrader.isFinished()) {
+             Component component1 = worldupgrader.getStatus();

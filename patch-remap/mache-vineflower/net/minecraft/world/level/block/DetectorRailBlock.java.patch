@@ -1,0 +1,420 @@
+--- a/net/minecraft/world/level/block/DetectorRailBlock.java
++++ b/net/minecraft/world/level/block/DetectorRailBlock.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.world.level.block;
+ 
+ import com.mojang.serialization.MapCodec;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.function.Predicate;
+ import net.minecraft.core.BlockPos;
+@@ -16,7 +17,7 @@
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+@@ -24,8 +25,10 @@
+ import net.minecraft.world.level.block.state.properties.Property;
+ import net.minecraft.world.level.block.state.properties.RailShape;
+ import net.minecraft.world.phys.AABB;
++import org.bukkit.event.block.BlockRedstoneEvent; // CraftBukkit
+ 
+ public class DetectorRailBlock extends BaseRailBlock {
++
+     public static final MapCodec<DetectorRailBlock> CODEC = simpleCodec(DetectorRailBlock::new);
+     public static final EnumProperty<RailShape> SHAPE = BlockStateProperties.RAIL_SHAPE_STRAIGHT;
+     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+@@ -33,130 +36,143 @@
+ 
+     @Override
+     public MapCodec<DetectorRailBlock> codec() {
+-        return CODEC;
++        return DetectorRailBlock.CODEC;
+     }
+ 
+     public DetectorRailBlock(BlockBehaviour.Properties properties) {
+         super(true, properties);
+-        this.registerDefaultState(
+-            this.stateDefinition
+-                .any()
+-                .setValue(POWERED, Boolean.valueOf(false))
+-                .setValue(SHAPE, RailShape.NORTH_SOUTH)
+-                .setValue(WATERLOGGED, Boolean.valueOf(false))
+-        );
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(DetectorRailBlock.POWERED, false)).setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_SOUTH)).setValue(DetectorRailBlock.WATERLOGGED, false));
+     }
+ 
+     @Override
+-    public boolean isSignalSource(BlockState state) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
++    public void entityInside(IBlockData state, Level level, BlockPos pos, Entity entity) {
+         if (!level.isClientSide) {
+-            if (!state.getValue(POWERED)) {
++            if (!(Boolean) state.getValue(DetectorRailBlock.POWERED)) {
+                 this.checkPressed(level, pos, state);
+             }
+         }
+     }
+ 
+     @Override
+-    public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+-        if (state.getValue(POWERED)) {
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(DetectorRailBlock.POWERED)) {
+             this.checkPressed(level, pos, state);
+         }
+     }
+ 
+     @Override
+-    public int getSignal(BlockState blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
+-        return blockState.getValue(POWERED) ? 15 : 0;
++    public int getSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return (Boolean) blockState.getValue(DetectorRailBlock.POWERED) ? 15 : 0;
+     }
+ 
+     @Override
+-    public int getDirectSignal(BlockState blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
+-        if (!blockState.getValue(POWERED)) {
+-            return 0;
+-        } else {
+-            return side == Direction.UP ? 15 : 0;
+-        }
++    public int getDirectSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return !(Boolean) blockState.getValue(DetectorRailBlock.POWERED) ? 0 : (side == Direction.UP ? 15 : 0);
+     }
+ 
+-    private void checkPressed(Level level, BlockPos pos, BlockState state) {
++    private void checkPressed(Level level, BlockPos pos, IBlockData state) {
+         if (this.canSurvive(state, level, pos)) {
+-            boolean flag = state.getValue(POWERED);
++            boolean flag = (Boolean) state.getValue(DetectorRailBlock.POWERED);
+             boolean flag1 = false;
+-            List<AbstractMinecart> interactingMinecartOfType = this.getInteractingMinecartOfType(level, pos, AbstractMinecart.class, entity -> true);
+-            if (!interactingMinecartOfType.isEmpty()) {
++            List<AbstractMinecart> list = this.getInteractingMinecartOfType(level, pos, AbstractMinecart.class, (entity) -> {
++                return true;
++            });
++
++            if (!list.isEmpty()) {
+                 flag1 = true;
+             }
+ 
++            IBlockData iblockdata1;
++            // CraftBukkit start
++            if (flag != flag1) {
++                org.bukkit.block.Block block = level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ());
++
++                BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(block, flag ? 15 : 0, flag1 ? 15 : 0);
++                level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++                flag1 = eventRedstone.getNewCurrent() > 0;
++            }
++            // CraftBukkit end
++
+             if (flag1 && !flag) {
+-                BlockState blockState = state.setValue(POWERED, Boolean.valueOf(true));
+-                level.setBlock(pos, blockState, 3);
+-                this.updatePowerToConnected(level, pos, blockState, true);
++                iblockdata1 = (IBlockData) state.setValue(DetectorRailBlock.POWERED, true);
++                level.setBlock(pos, iblockdata1, 3);
++                this.updatePowerToConnected(level, pos, iblockdata1, true);
+                 level.updateNeighborsAt(pos, this);
+                 level.updateNeighborsAt(pos.below(), this);
+-                level.setBlocksDirty(pos, state, blockState);
++                level.setBlocksDirty(pos, state, iblockdata1);
+             }
+ 
+             if (!flag1 && flag) {
+-                BlockState blockState = state.setValue(POWERED, Boolean.valueOf(false));
+-                level.setBlock(pos, blockState, 3);
+-                this.updatePowerToConnected(level, pos, blockState, false);
++                iblockdata1 = (IBlockData) state.setValue(DetectorRailBlock.POWERED, false);
++                level.setBlock(pos, iblockdata1, 3);
++                this.updatePowerToConnected(level, pos, iblockdata1, false);
+                 level.updateNeighborsAt(pos, this);
+                 level.updateNeighborsAt(pos.below(), this);
+-                level.setBlocksDirty(pos, state, blockState);
++                level.setBlocksDirty(pos, state, iblockdata1);
+             }
+ 
+             if (flag1) {
+-                level.scheduleTick(pos, this, 20);
++                level.scheduleTick(pos, (Block) this, 20);
+             }
+ 
+             level.updateNeighbourForOutputSignal(pos, this);
+         }
+     }
+ 
+-    protected void updatePowerToConnected(Level level, BlockPos pos, BlockState state, boolean powered) {
+-        RailState railState = new RailState(level, pos, state);
++    protected void updatePowerToConnected(Level level, BlockPos pos, IBlockData state, boolean powered) {
++        RailState minecarttracklogic = new RailState(level, pos, state);
++        List<BlockPos> list = minecarttracklogic.getConnections();
++        Iterator iterator = list.iterator();
+ 
+-        for (BlockPos blockPos : railState.getConnections()) {
+-            BlockState blockState = level.getBlockState(blockPos);
+-            level.neighborChanged(blockState, blockPos, blockState.getBlock(), pos, false);
++        while (iterator.hasNext()) {
++            BlockPos blockposition1 = (BlockPos) iterator.next();
++            IBlockData iblockdata1 = level.getBlockState(blockposition1);
++
++            level.neighborChanged(iblockdata1, blockposition1, iblockdata1.getBlock(), pos, false);
+         }
++
+     }
+ 
+     @Override
+-    public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
+         if (!oldState.is(state.getBlock())) {
+-            BlockState blockState = this.updateState(state, level, pos, isMoving);
+-            this.checkPressed(level, pos, blockState);
++            IBlockData iblockdata2 = this.updateState(state, level, pos, isMoving);
++
++            this.checkPressed(level, pos, iblockdata2);
+         }
+     }
+ 
+     @Override
+     public Property<RailShape> getShapeProperty() {
+-        return SHAPE;
++        return DetectorRailBlock.SHAPE;
+     }
+ 
+     @Override
+-    public boolean hasAnalogOutputSignal(BlockState state) {
++    public boolean hasAnalogOutputSignal(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    public int getAnalogOutputSignal(BlockState blockState, Level level, BlockPos pos) {
+-        if (blockState.getValue(POWERED)) {
+-            List<MinecartCommandBlock> interactingMinecartOfType = this.getInteractingMinecartOfType(level, pos, MinecartCommandBlock.class, cartEntity -> true);
+-            if (!interactingMinecartOfType.isEmpty()) {
+-                return interactingMinecartOfType.get(0).getCommandBlock().getSuccessCount();
++    public int getAnalogOutputSignal(IBlockData blockState, Level level, BlockPos pos) {
++        if ((Boolean) blockState.getValue(DetectorRailBlock.POWERED)) {
++            List<MinecartCommandBlock> list = this.getInteractingMinecartOfType(level, pos, MinecartCommandBlock.class, (entity) -> {
++                return true;
++            });
++
++            if (!list.isEmpty()) {
++                return ((MinecartCommandBlock) list.get(0)).getCommandBlock().getSuccessCount();
+             }
+ 
+-            List<AbstractMinecart> interactingMinecartOfType1 = this.getInteractingMinecartOfType(
+-                level, pos, AbstractMinecart.class, EntitySelector.CONTAINER_ENTITY_SELECTOR
+-            );
+-            if (!interactingMinecartOfType1.isEmpty()) {
+-                return AbstractContainerMenu.getRedstoneSignalFromContainer((Container)interactingMinecartOfType1.get(0));
++            List<AbstractMinecart> list1 = this.getInteractingMinecartOfType(level, pos, AbstractMinecart.class, EntitySelector.CONTAINER_ENTITY_SELECTOR);
++
++            if (!list1.isEmpty()) {
++                return AbstractContainerMenu.getRedstoneSignalFromContainer((Container) list1.get(0));
+             }
+         }
+ 
+@@ -168,84 +184,78 @@
+     }
+ 
+     private AABB getSearchBB(BlockPos pos) {
+-        double d = 0.2;
+-        return new AABB(
+-            (double)pos.getX() + 0.2,
+-            (double)pos.getY(),
+-            (double)pos.getZ() + 0.2,
+-            (double)(pos.getX() + 1) - 0.2,
+-            (double)(pos.getY() + 1) - 0.2,
+-            (double)(pos.getZ() + 1) - 0.2
+-        );
++        double d0 = 0.2D;
++
++        return new AABB((double) pos.getX() + 0.2D, (double) pos.getY(), (double) pos.getZ() + 0.2D, (double) (pos.getX() + 1) - 0.2D, (double) (pos.getY() + 1) - 0.2D, (double) (pos.getZ() + 1) - 0.2D);
+     }
+ 
+     @Override
+-    public BlockState rotate(BlockState state, Rotation rotation) {
++    public IBlockData rotate(IBlockData state, Rotation rotation) {
+         switch (rotation) {
+             case CLOCKWISE_180:
+-                switch ((RailShape)state.getValue(SHAPE)) {
++                switch ((RailShape) state.getValue(DetectorRailBlock.SHAPE)) {
+                     case ASCENDING_EAST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_WEST);
+                     case ASCENDING_WEST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_EAST);
+                     case ASCENDING_NORTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_SOUTH);
+                     case ASCENDING_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_NORTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_NORTH);
+                     case SOUTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_WEST);
+                     case SOUTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_EAST);
+                     case NORTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_EAST);
+                     case NORTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_WEST);
+                 }
+             case COUNTERCLOCKWISE_90:
+-                switch ((RailShape)state.getValue(SHAPE)) {
++                switch ((RailShape) state.getValue(DetectorRailBlock.SHAPE)) {
+                     case ASCENDING_EAST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_NORTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_NORTH);
+                     case ASCENDING_WEST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_SOUTH);
+                     case ASCENDING_NORTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_WEST);
+                     case ASCENDING_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_EAST);
+                     case SOUTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_EAST);
+                     case SOUTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_EAST);
+                     case NORTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_WEST);
+                     case NORTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_WEST);
+                     case NORTH_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.EAST_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.EAST_WEST);
+                     case EAST_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_SOUTH);
+                 }
+             case CLOCKWISE_90:
+-                switch ((RailShape)state.getValue(SHAPE)) {
++                switch ((RailShape) state.getValue(DetectorRailBlock.SHAPE)) {
+                     case ASCENDING_EAST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_SOUTH);
+                     case ASCENDING_WEST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_NORTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_NORTH);
+                     case ASCENDING_NORTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_EAST);
+                     case ASCENDING_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_WEST);
+                     case SOUTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_WEST);
+                     case SOUTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_WEST);
+                     case NORTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_EAST);
+                     case NORTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_EAST);
+                     case NORTH_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.EAST_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.EAST_WEST);
+                     case EAST_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_SOUTH);
+                 }
+             default:
+                 return state;
+@@ -253,44 +263,45 @@
+     }
+ 
+     @Override
+-    public BlockState mirror(BlockState state, Mirror mirror) {
+-        RailShape railShape = state.getValue(SHAPE);
++    public IBlockData mirror(IBlockData state, Mirror mirror) {
++        RailShape blockpropertytrackposition = (RailShape) state.getValue(DetectorRailBlock.SHAPE);
++
+         switch (mirror) {
+             case LEFT_RIGHT:
+-                switch (railShape) {
++                switch (blockpropertytrackposition) {
+                     case ASCENDING_NORTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_SOUTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_SOUTH);
+                     case ASCENDING_SOUTH:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_NORTH);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_NORTH);
+                     case SOUTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_EAST);
+                     case SOUTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_WEST);
+                     case NORTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_WEST);
+                     case NORTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_EAST);
+                     default:
+                         return super.mirror(state, mirror);
+                 }
+             case FRONT_BACK:
+-                switch (railShape) {
++                switch (blockpropertytrackposition) {
+                     case ASCENDING_EAST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_WEST);
+                     case ASCENDING_WEST:
+-                        return state.setValue(SHAPE, RailShape.ASCENDING_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.ASCENDING_EAST);
+                     case ASCENDING_NORTH:
+                     case ASCENDING_SOUTH:
+                     default:
+                         break;
+                     case SOUTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_WEST);
+                     case SOUTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.SOUTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.SOUTH_EAST);
+                     case NORTH_WEST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_EAST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_EAST);
+                     case NORTH_EAST:
+-                        return state.setValue(SHAPE, RailShape.NORTH_WEST);
++                        return (IBlockData) state.setValue(DetectorRailBlock.SHAPE, RailShape.NORTH_WEST);
+                 }
+         }
+ 
+@@ -298,7 +309,7 @@
+     }
+ 
+     @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+-        builder.add(SHAPE, POWERED, WATERLOGGED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(DetectorRailBlock.SHAPE, DetectorRailBlock.POWERED, DetectorRailBlock.WATERLOGGED);
+     }
+ }

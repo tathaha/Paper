@@ -1,0 +1,110 @@
+--- a/net/minecraft/world/level/chunk/storage/ChunkStorage.java
++++ b/net/minecraft/world/level/chunk/storage/ChunkStorage.java
+@@ -16,6 +18,10 @@
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
++// CraftBukkit start
++import java.util.concurrent.ExecutionException;
++import net.minecraft.world.level.chunk.ChunkStatus;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.levelgen.structure.LegacyStructureDataHandler;
+ import net.minecraft.world.level.storage.DimensionDataStorage;
+ 
+@@ -35,18 +42,13 @@
+         return this.worker.isOldChunkAround(pos, radius);
+     }
+ 
+-    public CompoundTag upgradeChunkTag(
+-        ResourceKey<Level> levelKey,
+-        Supplier<DimensionDataStorage> storage,
+-        CompoundTag chunkData,
+-        Optional<ResourceKey<Codec<? extends ChunkGenerator>>> chunkGeneratorKey
+-    ) {
+-        int version = getVersion(chunkData);
+-        if (version < 1493) {
+-            chunkData = DataFixTypes.CHUNK.update(this.fixerUpper, chunkData, version, 1493);
+-            if (chunkData.getCompound("Level").getBoolean("hasLegacyStructureData")) {
+-                LegacyStructureDataHandler legacyStructureHandler = this.getLegacyStructureHandler(levelKey, storage);
+-                chunkData = legacyStructureHandler.updateFromLegacy(chunkData);
++    // CraftBukkit start
++    private boolean check(ServerChunkCache cps, int x, int z) {
++        ChunkPos pos = new ChunkPos(x, z);
++        if (cps != null) {
++            com.google.common.base.Preconditions.checkState(org.bukkit.Bukkit.isPrimaryThread(), "primary thread");
++            if (cps.hasChunk(x, z)) {
++                return true;
+             }
+         }
+ 
+@@ -60,9 +73,45 @@
+         return var7;
+     }
+ 
+-    private LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<Level> level, Supplier<DimensionDataStorage> storage) {
+-        LegacyStructureDataHandler legacyStructureDataHandler = this.legacyStructureHandler;
+-        if (legacyStructureDataHandler == null) {
++    public CompoundTag upgradeChunkTag(ResourceKey<LevelStem> resourcekey, Supplier<DimensionDataStorage> supplier, CompoundTag nbttagcompound, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> optional, ChunkPos pos, @Nullable LevelAccessor generatoraccess) {
++        // CraftBukkit end
++        int i = getVersion(nbttagcompound);
++
++        // CraftBukkit start
++        if (i < 1466) {
++            CompoundTag level = nbttagcompound.getCompound("Level");
++            if (level.getBoolean("TerrainPopulated") && !level.getBoolean("LightPopulated")) {
++                ServerChunkCache cps = (generatoraccess == null) ? null : ((ServerLevel) generatoraccess).getChunkSource();
++                if (check(cps, pos.x - 1, pos.z) && check(cps, pos.x - 1, pos.z - 1) && check(cps, pos.x, pos.z - 1)) {
++                    level.putBoolean("LightPopulated", true);
++                }
++            }
++        }
++        // CraftBukkit end
++
++        if (i < 1493) {
++            nbttagcompound = DataFixTypes.CHUNK.update(this.fixerUpper, nbttagcompound, i, 1493);
++            if (nbttagcompound.getCompound("Level").getBoolean("hasLegacyStructureData")) {
++                LegacyStructureDataHandler persistentstructurelegacy = this.getLegacyStructureHandler(resourcekey, supplier);
++
++                nbttagcompound = persistentstructurelegacy.updateFromLegacy(nbttagcompound);
++            }
++        }
++
++        injectDatafixingContext(nbttagcompound, resourcekey, optional);
++        nbttagcompound = DataFixTypes.CHUNK.updateToCurrentVersion(this.fixerUpper, nbttagcompound, Math.max(1493, i));
++        if (i < SharedConstants.getCurrentVersion().getDataVersion().getVersion()) {
++            NbtUtils.addCurrentDataVersion(nbttagcompound);
++        }
++
++        nbttagcompound.remove("__context");
++        return nbttagcompound;
++    }
++
++    private LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<LevelStem> level, Supplier<DimensionDataStorage> storage) { // CraftBukkit
++        LegacyStructureDataHandler persistentstructurelegacy = this.legacyStructureHandler;
++
++        if (persistentstructurelegacy == null) {
+             synchronized (this) {
+                 legacyStructureDataHandler = this.legacyStructureHandler;
+                 if (legacyStructureDataHandler == null) {
+@@ -74,13 +123,14 @@
+         return legacyStructureDataHandler;
+     }
+ 
+-    public static void injectDatafixingContext(
+-        CompoundTag chunkData, ResourceKey<Level> levelKey, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> chunkGeneratorKey
+-    ) {
+-        CompoundTag compoundTag = new CompoundTag();
+-        compoundTag.putString("dimension", levelKey.location().toString());
+-        chunkGeneratorKey.ifPresent(generator -> compoundTag.putString("generator", generator.location().toString()));
+-        chunkData.put("__context", compoundTag);
++    public static void injectDatafixingContext(CompoundTag chunkData, ResourceKey<LevelStem> levelKey, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> chunkGeneratorKey) { // CraftBukkit
++        CompoundTag nbttagcompound1 = new CompoundTag();
++
++        nbttagcompound1.putString("dimension", levelKey.location().toString());
++        chunkGeneratorKey.ifPresent((resourcekey1) -> {
++            nbttagcompound1.putString("generator", resourcekey1.location().toString());
++        });
++        chunkData.put("__context", nbttagcompound1);
+     }
+ 
+     public static int getVersion(CompoundTag chunkData) {

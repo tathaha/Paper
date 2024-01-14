@@ -1,0 +1,959 @@
+--- a/net/minecraft/world/inventory/AbstractContainerMenu.java
++++ b/net/minecraft/world/inventory/AbstractContainerMenu.java
+@@ -21,6 +21,8 @@
+ import net.minecraft.ReportedException;
+ import net.minecraft.core.NonNullList;
+ import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.network.chat.Component;
++import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.util.Mth;
+ import net.minecraft.world.Container;
+@@ -33,6 +35,18 @@
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import com.google.common.base.Preconditions;
++import java.util.HashMap;
++import java.util.Map;
++import org.bukkit.craftbukkit.inventory.CraftInventory;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.Event.Result;
++import org.bukkit.event.inventory.InventoryDragEvent;
++import org.bukkit.event.inventory.InventoryType;
++import org.bukkit.inventory.InventoryView;
++// CraftBukkit end
++
+ public abstract class AbstractContainerMenu {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -44,11 +58,11 @@
+     public static final int QUICKCRAFT_HEADER_CONTINUE = 1;
+     public static final int QUICKCRAFT_HEADER_END = 2;
+     public static final int CARRIED_SLOT_SIZE = Integer.MAX_VALUE;
+-    private final NonNullList<ItemStack> lastSlots = NonNullList.create();
+-    public final NonNullList<Slot> slots = NonNullList.create();
++    public NonNullList<ItemStack> lastSlots = NonNullList.create();
++    public NonNullList<Slot> slots = NonNullList.create();
+     private final List<DataSlot> dataSlots = Lists.newArrayList();
+     private ItemStack carried;
+-    private final NonNullList<ItemStack> remoteSlots;
++    public NonNullList<ItemStack> remoteSlots;
+     private final IntList remoteDataSlots;
+     private ItemStack remoteCarried;
+     private int stateId;
+@@ -63,7 +77,28 @@
+     private ContainerSynchronizer synchronizer;
+     private boolean suppressRemoteUpdates;
+ 
+-    protected AbstractContainerMenu(@Nullable MenuType<?> menutype, int i) {
++    // CraftBukkit start
++    public boolean checkReachable = true;
++    public abstract InventoryView getBukkitView();
++    public void transferTo(AbstractContainerMenu other, org.bukkit.craftbukkit.entity.CraftHumanEntity player) {
++        InventoryView source = this.getBukkitView(), destination = other.getBukkitView();
++        ((CraftInventory) source.getTopInventory()).getInventory().onClose(player);
++        ((CraftInventory) source.getBottomInventory()).getInventory().onClose(player);
++        ((CraftInventory) destination.getTopInventory()).getInventory().onOpen(player);
++        ((CraftInventory) destination.getBottomInventory()).getInventory().onOpen(player);
++    }
++    private Component title;
++    public final Component getTitle() {
++        Preconditions.checkState(this.title != null, "Title not set");
++        return this.title;
++    }
++    public final void setTitle(Component title) {
++        Preconditions.checkState(this.title == null, "Title already set");
++        this.title = title;
++    }
++    // CraftBukkit end
++
++    protected AbstractContainerMenu(@Nullable MenuType<?> menuType, int containerId) {
+         this.carried = ItemStack.EMPTY;
+         this.remoteSlots = NonNullList.create();
+         this.remoteDataSlots = new IntArrayList();
+@@ -71,13 +106,13 @@
+         this.quickcraftType = -1;
+         this.quickcraftSlots = Sets.newHashSet();
+         this.containerListeners = Lists.newArrayList();
+-        this.menuType = menutype;
+-        this.containerId = i;
++        this.menuType = menuType;
++        this.containerId = containerId;
+     }
+ 
+-    protected static boolean stillValid(ContainerLevelAccess containerlevelaccess, Player player, Block block) {
+-        return (Boolean) containerlevelaccess.evaluate((level, blockpos) -> {
+-            return !level.getBlockState(blockpos).is(block) ? false : player.distanceToSqr((double) blockpos.getX() + 0.5D, (double) blockpos.getY() + 0.5D, (double) blockpos.getZ() + 0.5D) <= 64.0D;
++    protected static boolean stillValid(ContainerLevelAccess access, Player player, Block targetBlock) {
++        return (Boolean) access.evaluate((world, blockposition) -> {
++            return !world.getBlockState(blockposition).is(targetBlock) ? false : player.distanceToSqr((double) blockposition.getX() + 0.5D, (double) blockposition.getY() + 0.5D, (double) blockposition.getZ() + 0.5D) <= 64.0D;
+         }, true);
+     }
+ 
+@@ -89,24 +124,24 @@
+         }
+     }
+ 
+-    protected static void checkContainerSize(Container container, int i) {
++    protected static void checkContainerSize(Container container, int minSize) {
+         int j = container.getContainerSize();
+ 
+-        if (j < i) {
+-            throw new IllegalArgumentException("Container size " + j + " is smaller than expected " + i);
++        if (j < minSize) {
++            throw new IllegalArgumentException("Container size " + j + " is smaller than expected " + minSize);
+         }
+     }
+ 
+-    protected static void checkContainerDataCount(ContainerData containerdata, int i) {
+-        int j = containerdata.getCount();
++    protected static void checkContainerDataCount(ContainerData intArray, int minSize) {
++        int j = intArray.getCount();
+ 
+-        if (j < i) {
+-            throw new IllegalArgumentException("Container data count " + j + " is smaller than expected " + i);
++        if (j < minSize) {
++            throw new IllegalArgumentException("Container data count " + j + " is smaller than expected " + minSize);
+         }
+     }
+ 
+-    public boolean isValidSlotIndex(int i) {
+-        return i == -1 || i == -999 || i < this.slots.size();
++    public boolean isValidSlotIndex(int slotIndex) {
++        return slotIndex == -1 || slotIndex == -999 || slotIndex < this.slots.size();
+     }
+ 
+     protected Slot addSlot(Slot slot) {
+@@ -117,28 +152,28 @@
+         return slot;
+     }
+ 
+-    protected DataSlot addDataSlot(DataSlot dataslot) {
+-        this.dataSlots.add(dataslot);
++    protected DataSlot addDataSlot(DataSlot intValue) {
++        this.dataSlots.add(intValue);
+         this.remoteDataSlots.add(0);
+-        return dataslot;
++        return intValue;
+     }
+ 
+-    protected void addDataSlots(ContainerData containerdata) {
+-        for (int i = 0; i < containerdata.getCount(); ++i) {
+-            this.addDataSlot(DataSlot.forContainer(containerdata, i));
++    protected void addDataSlots(ContainerData array) {
++        for (int i = 0; i < array.getCount(); ++i) {
++            this.addDataSlot(DataSlot.forContainer(array, i));
+         }
+ 
+     }
+ 
+-    public void addSlotListener(ContainerListener containerlistener) {
+-        if (!this.containerListeners.contains(containerlistener)) {
+-            this.containerListeners.add(containerlistener);
++    public void addSlotListener(ContainerListener listener) {
++        if (!this.containerListeners.contains(listener)) {
++            this.containerListeners.add(listener);
+             this.broadcastChanges();
+         }
+     }
+ 
+-    public void setSynchronizer(ContainerSynchronizer containersynchronizer) {
+-        this.synchronizer = containersynchronizer;
++    public void setSynchronizer(ContainerSynchronizer synchronizer) {
++        this.synchronizer = synchronizer;
+         this.sendAllDataToRemote();
+     }
+ 
+@@ -164,10 +199,19 @@
+ 
+     }
+ 
+-    public void removeSlotListener(ContainerListener containerlistener) {
+-        this.containerListeners.remove(containerlistener);
++    // CraftBukkit start
++    public void broadcastCarriedItem() {
++        this.remoteCarried = this.getCarried().copy();
++        if (this.synchronizer != null) {
++            this.synchronizer.sendCarriedChange(this, this.remoteCarried);
++        }
+     }
++    // CraftBukkit end
+ 
++    public void removeSlotListener(ContainerListener listener) {
++        this.containerListeners.remove(listener);
++    }
++
+     public NonNullList<ItemStack> getItems() {
+         NonNullList<ItemStack> nonnulllist = NonNullList.create();
+         Iterator iterator = this.slots.iterator();
+@@ -197,10 +241,10 @@
+         this.synchronizeCarriedToRemote();
+ 
+         for (i = 0; i < this.dataSlots.size(); ++i) {
+-            DataSlot dataslot = (DataSlot) this.dataSlots.get(i);
+-            int j = dataslot.get();
++            DataSlot containerproperty = (DataSlot) this.dataSlots.get(i);
++            int j = containerproperty.get();
+ 
+-            if (dataslot.checkAndClearUpdateFlag()) {
++            if (containerproperty.checkAndClearUpdateFlag()) {
+                 this.updateDataSlotListeners(i, j);
+             }
+ 
+@@ -220,69 +264,69 @@
+         }
+ 
+         for (i = 0; i < this.dataSlots.size(); ++i) {
+-            DataSlot dataslot = (DataSlot) this.dataSlots.get(i);
++            DataSlot containerproperty = (DataSlot) this.dataSlots.get(i);
+ 
+-            if (dataslot.checkAndClearUpdateFlag()) {
+-                this.updateDataSlotListeners(i, dataslot.get());
++            if (containerproperty.checkAndClearUpdateFlag()) {
++                this.updateDataSlotListeners(i, containerproperty.get());
+             }
+         }
+ 
+         this.sendAllDataToRemote();
+     }
+ 
+-    private void updateDataSlotListeners(int i, int j) {
++    private void updateDataSlotListeners(int slotIndex, int value) {
+         Iterator iterator = this.containerListeners.iterator();
+ 
+         while (iterator.hasNext()) {
+-            ContainerListener containerlistener = (ContainerListener) iterator.next();
++            ContainerListener icrafting = (ContainerListener) iterator.next();
+ 
+-            containerlistener.dataChanged(this, i, j);
++            icrafting.dataChanged(this, slotIndex, value);
+         }
+ 
+     }
+ 
+-    private void triggerSlotListeners(int i, ItemStack itemstack, Supplier<ItemStack> supplier) {
+-        ItemStack itemstack1 = (ItemStack) this.lastSlots.get(i);
++    private void triggerSlotListeners(int slotIndex, ItemStack stack, Supplier<ItemStack> supplier) {
++        ItemStack itemstack1 = (ItemStack) this.lastSlots.get(slotIndex);
+ 
+-        if (!ItemStack.matches(itemstack1, itemstack)) {
++        if (!ItemStack.matches(itemstack1, stack)) {
+             ItemStack itemstack2 = (ItemStack) supplier.get();
+ 
+-            this.lastSlots.set(i, itemstack2);
++            this.lastSlots.set(slotIndex, itemstack2);
+             Iterator iterator = this.containerListeners.iterator();
+ 
+             while (iterator.hasNext()) {
+-                ContainerListener containerlistener = (ContainerListener) iterator.next();
++                ContainerListener icrafting = (ContainerListener) iterator.next();
+ 
+-                containerlistener.slotChanged(this, i, itemstack2);
++                icrafting.slotChanged(this, slotIndex, itemstack2);
+             }
+         }
+ 
+     }
+ 
+-    private void synchronizeSlotToRemote(int i, ItemStack itemstack, Supplier<ItemStack> supplier) {
++    private void synchronizeSlotToRemote(int slotIndex, ItemStack stack, Supplier<ItemStack> supplier) {
+         if (!this.suppressRemoteUpdates) {
+-            ItemStack itemstack1 = (ItemStack) this.remoteSlots.get(i);
++            ItemStack itemstack1 = (ItemStack) this.remoteSlots.get(slotIndex);
+ 
+-            if (!ItemStack.matches(itemstack1, itemstack)) {
++            if (!ItemStack.matches(itemstack1, stack)) {
+                 ItemStack itemstack2 = (ItemStack) supplier.get();
+ 
+-                this.remoteSlots.set(i, itemstack2);
++                this.remoteSlots.set(slotIndex, itemstack2);
+                 if (this.synchronizer != null) {
+-                    this.synchronizer.sendSlotChange(this, i, itemstack2);
++                    this.synchronizer.sendSlotChange(this, slotIndex, itemstack2);
+                 }
+             }
+ 
+         }
+     }
+ 
+-    private void synchronizeDataSlotToRemote(int i, int j) {
++    private void synchronizeDataSlotToRemote(int slotIndex, int value) {
+         if (!this.suppressRemoteUpdates) {
+-            int k = this.remoteDataSlots.getInt(i);
++            int k = this.remoteDataSlots.getInt(slotIndex);
+ 
+-            if (k != j) {
+-                this.remoteDataSlots.set(i, j);
++            if (k != value) {
++                this.remoteDataSlots.set(slotIndex, value);
+                 if (this.synchronizer != null) {
+-                    this.synchronizer.sendDataChange(this, i, j);
++                    this.synchronizer.sendDataChange(this, slotIndex, value);
+                 }
+             }
+ 
+@@ -301,71 +345,71 @@
+         }
+     }
+ 
+-    public void setRemoteSlot(int i, ItemStack itemstack) {
+-        this.remoteSlots.set(i, itemstack.copy());
++    public void setRemoteSlot(int slot, ItemStack stack) {
++        this.remoteSlots.set(slot, stack.copy());
+     }
+ 
+-    public void setRemoteSlotNoCopy(int i, ItemStack itemstack) {
+-        if (i >= 0 && i < this.remoteSlots.size()) {
+-            this.remoteSlots.set(i, itemstack);
++    public void setRemoteSlotNoCopy(int slot, ItemStack stack) {
++        if (slot >= 0 && slot < this.remoteSlots.size()) {
++            this.remoteSlots.set(slot, stack);
+         } else {
+-            AbstractContainerMenu.LOGGER.debug("Incorrect slot index: {} available slots: {}", i, this.remoteSlots.size());
++            AbstractContainerMenu.LOGGER.debug("Incorrect slot index: {} available slots: {}", slot, this.remoteSlots.size());
+         }
+     }
+ 
+-    public void setRemoteCarried(ItemStack itemstack) {
+-        this.remoteCarried = itemstack.copy();
++    public void setRemoteCarried(ItemStack remoteCarried) {
++        this.remoteCarried = remoteCarried.copy();
+     }
+ 
+-    public boolean clickMenuButton(Player player, int i) {
++    public boolean clickMenuButton(Player player, int id) {
+         return false;
+     }
+ 
+-    public Slot getSlot(int i) {
+-        return (Slot) this.slots.get(i);
++    public Slot getSlot(int slotId) {
++        return (Slot) this.slots.get(slotId);
+     }
+ 
+     public abstract ItemStack quickMoveStack(Player player, int index);
+ 
+-    public void clicked(int i, int j, ClickType clicktype, Player player) {
++    public void clicked(int slotId, int button, InventoryClickType clickType, Player player) {
+         try {
+-            this.doClick(i, j, clicktype, player);
++            this.doClick(slotId, button, clickType, player);
+         } catch (Exception exception) {
+             CrashReport crashreport = CrashReport.forThrowable(exception, "Container click");
+-            CrashReportCategory crashreportcategory = crashreport.addCategory("Click info");
++            CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Click info");
+ 
+-            crashreportcategory.setDetail("Menu Type", () -> {
++            crashreportsystemdetails.setDetail("Menu Type", () -> {
+                 return this.menuType != null ? BuiltInRegistries.MENU.getKey(this.menuType).toString() : "<no type>";
+             });
+-            crashreportcategory.setDetail("Menu Class", () -> {
++            crashreportsystemdetails.setDetail("Menu Class", () -> {
+                 return this.getClass().getCanonicalName();
+             });
+-            crashreportcategory.setDetail("Slot Count", (Object) this.slots.size());
+-            crashreportcategory.setDetail("Slot", (Object) i);
+-            crashreportcategory.setDetail("Button", (Object) j);
+-            crashreportcategory.setDetail("Type", (Object) clicktype);
++            crashreportsystemdetails.setDetail("Slot Count", (Object) this.slots.size());
++            crashreportsystemdetails.setDetail("Slot", (Object) slotId);
++            crashreportsystemdetails.setDetail("Button", (Object) button);
++            crashreportsystemdetails.setDetail("Type", (Object) clickType);
+             throw new ReportedException(crashreport);
+         }
+     }
+ 
+-    private void doClick(int i, int j, ClickType clicktype, Player player) {
+-        Inventory inventory = player.getInventory();
++    private void doClick(int slotId, int button, InventoryClickType clickType, Player player) {
++        Inventory playerinventory = player.getInventory();
+         Slot slot;
+         ItemStack itemstack;
+         int k;
+         ItemStack itemstack1;
+         int l;
+ 
+-        if (clicktype == ClickType.QUICK_CRAFT) {
++        if (clickType == InventoryClickType.QUICK_CRAFT) {
+             int i1 = this.quickcraftStatus;
+ 
+-            this.quickcraftStatus = getQuickcraftHeader(j);
++            this.quickcraftStatus = getQuickcraftHeader(button);
+             if ((i1 != 1 || this.quickcraftStatus != 2) && i1 != this.quickcraftStatus) {
+                 this.resetQuickCraft();
+             } else if (this.getCarried().isEmpty()) {
+                 this.resetQuickCraft();
+             } else if (this.quickcraftStatus == 0) {
+-                this.quickcraftType = getQuickcraftType(j);
++                this.quickcraftType = getQuickcraftType(button);
+                 if (isValidQuickcraftType(this.quickcraftType, player)) {
+                     this.quickcraftStatus = 1;
+                     this.quickcraftSlots.clear();
+@@ -373,17 +417,17 @@
+                     this.resetQuickCraft();
+                 }
+             } else if (this.quickcraftStatus == 1) {
+-                slot = (Slot) this.slots.get(i);
++                slot = (Slot) this.slots.get(slotId);
+                 itemstack = this.getCarried();
+                 if (canItemQuickReplace(slot, itemstack, true) && slot.mayPlace(itemstack) && (this.quickcraftType == 2 || itemstack.getCount() > this.quickcraftSlots.size()) && this.canDragTo(slot)) {
+                     this.quickcraftSlots.add(slot);
+                 }
+             } else if (this.quickcraftStatus == 2) {
+                 if (!this.quickcraftSlots.isEmpty()) {
+-                    if (this.quickcraftSlots.size() == 1) {
++                    if (false && this.quickcraftSlots.size() == 1) { // CraftBukkit - treat everything as a drag since we are unable to easily call InventoryClickEvent instead
+                         k = ((Slot) this.quickcraftSlots.iterator().next()).index;
+                         this.resetQuickCraft();
+-                        this.doClick(k, this.quickcraftType, ClickType.PICKUP, player);
++                        this.doClick(k, this.quickcraftType, InventoryClickType.PICKUP, player);
+                         return;
+                     }
+ 
+@@ -396,6 +440,7 @@
+                     l = this.getCarried().getCount();
+                     Iterator iterator = this.quickcraftSlots.iterator();
+ 
++                    Map<Integer, ItemStack> draggedSlots = new HashMap<Integer, ItemStack>(); // CraftBukkit - Store slots from drag in map (raw slot id -> new stack)
+                     while (iterator.hasNext()) {
+                         Slot slot1 = (Slot) iterator.next();
+                         ItemStack itemstack2 = this.getCarried();
+@@ -406,12 +451,48 @@
+                             int l1 = Math.min(getQuickCraftPlaceCount(this.quickcraftSlots, this.quickcraftType, itemstack1) + j1, k1);
+ 
+                             l -= l1 - j1;
+-                            slot1.setByPlayer(itemstack1.copyWithCount(l1));
++                            // slot1.setByPlayer(itemstack1.copyWithCount(l1));
++                            draggedSlots.put(slot1.index, itemstack1.copyWithCount(l1)); // CraftBukkit - Put in map instead of setting
+                         }
+                     }
+ 
+-                    itemstack1.setCount(l);
+-                    this.setCarried(itemstack1);
++                    // CraftBukkit start - InventoryDragEvent
++                    InventoryView view = getBukkitView();
++                    org.bukkit.inventory.ItemStack newcursor = CraftItemStack.asCraftMirror(itemstack1);
++                    newcursor.setAmount(l);
++                    Map<Integer, org.bukkit.inventory.ItemStack> eventmap = new HashMap<Integer, org.bukkit.inventory.ItemStack>();
++                    for (Map.Entry<Integer, ItemStack> ditem : draggedSlots.entrySet()) {
++                        eventmap.put(ditem.getKey(), CraftItemStack.asBukkitCopy(ditem.getValue()));
++                    }
++
++                    // It's essential that we set the cursor to the new value here to prevent item duplication if a plugin closes the inventory.
++                    ItemStack oldCursor = this.getCarried();
++                    this.setCarried(CraftItemStack.asNMSCopy(newcursor));
++
++                    InventoryDragEvent event = new InventoryDragEvent(view, (newcursor.getType() != org.bukkit.Material.AIR ? newcursor : null), CraftItemStack.asBukkitCopy(oldCursor), this.quickcraftType == 1, eventmap);
++                    player.level().getCraftServer().getPluginManager().callEvent(event);
++
++                    // Whether or not a change was made to the inventory that requires an update.
++                    boolean needsUpdate = event.getResult() != Result.DEFAULT;
++
++                    if (event.getResult() != Result.DENY) {
++                        for (Map.Entry<Integer, ItemStack> dslot : draggedSlots.entrySet()) {
++                            view.setItem(dslot.getKey(), CraftItemStack.asBukkitCopy(dslot.getValue()));
++                        }
++                        // The only time the carried item will be set to null is if the inventory is closed by the server.
++                        // If the inventory is closed by the server, then the cursor items are dropped.  This is why we change the cursor early.
++                        if (this.getCarried() != null) {
++                            this.setCarried(CraftItemStack.asNMSCopy(event.getCursor()));
++                            needsUpdate = true;
++                        }
++                    } else {
++                        this.setCarried(oldCursor);
++                    }
++
++                    if (needsUpdate && player instanceof ServerPlayer) {
++                        this.sendAllDataToRemote();
++                    }
++                    // CraftBukkit end
+                 }
+ 
+                 this.resetQuickCraft();
+@@ -423,37 +504,40 @@
+         } else {
+             int i2;
+ 
+-            if ((clicktype == ClickType.PICKUP || clicktype == ClickType.QUICK_MOVE) && (j == 0 || j == 1)) {
+-                ClickAction clickaction = j == 0 ? ClickAction.PRIMARY : ClickAction.SECONDARY;
++            if ((clickType == InventoryClickType.PICKUP || clickType == InventoryClickType.QUICK_MOVE) && (button == 0 || button == 1)) {
++                ClickAction clickaction = button == 0 ? ClickAction.PRIMARY : ClickAction.SECONDARY;
+ 
+-                if (i == -999) {
++                if (slotId == -999) {
+                     if (!this.getCarried().isEmpty()) {
+                         if (clickaction == ClickAction.PRIMARY) {
+-                            player.drop(this.getCarried(), true);
++                            // CraftBukkit start
++                            ItemStack carried = this.getCarried();
+                             this.setCarried(ItemStack.EMPTY);
++                            player.drop(carried, true);
++                            // CraftBukkit start
+                         } else {
+                             player.drop(this.getCarried().split(1), true);
+                         }
+                     }
+-                } else if (clicktype == ClickType.QUICK_MOVE) {
+-                    if (i < 0) {
++                } else if (clickType == InventoryClickType.QUICK_MOVE) {
++                    if (slotId < 0) {
+                         return;
+                     }
+ 
+-                    slot = (Slot) this.slots.get(i);
++                    slot = (Slot) this.slots.get(slotId);
+                     if (!slot.mayPickup(player)) {
+                         return;
+                     }
+ 
+-                    for (itemstack = this.quickMoveStack(player, i); !itemstack.isEmpty() && ItemStack.isSameItem(slot.getItem(), itemstack); itemstack = this.quickMoveStack(player, i)) {
++                    for (itemstack = this.quickMoveStack(player, slotId); !itemstack.isEmpty() && ItemStack.isSameItem(slot.getItem(), itemstack); itemstack = this.quickMoveStack(player, slotId)) {
+                         ;
+                     }
+                 } else {
+-                    if (i < 0) {
++                    if (slotId < 0) {
+                         return;
+                     }
+ 
+-                    slot = (Slot) this.slots.get(i);
++                    slot = (Slot) this.slots.get(slotId);
+                     itemstack = slot.getItem();
+                     ItemStack itemstack3 = this.getCarried();
+ 
+@@ -493,19 +577,28 @@
+                     }
+ 
+                     slot.setChanged();
++                    // CraftBukkit start - Make sure the client has the right slot contents
++                    if (player instanceof ServerPlayer && slot.getMaxStackSize() != 64) {
++                        ((ServerPlayer) player).connection.send(new ClientboundContainerSetSlotPacket(this.containerId, this.incrementStateId(), slot.index, slot.getItem()));
++                        // Updating a crafting inventory makes the client reset the result slot, have to send it again
++                        if (this.getBukkitView().getType() == InventoryType.WORKBENCH || this.getBukkitView().getType() == InventoryType.CRAFTING) {
++                            ((ServerPlayer) player).connection.send(new ClientboundContainerSetSlotPacket(this.containerId, this.incrementStateId(), 0, this.getSlot(0).getItem()));
++                        }
++                    }
++                    // CraftBukkit end
+                 }
+             } else {
+                 int j2;
+ 
+-                if (clicktype == ClickType.SWAP && (j >= 0 && j < 9 || j == 40)) {
+-                    ItemStack itemstack4 = inventory.getItem(j);
++                if (clickType == InventoryClickType.SWAP && (button >= 0 && button < 9 || button == 40)) {
++                    ItemStack itemstack4 = playerinventory.getItem(button);
+ 
+-                    slot = (Slot) this.slots.get(i);
++                    slot = (Slot) this.slots.get(slotId);
+                     itemstack = slot.getItem();
+                     if (!itemstack4.isEmpty() || !itemstack.isEmpty()) {
+                         if (itemstack4.isEmpty()) {
+                             if (slot.mayPickup(player)) {
+-                                inventory.setItem(j, itemstack);
++                                playerinventory.setItem(button, itemstack);
+                                 slot.onSwapCraft(itemstack.getCount());
+                                 slot.setByPlayer(ItemStack.EMPTY);
+                                 slot.onTake(player, itemstack);
+@@ -516,7 +609,7 @@
+                                 if (itemstack4.getCount() > j2) {
+                                     slot.setByPlayer(itemstack4.split(j2));
+                                 } else {
+-                                    inventory.setItem(j, ItemStack.EMPTY);
++                                    playerinventory.setItem(button, ItemStack.EMPTY);
+                                     slot.setByPlayer(itemstack4);
+                                 }
+                             }
+@@ -525,11 +618,11 @@
+                             if (itemstack4.getCount() > j2) {
+                                 slot.setByPlayer(itemstack4.split(j2));
+                                 slot.onTake(player, itemstack);
+-                                if (!inventory.add(itemstack)) {
++                                if (!playerinventory.add(itemstack)) {
+                                     player.drop(itemstack, true);
+                                 }
+                             } else {
+-                                inventory.setItem(j, itemstack);
++                                playerinventory.setItem(button, itemstack);
+                                 slot.setByPlayer(itemstack4);
+                                 slot.onTake(player, itemstack);
+                             }
+@@ -538,23 +631,23 @@
+                 } else {
+                     Slot slot2;
+ 
+-                    if (clicktype == ClickType.CLONE && player.getAbilities().instabuild && this.getCarried().isEmpty() && i >= 0) {
+-                        slot2 = (Slot) this.slots.get(i);
++                    if (clickType == InventoryClickType.CLONE && player.getAbilities().instabuild && this.getCarried().isEmpty() && slotId >= 0) {
++                        slot2 = (Slot) this.slots.get(slotId);
+                         if (slot2.hasItem()) {
+                             itemstack1 = slot2.getItem();
+                             this.setCarried(itemstack1.copyWithCount(itemstack1.getMaxStackSize()));
+                         }
+-                    } else if (clicktype == ClickType.THROW && this.getCarried().isEmpty() && i >= 0) {
+-                        slot2 = (Slot) this.slots.get(i);
+-                        k = j == 0 ? 1 : slot2.getItem().getCount();
++                    } else if (clickType == InventoryClickType.THROW && this.getCarried().isEmpty() && slotId >= 0) {
++                        slot2 = (Slot) this.slots.get(slotId);
++                        k = button == 0 ? 1 : slot2.getItem().getCount();
+                         itemstack = slot2.safeTake(k, Integer.MAX_VALUE, player);
+                         player.drop(itemstack, true);
+-                    } else if (clicktype == ClickType.PICKUP_ALL && i >= 0) {
+-                        slot2 = (Slot) this.slots.get(i);
++                    } else if (clickType == InventoryClickType.PICKUP_ALL && slotId >= 0) {
++                        slot2 = (Slot) this.slots.get(slotId);
+                         itemstack1 = this.getCarried();
+                         if (!itemstack1.isEmpty() && (!slot2.hasItem() || !slot2.mayPickup(player))) {
+-                            l = j == 0 ? 0 : this.slots.size() - 1;
+-                            j2 = j == 0 ? 1 : -1;
++                            l = button == 0 ? 0 : this.slots.size() - 1;
++                            j2 = button == 0 ? 1 : -1;
+ 
+                             for (i2 = 0; i2 < 2; ++i2) {
+                                 for (int k2 = l; k2 >= 0 && k2 < this.slots.size() && itemstack1.getCount() < itemstack1.getMaxStackSize(); k2 += j2) {
+@@ -579,30 +672,28 @@
+ 
+     }
+ 
+-    private boolean tryItemClickBehaviourOverride(Player player, ClickAction clickaction, Slot slot, ItemStack itemstack, ItemStack itemstack1) {
++    private boolean tryItemClickBehaviourOverride(Player player, ClickAction action, Slot slot, ItemStack clickedItem, ItemStack carriedItem) {
+         FeatureFlagSet featureflagset = player.level().enabledFeatures();
+ 
+-        return itemstack1.isItemEnabled(featureflagset) && itemstack1.overrideStackedOnOther(slot, clickaction, player) ? true : itemstack.isItemEnabled(featureflagset) && itemstack.overrideOtherStackedOnMe(itemstack1, slot, clickaction, player, this.createCarriedSlotAccess());
++        return carriedItem.isItemEnabled(featureflagset) && carriedItem.overrideStackedOnOther(slot, action, player) ? true : clickedItem.isItemEnabled(featureflagset) && clickedItem.overrideOtherStackedOnMe(carriedItem, slot, action, player, this.createCarriedSlotAccess());
+     }
+ 
+     private SlotAccess createCarriedSlotAccess() {
+         return new SlotAccess() {
+             @Override
+-            @Override
+             public ItemStack get() {
+                 return AbstractContainerMenu.this.getCarried();
+             }
+ 
+             @Override
+-            @Override
+-            public boolean set(ItemStack itemstack) {
+-                AbstractContainerMenu.this.setCarried(itemstack);
++            public boolean set(ItemStack carried) {
++                AbstractContainerMenu.this.setCarried(carried);
+                 return true;
+             }
+         };
+     }
+ 
+-    public boolean canTakeItemForPickAll(ItemStack itemstack, Slot slot) {
++    public boolean canTakeItemForPickAll(ItemStack stack, Slot slot) {
+         return true;
+     }
+ 
+@@ -611,13 +702,14 @@
+             ItemStack itemstack = this.getCarried();
+ 
+             if (!itemstack.isEmpty()) {
++                this.setCarried(ItemStack.EMPTY); // CraftBukkit - SPIGOT-4556 - from below
+                 if (player.isAlive() && !((ServerPlayer) player).hasDisconnected()) {
+                     player.getInventory().placeItemBackInInventory(itemstack);
+                 } else {
+                     player.drop(itemstack, false);
+                 }
+ 
+-                this.setCarried(ItemStack.EMPTY);
++                // this.setCarried(ItemStack.EMPTY); // CraftBukkit - moved up
+             }
+         }
+ 
+@@ -628,10 +720,10 @@
+ 
+         if (player.isAlive() && (!(player instanceof ServerPlayer) || !((ServerPlayer) player).hasDisconnected())) {
+             for (i = 0; i < container.getContainerSize(); ++i) {
+-                Inventory inventory = player.getInventory();
++                Inventory playerinventory = player.getInventory();
+ 
+-                if (inventory.player instanceof ServerPlayer) {
+-                    inventory.placeItemBackInInventory(container.removeItemNoUpdate(i));
++                if (playerinventory.player instanceof ServerPlayer) {
++                    playerinventory.placeItemBackInInventory(container.removeItemNoUpdate(i));
+                 }
+             }
+ 
+@@ -647,66 +739,66 @@
+         this.broadcastChanges();
+     }
+ 
+-    public void setItem(int i, int j, ItemStack itemstack) {
+-        this.getSlot(i).set(itemstack);
+-        this.stateId = j;
++    public void setItem(int slotId, int stateId, ItemStack stack) {
++        this.getSlot(slotId).set(stack);
++        this.stateId = stateId;
+     }
+ 
+-    public void initializeContents(int i, List<ItemStack> list, ItemStack itemstack) {
+-        for (int j = 0; j < list.size(); ++j) {
+-            this.getSlot(j).set((ItemStack) list.get(j));
++    public void initializeContents(int stateId, List<ItemStack> items, ItemStack carried) {
++        for (int j = 0; j < items.size(); ++j) {
++            this.getSlot(j).set((ItemStack) items.get(j));
+         }
+ 
+-        this.carried = itemstack;
+-        this.stateId = i;
++        this.carried = carried;
++        this.stateId = stateId;
+     }
+ 
+-    public void setData(int i, int j) {
+-        ((DataSlot) this.dataSlots.get(i)).set(j);
++    public void setData(int id, int data) {
++        ((DataSlot) this.dataSlots.get(id)).set(data);
+     }
+ 
+     public abstract boolean stillValid(Player player);
+ 
+-    protected boolean moveItemStackTo(ItemStack itemstack, int i, int j, boolean flag) {
++    protected boolean moveItemStackTo(ItemStack stack, int startIndex, int endIndex, boolean reverseDirection) {
+         boolean flag1 = false;
+-        int k = i;
++        int k = startIndex;
+ 
+-        if (flag) {
+-            k = j - 1;
++        if (reverseDirection) {
++            k = endIndex - 1;
+         }
+ 
+         Slot slot;
+         ItemStack itemstack1;
+ 
+-        if (itemstack.isStackable()) {
+-            while (!itemstack.isEmpty()) {
+-                if (flag) {
+-                    if (k < i) {
++        if (stack.isStackable()) {
++            while (!stack.isEmpty()) {
++                if (reverseDirection) {
++                    if (k < startIndex) {
+                         break;
+                     }
+-                } else if (k >= j) {
++                } else if (k >= endIndex) {
+                     break;
+                 }
+ 
+                 slot = (Slot) this.slots.get(k);
+                 itemstack1 = slot.getItem();
+-                if (!itemstack1.isEmpty() && ItemStack.isSameItemSameTags(itemstack, itemstack1)) {
+-                    int l = itemstack1.getCount() + itemstack.getCount();
++                if (!itemstack1.isEmpty() && ItemStack.isSameItemSameTags(stack, itemstack1)) {
++                    int l = itemstack1.getCount() + stack.getCount();
+ 
+-                    if (l <= itemstack.getMaxStackSize()) {
+-                        itemstack.setCount(0);
++                    if (l <= stack.getMaxStackSize()) {
++                        stack.setCount(0);
+                         itemstack1.setCount(l);
+                         slot.setChanged();
+                         flag1 = true;
+-                    } else if (itemstack1.getCount() < itemstack.getMaxStackSize()) {
+-                        itemstack.shrink(itemstack.getMaxStackSize() - itemstack1.getCount());
+-                        itemstack1.setCount(itemstack.getMaxStackSize());
++                    } else if (itemstack1.getCount() < stack.getMaxStackSize()) {
++                        stack.shrink(stack.getMaxStackSize() - itemstack1.getCount());
++                        itemstack1.setCount(stack.getMaxStackSize());
+                         slot.setChanged();
+                         flag1 = true;
+                     }
+                 }
+ 
+-                if (flag) {
++                if (reverseDirection) {
+                     --k;
+                 } else {
+                     ++k;
+@@ -714,29 +806,29 @@
+             }
+         }
+ 
+-        if (!itemstack.isEmpty()) {
+-            if (flag) {
+-                k = j - 1;
++        if (!stack.isEmpty()) {
++            if (reverseDirection) {
++                k = endIndex - 1;
+             } else {
+-                k = i;
++                k = startIndex;
+             }
+ 
+             while (true) {
+-                if (flag) {
+-                    if (k < i) {
++                if (reverseDirection) {
++                    if (k < startIndex) {
+                         break;
+                     }
+-                } else if (k >= j) {
++                } else if (k >= endIndex) {
+                     break;
+                 }
+ 
+                 slot = (Slot) this.slots.get(k);
+                 itemstack1 = slot.getItem();
+-                if (itemstack1.isEmpty() && slot.mayPlace(itemstack)) {
+-                    if (itemstack.getCount() > slot.getMaxStackSize()) {
+-                        slot.setByPlayer(itemstack.split(slot.getMaxStackSize()));
++                if (itemstack1.isEmpty() && slot.mayPlace(stack)) {
++                    if (stack.getCount() > slot.getMaxStackSize()) {
++                        slot.setByPlayer(stack.split(slot.getMaxStackSize()));
+                     } else {
+-                        slot.setByPlayer(itemstack.split(itemstack.getCount()));
++                        slot.setByPlayer(stack.split(stack.getCount()));
+                     }
+ 
+                     slot.setChanged();
+@@ -744,7 +836,7 @@
+                     break;
+                 }
+ 
+-                if (flag) {
++                if (reverseDirection) {
+                     --k;
+                 } else {
+                     ++k;
+@@ -755,20 +847,20 @@
+         return flag1;
+     }
+ 
+-    public static int getQuickcraftType(int i) {
+-        return i >> 2 & 3;
++    public static int getQuickcraftType(int eventButton) {
++        return eventButton >> 2 & 3;
+     }
+ 
+-    public static int getQuickcraftHeader(int i) {
+-        return i & 3;
++    public static int getQuickcraftHeader(int clickedButton) {
++        return clickedButton & 3;
+     }
+ 
+-    public static int getQuickcraftMask(int i, int j) {
+-        return i & 3 | (j & 3) << 2;
++    public static int getQuickcraftMask(int quickCraftingHeader, int quickCraftingType) {
++        return quickCraftingHeader & 3 | (quickCraftingType & 3) << 2;
+     }
+ 
+-    public static boolean isValidQuickcraftType(int i, Player player) {
+-        return i == 0 ? true : (i == 1 ? true : i == 2 && player.getAbilities().instabuild);
++    public static boolean isValidQuickcraftType(int dragMode, Player player) {
++        return dragMode == 0 ? true : (dragMode == 1 ? true : dragMode == 2 && player.getAbilities().instabuild);
+     }
+ 
+     protected void resetQuickCraft() {
+@@ -776,27 +868,27 @@
+         this.quickcraftSlots.clear();
+     }
+ 
+-    public static boolean canItemQuickReplace(@Nullable Slot slot, ItemStack itemstack, boolean flag) {
++    public static boolean canItemQuickReplace(@Nullable Slot slot, ItemStack stack, boolean stackSizeMatters) {
+         boolean flag1 = slot == null || !slot.hasItem();
+ 
+-        return !flag1 && ItemStack.isSameItemSameTags(itemstack, slot.getItem()) ? slot.getItem().getCount() + (flag ? 0 : itemstack.getCount()) <= itemstack.getMaxStackSize() : flag1;
++        return !flag1 && ItemStack.isSameItemSameTags(stack, slot.getItem()) ? slot.getItem().getCount() + (stackSizeMatters ? 0 : stack.getCount()) <= stack.getMaxStackSize() : flag1;
+     }
+ 
+-    public static int getQuickCraftPlaceCount(Set<Slot> set, int i, ItemStack itemstack) {
++    public static int getQuickCraftPlaceCount(Set<Slot> slots, int type, ItemStack stack) {
+         int j;
+ 
+-        switch (i) {
++        switch (type) {
+             case 0:
+-                j = Mth.floor((float) itemstack.getCount() / (float) set.size());
++                j = Mth.floor((float) stack.getCount() / (float) slots.size());
+                 break;
+             case 1:
+                 j = 1;
+                 break;
+             case 2:
+-                j = itemstack.getItem().getMaxStackSize();
++                j = stack.getItem().getMaxStackSize();
+                 break;
+             default:
+-                j = itemstack.getCount();
++                j = stack.getCount();
+         }
+ 
+         return j;
+@@ -806,8 +898,8 @@
+         return true;
+     }
+ 
+-    public static int getRedstoneSignalFromBlockEntity(@Nullable BlockEntity blockentity) {
+-        return blockentity instanceof Container ? getRedstoneSignalFromContainer((Container) blockentity) : 0;
++    public static int getRedstoneSignalFromBlockEntity(@Nullable BlockEntity blockEntity) {
++        return blockEntity instanceof Container ? getRedstoneSignalFromContainer((Container) blockEntity) : 0;
+     }
+ 
+     public static int getRedstoneSignalFromContainer(@Nullable Container container) {
+@@ -829,11 +921,16 @@
+         }
+     }
+ 
+-    public void setCarried(ItemStack itemstack) {
+-        this.carried = itemstack;
++    public void setCarried(ItemStack stack) {
++        this.carried = stack;
+     }
+ 
+     public ItemStack getCarried() {
++        // CraftBukkit start
++        if (this.carried.isEmpty()) {
++            this.setCarried(ItemStack.EMPTY);
++        }
++        // CraftBukkit end
+         return this.carried;
+     }
+ 
+@@ -845,14 +942,14 @@
+         this.suppressRemoteUpdates = false;
+     }
+ 
+-    public void transferState(AbstractContainerMenu abstractcontainermenu) {
++    public void transferState(AbstractContainerMenu menu) {
+         Table<Container, Integer, Integer> table = HashBasedTable.create();
+ 
+         Slot slot;
+         int i;
+ 
+-        for (i = 0; i < abstractcontainermenu.slots.size(); ++i) {
+-            slot = (Slot) abstractcontainermenu.slots.get(i);
++        for (i = 0; i < menu.slots.size(); ++i) {
++            slot = (Slot) menu.slots.get(i);
+             table.put(slot.container, slot.getContainerSlot(), i);
+         }
+ 
+@@ -861,18 +958,18 @@
+             Integer integer = (Integer) table.get(slot.container, slot.getContainerSlot());
+ 
+             if (integer != null) {
+-                this.lastSlots.set(i, (ItemStack) abstractcontainermenu.lastSlots.get(integer));
+-                this.remoteSlots.set(i, (ItemStack) abstractcontainermenu.remoteSlots.get(integer));
++                this.lastSlots.set(i, (ItemStack) menu.lastSlots.get(integer));
++                this.remoteSlots.set(i, (ItemStack) menu.remoteSlots.get(integer));
+             }
+         }
+ 
+     }
+ 
+-    public OptionalInt findSlot(Container container, int i) {
++    public OptionalInt findSlot(Container container, int slotIndex) {
+         for (int j = 0; j < this.slots.size(); ++j) {
+             Slot slot = (Slot) this.slots.get(j);
+ 
+-            if (slot.container == container && i == slot.getContainerSlot()) {
++            if (slot.container == container && slotIndex == slot.getContainerSlot()) {
+                 return OptionalInt.of(j);
+             }
+         }

@@ -1,0 +1,343 @@
+--- a/net/minecraft/world/entity/animal/MushroomCow.java
++++ b/net/minecraft/world/entity/animal/MushroomCow.java
+@@ -19,13 +19,13 @@
+ import net.minecraft.tags.ItemTags;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.util.StringRepresentable;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.AgeableMob;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMobSpawn;
+ import net.minecraft.world.entity.LightningBolt;
+-import net.minecraft.world.entity.MobSpawnType;
+ import net.minecraft.world.entity.Shearable;
+ import net.minecraft.world.entity.VariantHolder;
+ import net.minecraft.world.entity.item.ItemEntity;
+@@ -39,37 +39,42 @@
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.SuspiciousEffectHolder;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ 
++// CraftBukkit start
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityDropItemEvent;
++import org.bukkit.event.entity.EntityTransformEvent;
++// CraftBukkit end
++
+ public class MushroomCow extends Cow implements Shearable, VariantHolder<MushroomCow.MushroomType> {
+ 
+     private static final EntityDataAccessor<String> DATA_TYPE = SynchedEntityData.defineId(MushroomCow.class, EntityDataSerializers.STRING);
+     private static final int MUTATE_CHANCE = 1024;
+     private static final String TAG_STEW_EFFECTS = "stew_effects";
+     @Nullable
+-    private List<SuspiciousEffectHolder.EffectEntry> stewEffects;
++    private List<SuspiciousEffectHolder.a> stewEffects;
+     @Nullable
+     private UUID lastLightningBoltUUID;
+ 
+-    public MushroomCow(EntityType<? extends MushroomCow> entitytype, Level level) {
+-        super(entitytype, level);
++    public MushroomCow(EntityType<? extends MushroomCow> entityType, Level level) {
++        super(entityType, level);
+     }
+ 
+     @Override
+-    @Override
+-    public float getWalkTargetValue(BlockPos blockpos, LevelReader levelreader) {
+-        return levelreader.getBlockState(blockpos.below()).is(Blocks.MYCELIUM) ? 10.0F : levelreader.getPathfindingCostFromLightLevels(blockpos);
++    public float getWalkTargetValue(BlockPos pos, LevelReader level) {
++        return level.getBlockState(pos.below()).is(Blocks.MYCELIUM) ? 10.0F : level.getPathfindingCostFromLightLevels(pos);
+     }
+ 
+-    public static boolean checkMushroomSpawnRules(EntityType<MushroomCow> entitytype, LevelAccessor levelaccessor, MobSpawnType mobspawntype, BlockPos blockpos, RandomSource randomsource) {
+-        return levelaccessor.getBlockState(blockpos.below()).is(BlockTags.MOOSHROOMS_SPAWNABLE_ON) && isBrightEnoughToSpawn(levelaccessor, blockpos);
++    public static boolean checkMushroomSpawnRules(EntityType<MushroomCow> mushroomCow, LevelAccessor level, EnumMobSpawn spawnType, BlockPos pos, RandomSource randomSource) {
++        return level.getBlockState(pos.below()).is(BlockTags.MOOSHROOMS_SPAWNABLE_ON) && isBrightEnoughToSpawn(level, pos);
+     }
+ 
+     @Override
+-    @Override
+-    public void thunderHit(ServerLevel serverlevel, LightningBolt lightningbolt) {
+-        UUID uuid = lightningbolt.getUUID();
++    public void thunderHit(ServerLevel level, LightningBolt lightning) {
++        UUID uuid = lightning.getUUID();
+ 
+         if (!uuid.equals(this.lastLightningBoltUUID)) {
+             this.setVariant(this.getVariant() == MushroomCow.MushroomType.RED ? MushroomCow.MushroomType.BROWN : MushroomCow.MushroomType.RED);
+@@ -80,16 +85,14 @@
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.entityData.define(MushroomCow.DATA_TYPE, MushroomCow.MushroomType.RED.type);
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult mobInteract(Player player, InteractionHand interactionhand) {
+-        ItemStack itemstack = player.getItemInHand(interactionhand);
++    public InteractionResult mobInteract(Player player, EnumHand hand) {
++        ItemStack itemstack = player.getItemInHand(hand);
+ 
+         if (itemstack.is(Items.BOWL) && !this.isBaby()) {
+             boolean flag = false;
+@@ -106,23 +109,28 @@
+ 
+             ItemStack itemstack2 = ItemUtils.createFilledResult(itemstack, player, itemstack1, false);
+ 
+-            player.setItemInHand(interactionhand, itemstack2);
+-            SoundEvent soundevent;
++            player.setItemInHand(hand, itemstack2);
++            SoundEvent soundeffect;
+ 
+             if (flag) {
+-                soundevent = SoundEvents.MOOSHROOM_MILK_SUSPICIOUSLY;
++                soundeffect = SoundEvents.MOOSHROOM_MILK_SUSPICIOUSLY;
+             } else {
+-                soundevent = SoundEvents.MOOSHROOM_MILK;
++                soundeffect = SoundEvents.MOOSHROOM_MILK;
+             }
+ 
+-            this.playSound(soundevent, 1.0F, 1.0F);
++            this.playSound(soundeffect, 1.0F, 1.0F);
+             return InteractionResult.sidedSuccess(this.level().isClientSide);
+         } else if (itemstack.is(Items.SHEARS) && this.readyForShearing()) {
++            // CraftBukkit start
++            if (!CraftEventFactory.handlePlayerShearEntityEvent(player, this, itemstack, hand)) {
++                return InteractionResult.PASS;
++            }
++            // CraftBukkit end
+             this.shear(SoundSource.PLAYERS);
+             this.gameEvent(GameEvent.SHEAR, player);
+             if (!this.level().isClientSide) {
+-                itemstack.hurtAndBreak(1, player, (player1) -> {
+-                    player1.broadcastBreakEvent(interactionhand);
++                itemstack.hurtAndBreak(1, player, (entityhuman1) -> {
++                    entityhuman1.broadcastBreakEvent(hand);
+                 });
+             }
+ 
+@@ -133,7 +141,7 @@
+                     this.level().addParticle(ParticleTypes.SMOKE, this.getX() + this.random.nextDouble() / 2.0D, this.getY(0.5D), this.getZ() + this.random.nextDouble() / 2.0D, 0.0D, this.random.nextDouble() / 5.0D, 0.0D);
+                 }
+             } else {
+-                Optional<List<SuspiciousEffectHolder.EffectEntry>> optional = this.getEffectsFromItemStack(itemstack);
++                Optional<List<SuspiciousEffectHolder.a>> optional = this.getEffectsFromItemStack(itemstack);
+ 
+                 if (optional.isEmpty()) {
+                     return InteractionResult.PASS;
+@@ -153,37 +161,51 @@
+ 
+             return InteractionResult.sidedSuccess(this.level().isClientSide);
+         } else {
+-            return super.mobInteract(player, interactionhand);
++            return super.mobInteract(player, hand);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public void shear(SoundSource soundsource) {
+-        this.level().playSound((Player) null, (Entity) this, SoundEvents.MOOSHROOM_SHEAR, soundsource, 1.0F, 1.0F);
++    public void shear(SoundSource category) {
++        this.level().playSound((Player) null, (Entity) this, SoundEvents.MOOSHROOM_SHEAR, category, 1.0F, 1.0F);
+         if (!this.level().isClientSide()) {
+-            Cow cow = (Cow) EntityType.COW.create(this.level());
++            Cow entitycow = (Cow) EntityType.COW.create(this.level());
+ 
+-            if (cow != null) {
++            if (entitycow != null) {
+                 ((ServerLevel) this.level()).sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY(0.5D), this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
+-                this.discard();
+-                cow.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+-                cow.setHealth(this.getHealth());
+-                cow.yBodyRot = this.yBodyRot;
++                // this.discard(); // CraftBukkit - moved down
++                entitycow.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
++                entitycow.setHealth(this.getHealth());
++                entitycow.yBodyRot = this.yBodyRot;
+                 if (this.hasCustomName()) {
+-                    cow.setCustomName(this.getCustomName());
+-                    cow.setCustomNameVisible(this.isCustomNameVisible());
++                    entitycow.setCustomName(this.getCustomName());
++                    entitycow.setCustomNameVisible(this.isCustomNameVisible());
+                 }
+ 
+                 if (this.isPersistenceRequired()) {
+-                    cow.setPersistenceRequired();
++                    entitycow.setPersistenceRequired();
+                 }
+ 
+-                cow.setInvulnerable(this.isInvulnerable());
+-                this.level().addFreshEntity(cow);
++                entitycow.setInvulnerable(this.isInvulnerable());
++                // CraftBukkit start
++                if (CraftEventFactory.callEntityTransformEvent(this, entitycow, EntityTransformEvent.TransformReason.SHEARED).isCancelled()) {
++                    return;
++                }
++                this.level().addFreshEntity(entitycow, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.SHEARED);
+ 
++                this.discard(); // CraftBukkit - from above
++                // CraftBukkit end
++
+                 for (int i = 0; i < 5; ++i) {
+-                    this.level().addFreshEntity(new ItemEntity(this.level(), this.getX(), this.getY(1.0D), this.getZ(), new ItemStack(this.getVariant().blockState.getBlock())));
++                    // CraftBukkit start
++                    ItemEntity entityitem = new ItemEntity(this.level(), this.getX(), this.getY(1.0D), this.getZ(), new ItemStack(this.getVariant().blockState.getBlock()));
++                    EntityDropItemEvent event = new EntityDropItemEvent(this.getBukkitEntity(), (org.bukkit.entity.Item) entityitem.getBukkitEntity());
++                    Bukkit.getPluginManager().callEvent(event);
++                    if (event.isCancelled()) {
++                        continue;
++                    }
++                    this.level().addFreshEntity(entityitem);
++                    // CraftBukkit end
+                 }
+             }
+         }
+@@ -191,79 +213,73 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean readyForShearing() {
+         return this.isAlive() && !this.isBaby();
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putString("Type", this.getVariant().getSerializedName());
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putString("Type", this.getVariant().getSerializedName());
+         if (this.stewEffects != null) {
+-            SuspiciousEffectHolder.EffectEntry.LIST_CODEC.encodeStart(NbtOps.INSTANCE, this.stewEffects).result().ifPresent((tag) -> {
+-                compoundtag.put("stew_effects", tag);
++            SuspiciousEffectHolder.a.LIST_CODEC.encodeStart(NbtOps.INSTANCE, this.stewEffects).result().ifPresent((nbtbase) -> {
++                compound.put("stew_effects", nbtbase);
+             });
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.setVariant(MushroomCow.MushroomType.byType(compoundtag.getString("Type")));
+-        if (compoundtag.contains("stew_effects", 9)) {
+-            SuspiciousEffectHolder.EffectEntry.LIST_CODEC.parse(NbtOps.INSTANCE, compoundtag.get("stew_effects")).result().ifPresent((list) -> {
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.setVariant(MushroomCow.MushroomType.byType(compound.getString("Type")));
++        if (compound.contains("stew_effects", 9)) {
++            SuspiciousEffectHolder.a.LIST_CODEC.parse(NbtOps.INSTANCE, compound.get("stew_effects")).result().ifPresent((list) -> {
+                 this.stewEffects = list;
+             });
+         }
+ 
+     }
+ 
+-    private Optional<List<SuspiciousEffectHolder.EffectEntry>> getEffectsFromItemStack(ItemStack itemstack) {
++    private Optional<List<SuspiciousEffectHolder.a>> getEffectsFromItemStack(ItemStack itemstack) {
+         SuspiciousEffectHolder suspiciouseffectholder = SuspiciousEffectHolder.tryGet(itemstack.getItem());
+ 
+         return suspiciouseffectholder != null ? Optional.of(suspiciouseffectholder.getSuspiciousEffects()) : Optional.empty();
+     }
+ 
+-    @Override
+-    public void setVariant(MushroomCow.MushroomType mushroomcow_mushroomtype) {
+-        this.entityData.set(MushroomCow.DATA_TYPE, mushroomcow_mushroomtype.type);
++    public void setVariant(MushroomCow.MushroomType variant) {
++        this.entityData.set(MushroomCow.DATA_TYPE, variant.type);
+     }
+ 
+     @Override
+-    @Override
+     public MushroomCow.MushroomType getVariant() {
+         return MushroomCow.MushroomType.byType((String) this.entityData.get(MushroomCow.DATA_TYPE));
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public MushroomCow getBreedOffspring(ServerLevel serverlevel, AgeableMob ageablemob) {
+-        MushroomCow mushroomcow = (MushroomCow) EntityType.MOOSHROOM.create(serverlevel);
++    public MushroomCow getBreedOffspring(ServerLevel level, AgeableMob otherParent) {
++        MushroomCow entitymushroomcow = (MushroomCow) EntityType.MOOSHROOM.create(level);
+ 
+-        if (mushroomcow != null) {
+-            mushroomcow.setVariant(this.getOffspringType((MushroomCow) ageablemob));
++        if (entitymushroomcow != null) {
++            entitymushroomcow.setVariant(this.getOffspringType((MushroomCow) otherParent));
+         }
+ 
+-        return mushroomcow;
++        return entitymushroomcow;
+     }
+ 
+-    private MushroomCow.MushroomType getOffspringType(MushroomCow mushroomcow) {
+-        MushroomCow.MushroomType mushroomcow_mushroomtype = this.getVariant();
+-        MushroomCow.MushroomType mushroomcow_mushroomtype1 = mushroomcow.getVariant();
+-        MushroomCow.MushroomType mushroomcow_mushroomtype2;
++    private MushroomCow.MushroomType getOffspringType(MushroomCow mate) {
++        MushroomCow.MushroomType entitymushroomcow_type = this.getVariant();
++        MushroomCow.MushroomType entitymushroomcow_type1 = mate.getVariant();
++        MushroomCow.MushroomType entitymushroomcow_type2;
+ 
+-        if (mushroomcow_mushroomtype == mushroomcow_mushroomtype1 && this.random.nextInt(1024) == 0) {
+-            mushroomcow_mushroomtype2 = mushroomcow_mushroomtype == MushroomCow.MushroomType.BROWN ? MushroomCow.MushroomType.RED : MushroomCow.MushroomType.BROWN;
++        if (entitymushroomcow_type == entitymushroomcow_type1 && this.random.nextInt(1024) == 0) {
++            entitymushroomcow_type2 = entitymushroomcow_type == MushroomCow.MushroomType.BROWN ? MushroomCow.MushroomType.RED : MushroomCow.MushroomType.BROWN;
+         } else {
+-            mushroomcow_mushroomtype2 = this.random.nextBoolean() ? mushroomcow_mushroomtype : mushroomcow_mushroomtype1;
++            entitymushroomcow_type2 = this.random.nextBoolean() ? entitymushroomcow_type : entitymushroomcow_type1;
+         }
+ 
+-        return mushroomcow_mushroomtype2;
++        return entitymushroomcow_type2;
+     }
+ 
+     public static enum MushroomType implements StringRepresentable {
+@@ -272,25 +288,24 @@
+ 
+         public static final StringRepresentable.EnumCodec<MushroomCow.MushroomType> CODEC = StringRepresentable.fromEnum(MushroomCow.MushroomType::values);
+         final String type;
+-        final BlockState blockState;
++        final IBlockData blockState;
+ 
+-        private MushroomType(String s, BlockState blockstate) {
++        private MushroomType(String s, IBlockData iblockdata) {
+             this.type = s;
+-            this.blockState = blockstate;
++            this.blockState = iblockdata;
+         }
+ 
+-        public BlockState getBlockState() {
++        public IBlockData getBlockState() {
+             return this.blockState;
+         }
+ 
+         @Override
+-        @Override
+         public String getSerializedName() {
+             return this.type;
+         }
+ 
+-        static MushroomCow.MushroomType byType(String s) {
+-            return (MushroomCow.MushroomType) MushroomCow.MushroomType.CODEC.byName(s, MushroomCow.MushroomType.RED);
++        static MushroomCow.MushroomType byType(String name) {
++            return (MushroomCow.MushroomType) MushroomCow.MushroomType.CODEC.byName(name, MushroomCow.MushroomType.RED);
+         }
+     }
+ }

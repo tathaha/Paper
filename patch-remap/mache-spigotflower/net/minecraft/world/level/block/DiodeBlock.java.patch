@@ -1,0 +1,303 @@
+--- a/net/minecraft/world/level/block/DiodeBlock.java
++++ b/net/minecraft/world/level/block/DiodeBlock.java
+@@ -14,57 +14,64 @@
+ import net.minecraft.world.level.SignalGetter;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
+ import net.minecraft.world.ticks.TickPriority;
++import org.bukkit.craftbukkit.event.CraftEventFactory; // CraftBukkit
+ 
+ public abstract class DiodeBlock extends HorizontalDirectionalBlock {
+ 
+     protected static final VoxelShape SHAPE = Block.box(0.0D, 0.0D, 0.0D, 16.0D, 2.0D, 16.0D);
+     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+ 
+-    protected DiodeBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
++    protected DiodeBlock(BlockBehaviour.Properties properties) {
++        super(properties);
+     }
+ 
+     @Override
+-    @Override
+     protected abstract MapCodec<? extends DiodeBlock> codec();
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return DiodeBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canSurvive(BlockState blockstate, LevelReader levelreader, BlockPos blockpos) {
+-        BlockPos blockpos1 = blockpos.below();
++    public boolean canSurvive(IBlockData state, LevelReader level, BlockPos pos) {
++        BlockPos blockposition1 = pos.below();
+ 
+-        return this.canSurviveOn(levelreader, blockpos1, levelreader.getBlockState(blockpos1));
++        return this.canSurviveOn(level, blockposition1, level.getBlockState(blockposition1));
+     }
+ 
+-    protected boolean canSurviveOn(LevelReader levelreader, BlockPos blockpos, BlockState blockstate) {
+-        return blockstate.isFaceSturdy(levelreader, blockpos, Direction.UP, SupportType.RIGID);
++    protected boolean canSurviveOn(LevelReader iworldreader, BlockPos blockposition, IBlockData iblockdata) {
++        return iblockdata.isFaceSturdy(iworldreader, blockposition, Direction.UP, SupportType.RIGID);
+     }
+ 
+     @Override
+-    @Override
+-    public void tick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        if (!this.isLocked(serverlevel, blockpos, blockstate)) {
+-            boolean flag = (Boolean) blockstate.getValue(DiodeBlock.POWERED);
+-            boolean flag1 = this.shouldTurnOn(serverlevel, blockpos, blockstate);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if (!this.isLocked(level, pos, state)) {
++            boolean flag = (Boolean) state.getValue(DiodeBlock.POWERED);
++            boolean flag1 = this.shouldTurnOn(level, pos, state);
+ 
+             if (flag && !flag1) {
+-                serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(DiodeBlock.POWERED, false), 2);
++                // CraftBukkit start
++                if (CraftEventFactory.callRedstoneChange(level, pos, 15, 0).getNewCurrent() != 0) {
++                    return;
++                }
++                // CraftBukkit end
++                level.setBlock(pos, (IBlockData) state.setValue(DiodeBlock.POWERED, false), 2);
+             } else if (!flag) {
+-                serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(DiodeBlock.POWERED, true), 2);
++                // CraftBukkit start
++                if (CraftEventFactory.callRedstoneChange(level, pos, 0, 15).getNewCurrent() != 15) {
++                    return;
++                }
++                // CraftBukkit end
++                level.setBlock(pos, (IBlockData) state.setValue(DiodeBlock.POWERED, true), 2);
+                 if (!flag1) {
+-                    serverlevel.scheduleTick(blockpos, (Block) this, this.getDelay(blockstate), TickPriority.VERY_HIGH);
++                    level.scheduleTick(pos, (Block) this, this.getDelay(state), TickPriority.VERY_HIGH);
+                 }
+             }
+ 
+@@ -72,152 +79,144 @@
+     }
+ 
+     @Override
+-    @Override
+-    public int getDirectSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return blockstate.getSignal(blockgetter, blockpos, direction);
++    public int getDirectSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return blockState.getSignal(blockAccess, pos, side);
+     }
+ 
+     @Override
+-    @Override
+-    public int getSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return !(Boolean) blockstate.getValue(DiodeBlock.POWERED) ? 0 : (blockstate.getValue(DiodeBlock.FACING) == direction ? this.getOutputSignal(blockgetter, blockpos, blockstate) : 0);
++    public int getSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return !(Boolean) blockState.getValue(DiodeBlock.POWERED) ? 0 : (blockState.getValue(DiodeBlock.FACING) == side ? this.getOutputSignal(blockAccess, pos, blockState) : 0);
+     }
+ 
+     @Override
+-    @Override
+-    public void neighborChanged(BlockState blockstate, Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-        if (blockstate.canSurvive(level, blockpos)) {
+-            this.checkTickOnNeighbor(level, blockpos, blockstate);
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
++        if (state.canSurvive(level, pos)) {
++            this.checkTickOnNeighbor(level, pos, state);
+         } else {
+-            BlockEntity blockentity = blockstate.hasBlockEntity() ? level.getBlockEntity(blockpos) : null;
++            BlockEntity tileentity = state.hasBlockEntity() ? level.getBlockEntity(pos) : null;
+ 
+-            dropResources(blockstate, level, blockpos, blockentity);
+-            level.removeBlock(blockpos, false);
+-            Direction[] adirection = Direction.values();
+-            int i = adirection.length;
++            dropResources(state, level, pos, tileentity);
++            level.removeBlock(pos, false);
++            Direction[] aenumdirection = Direction.values();
++            int i = aenumdirection.length;
+ 
+             for (int j = 0; j < i; ++j) {
+-                Direction direction = adirection[j];
++                Direction enumdirection = aenumdirection[j];
+ 
+-                level.updateNeighborsAt(blockpos.relative(direction), this);
++                level.updateNeighborsAt(pos.relative(enumdirection), this);
+             }
+ 
+         }
+     }
+ 
+-    protected void checkTickOnNeighbor(Level level, BlockPos blockpos, BlockState blockstate) {
+-        if (!this.isLocked(level, blockpos, blockstate)) {
+-            boolean flag = (Boolean) blockstate.getValue(DiodeBlock.POWERED);
+-            boolean flag1 = this.shouldTurnOn(level, blockpos, blockstate);
++    protected void checkTickOnNeighbor(Level level, BlockPos pos, IBlockData state) {
++        if (!this.isLocked(level, pos, state)) {
++            boolean flag = (Boolean) state.getValue(DiodeBlock.POWERED);
++            boolean flag1 = this.shouldTurnOn(level, pos, state);
+ 
+-            if (flag != flag1 && !level.getBlockTicks().willTickThisTick(blockpos, this)) {
+-                TickPriority tickpriority = TickPriority.HIGH;
++            if (flag != flag1 && !level.getBlockTicks().willTickThisTick(pos, this)) {
++                TickPriority ticklistpriority = TickPriority.HIGH;
+ 
+-                if (this.shouldPrioritize(level, blockpos, blockstate)) {
+-                    tickpriority = TickPriority.EXTREMELY_HIGH;
++                if (this.shouldPrioritize(level, pos, state)) {
++                    ticklistpriority = TickPriority.EXTREMELY_HIGH;
+                 } else if (flag) {
+-                    tickpriority = TickPriority.VERY_HIGH;
++                    ticklistpriority = TickPriority.VERY_HIGH;
+                 }
+ 
+-                level.scheduleTick(blockpos, (Block) this, this.getDelay(blockstate), tickpriority);
++                level.scheduleTick(pos, (Block) this, this.getDelay(state), ticklistpriority);
+             }
+ 
+         }
+     }
+ 
+-    public boolean isLocked(LevelReader levelreader, BlockPos blockpos, BlockState blockstate) {
++    public boolean isLocked(LevelReader level, BlockPos pos, IBlockData state) {
+         return false;
+     }
+ 
+-    protected boolean shouldTurnOn(Level level, BlockPos blockpos, BlockState blockstate) {
+-        return this.getInputSignal(level, blockpos, blockstate) > 0;
++    protected boolean shouldTurnOn(Level level, BlockPos pos, IBlockData state) {
++        return this.getInputSignal(level, pos, state) > 0;
+     }
+ 
+-    protected int getInputSignal(Level level, BlockPos blockpos, BlockState blockstate) {
+-        Direction direction = (Direction) blockstate.getValue(DiodeBlock.FACING);
+-        BlockPos blockpos1 = blockpos.relative(direction);
+-        int i = level.getSignal(blockpos1, direction);
++    protected int getInputSignal(Level level, BlockPos pos, IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(DiodeBlock.FACING);
++        BlockPos blockposition1 = pos.relative(enumdirection);
++        int i = level.getSignal(blockposition1, enumdirection);
+ 
+         if (i >= 15) {
+             return i;
+         } else {
+-            BlockState blockstate1 = level.getBlockState(blockpos1);
++            IBlockData iblockdata1 = level.getBlockState(blockposition1);
+ 
+-            return Math.max(i, blockstate1.is(Blocks.REDSTONE_WIRE) ? (Integer) blockstate1.getValue(RedStoneWireBlock.POWER) : 0);
++            return Math.max(i, iblockdata1.is(Blocks.REDSTONE_WIRE) ? (Integer) iblockdata1.getValue(RedStoneWireBlock.POWER) : 0);
+         }
+     }
+ 
+-    protected int getAlternateSignal(SignalGetter signalgetter, BlockPos blockpos, BlockState blockstate) {
+-        Direction direction = (Direction) blockstate.getValue(DiodeBlock.FACING);
+-        Direction direction1 = direction.getClockWise();
+-        Direction direction2 = direction.getCounterClockWise();
++    protected int getAlternateSignal(SignalGetter level, BlockPos pos, IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(DiodeBlock.FACING);
++        Direction enumdirection1 = enumdirection.getClockWise();
++        Direction enumdirection2 = enumdirection.getCounterClockWise();
+         boolean flag = this.sideInputDiodesOnly();
+ 
+-        return Math.max(signalgetter.getControlInputSignal(blockpos.relative(direction1), direction1, flag), signalgetter.getControlInputSignal(blockpos.relative(direction2), direction2, flag));
++        return Math.max(level.getControlInputSignal(pos.relative(enumdirection1), enumdirection1, flag), level.getControlInputSignal(pos.relative(enumdirection2), enumdirection2, flag));
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isSignalSource(BlockState blockstate) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        return (BlockState) this.defaultBlockState().setValue(DiodeBlock.FACING, blockplacecontext.getHorizontalDirection().getOpposite());
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        return (IBlockData) this.defaultBlockState().setValue(DiodeBlock.FACING, context.getHorizontalDirection().getOpposite());
+     }
+ 
+     @Override
+-    @Override
+-    public void setPlacedBy(Level level, BlockPos blockpos, BlockState blockstate, LivingEntity livingentity, ItemStack itemstack) {
+-        if (this.shouldTurnOn(level, blockpos, blockstate)) {
+-            level.scheduleTick(blockpos, (Block) this, 1);
++    public void setPlacedBy(Level level, BlockPos pos, IBlockData state, LivingEntity placer, ItemStack stack) {
++        if (this.shouldTurnOn(level, pos, state)) {
++            level.scheduleTick(pos, (Block) this, 1);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        this.updateNeighborsInFront(level, blockpos, blockstate);
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
++        this.updateNeighborsInFront(level, pos, state);
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!flag && !blockstate.is(blockstate1.getBlock())) {
+-            super.onRemove(blockstate, level, blockpos, blockstate1, flag);
+-            this.updateNeighborsInFront(level, blockpos, blockstate);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean isMoving) {
++        if (!isMoving && !state.is(newState.getBlock())) {
++            super.onRemove(state, level, pos, newState, isMoving);
++            this.updateNeighborsInFront(level, pos, state);
+         }
+     }
+ 
+-    protected void updateNeighborsInFront(Level level, BlockPos blockpos, BlockState blockstate) {
+-        Direction direction = (Direction) blockstate.getValue(DiodeBlock.FACING);
+-        BlockPos blockpos1 = blockpos.relative(direction.getOpposite());
++    protected void updateNeighborsInFront(Level level, BlockPos pos, IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(DiodeBlock.FACING);
++        BlockPos blockposition1 = pos.relative(enumdirection.getOpposite());
+ 
+-        level.neighborChanged(blockpos1, this, blockpos);
+-        level.updateNeighborsAtExceptFromFacing(blockpos1, this, direction);
++        level.neighborChanged(blockposition1, this, pos);
++        level.updateNeighborsAtExceptFromFacing(blockposition1, this, enumdirection);
+     }
+ 
+     protected boolean sideInputDiodesOnly() {
+         return false;
+     }
+ 
+-    protected int getOutputSignal(BlockGetter blockgetter, BlockPos blockpos, BlockState blockstate) {
++    protected int getOutputSignal(BlockGetter level, BlockPos pos, IBlockData state) {
+         return 15;
+     }
+ 
+-    public static boolean isDiode(BlockState blockstate) {
+-        return blockstate.getBlock() instanceof DiodeBlock;
++    public static boolean isDiode(IBlockData state) {
++        return state.getBlock() instanceof DiodeBlock;
+     }
+ 
+-    public boolean shouldPrioritize(BlockGetter blockgetter, BlockPos blockpos, BlockState blockstate) {
+-        Direction direction = ((Direction) blockstate.getValue(DiodeBlock.FACING)).getOpposite();
+-        BlockState blockstate1 = blockgetter.getBlockState(blockpos.relative(direction));
++    public boolean shouldPrioritize(BlockGetter level, BlockPos pos, IBlockData state) {
++        Direction enumdirection = ((Direction) state.getValue(DiodeBlock.FACING)).getOpposite();
++        IBlockData iblockdata1 = level.getBlockState(pos.relative(enumdirection));
+ 
+-        return isDiode(blockstate1) && blockstate1.getValue(DiodeBlock.FACING) != direction;
++        return isDiode(iblockdata1) && iblockdata1.getValue(DiodeBlock.FACING) != enumdirection;
+     }
+ 
+-    protected abstract int getDelay(BlockState state);
++    protected abstract int getDelay(IBlockData state);
+ }

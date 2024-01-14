@@ -1,0 +1,152 @@
+--- a/net/minecraft/world/entity/decoration/HangingEntity.java
++++ b/net/minecraft/world/entity/decoration/HangingEntity.java
+@@ -25,6 +20,17 @@
+ import net.minecraft.world.phys.Vec3;
+ import org.apache.commons.lang3.Validate;
+ import org.slf4j.Logger;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++// CraftBukkit start
++import net.minecraft.tags.DamageTypeTags;
++import net.minecraft.util.Mth;
++import org.bukkit.entity.Hanging;
++import org.bukkit.event.hanging.HangingBreakByEntityEvent;
++import org.bukkit.event.hanging.HangingBreakEvent;
++// CraftBukkit end
+ 
+ public abstract class HangingEntity extends Entity {
+ 
+@@ -61,9 +66,18 @@
+ 
+     protected void recalculateBoundingBox() {
+         if (this.direction != null) {
+-            double d0 = (double) this.pos.getX() + 0.5D;
+-            double d1 = (double) this.pos.getY() + 0.5D;
+-            double d2 = (double) this.pos.getZ() + 0.5D;
++            // CraftBukkit start code moved in to calculateBoundingBox
++            this.setBoundingBox(calculateBoundingBox(this, this.pos, this.direction, this.getWidth(), this.getHeight()));
++            // CraftBukkit end
++        }
++    }
++
++    // CraftBukkit start - break out BB calc into own method
++    public static AABB calculateBoundingBox(@Nullable Entity entity, BlockPos blockPosition, Direction direction, int width, int height) {
++        {
++            double d0 = (double) blockPosition.getX() + 0.5D;
++            double d1 = (double) blockPosition.getY() + 0.5D;
++            double d2 = (double) blockPosition.getZ() + 0.5D;
+             double d3 = 0.46875D;
+             double d4 = this.offs(this.getWidth());
+             double d5 = this.offs(this.getHeight());
+@@ -92,8 +108,9 @@
+             this.setBoundingBox(new AABB(d0 - d6, d1 - d7, d2 - d8, d0 + d6, d1 + d7, d2 + d8));
+         }
+     }
++    // CraftBukkit end
+ 
+-    private double offs(int i) {
++    private static double offs(int i) { // CraftBukkit - static
+         return i % 32 == 0 ? 0.5D : 0.0D;
+     }
+ 
+@@ -105,6 +121,24 @@
+             if (this.checkInterval++ == 100) {
+                 this.checkInterval = 0;
+                 if (!this.isRemoved() && !this.survives()) {
++                    // CraftBukkit start - fire break events
++                    IBlockData material = this.level().getBlockState(this.blockPosition());
++                    HangingBreakEvent.RemoveCause cause;
++
++                    if (!material.isAir()) {
++                        // TODO: This feels insufficient to catch 100% of suffocation cases
++                        cause = HangingBreakEvent.RemoveCause.OBSTRUCTION;
++                    } else {
++                        cause = HangingBreakEvent.RemoveCause.PHYSICS;
++                    }
++
++                    HangingBreakEvent event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), cause);
++                    this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                    if (this.isRemoved() || event.isCancelled()) {
++                        return;
++                    }
++                    // CraftBukkit end
+                     this.discard();
+                     this.dropItem((Entity) null);
+                 }
+@@ -172,6 +202,22 @@
+             return false;
+         } else {
+             if (!this.isRemoved() && !this.level().isClientSide) {
++                // CraftBukkit start - fire break events
++                Entity damager = (source.isIndirect()) ? source.getEntity() : source.getDirectEntity();
++                HangingBreakEvent event;
++                if (damager != null) {
++                    event = new HangingBreakByEntityEvent((Hanging) this.getBukkitEntity(), damager.getBukkitEntity(), source.is(DamageTypeTags.IS_EXPLOSION) ? HangingBreakEvent.RemoveCause.EXPLOSION : HangingBreakEvent.RemoveCause.ENTITY);
++                } else {
++                    event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), source.is(DamageTypeTags.IS_EXPLOSION) ? HangingBreakEvent.RemoveCause.EXPLOSION : HangingBreakEvent.RemoveCause.DEFAULT);
++                }
++
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (this.isRemoved() || event.isCancelled()) {
++                    return true;
++                }
++                // CraftBukkit end
++
+                 this.kill();
+                 this.markHurt();
+                 this.dropItem(damagesource.getEntity());
+@@ -182,9 +228,20 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void move(MoverType movertype, Vec3 vec3) {
+-        if (!this.level().isClientSide && !this.isRemoved() && vec3.lengthSqr() > 0.0D) {
++    public void move(EnumMoveType type, Vec3 pos) {
++        if (!this.level().isClientSide && !this.isRemoved() && pos.lengthSqr() > 0.0D) {
++            if (this.isRemoved()) return; // CraftBukkit
++
++            // CraftBukkit start - fire break events
++            // TODO - Does this need its own cause? Seems to only be triggered by pistons
++            HangingBreakEvent event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), HangingBreakEvent.RemoveCause.PHYSICS);
++            this.level().getCraftServer().getPluginManager().callEvent(event);
++
++            if (this.isRemoved() || event.isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++
+             this.kill();
+             this.dropItem((Entity) null);
+         }
+@@ -192,16 +249,23 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void push(double d0, double d1, double d2) {
+-        if (!this.level().isClientSide && !this.isRemoved() && d0 * d0 + d1 * d1 + d2 * d2 > 0.0D) {
++    public void push(double x, double d1, double y) {
++        if (false && !this.level().isClientSide && !this.isRemoved() && x * x + d1 * d1 + y * y > 0.0D) { // CraftBukkit - not needed
+             this.kill();
+             this.dropItem((Entity) null);
+         }
+ 
+     }
+ 
++    // CraftBukkit start - selectively save tile position
+     @Override
++    public void addAdditionalSaveData(CompoundTag nbttagcompound, boolean includeAll) {
++        if (includeAll) {
++            addAdditionalSaveData(nbttagcompound);
++        }
++    }
++    // CraftBukkit end
++
+     @Override
+     public void addAdditionalSaveData(CompoundTag compoundtag) {
+         BlockPos blockpos = this.getPos();

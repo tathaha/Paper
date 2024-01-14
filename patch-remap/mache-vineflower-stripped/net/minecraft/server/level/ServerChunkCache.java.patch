@@ -1,0 +1,167 @@
+--- a/net/minecraft/server/level/ServerChunkCache.java
++++ b/net/minecraft/server/level/ServerChunkCache.java
+@@ -107,6 +83,16 @@
+         this.clearCache();
+     }
+ 
++    // CraftBukkit start - properly implement isChunkLoaded
++    public boolean isChunkLoaded(int chunkX, int chunkZ) {
++        ChunkHolder chunk = this.chunkMap.getUpdatingChunkIfPresent(ChunkPos.asLong(chunkX, chunkZ));
++        if (chunk == null) {
++            return false;
++        }
++        return chunk.getFullChunkNow() != null;
++    }
++    // CraftBukkit end
++
+     @Override
+     public ThreadedLevelLightEngine getLightEngine() {
+         return this.lightEngine;
+@@ -143,11 +129,16 @@
+             profiler.incrementCounter("getChunk");
+             long _long = ChunkPos.asLong(chunkX, chunkZ);
+ 
+-            for (int i = 0; i < 4; i++) {
+-                if (_long == this.lastChunkPos[i] && requiredStatus == this.lastChunkStatus[i]) {
+-                    ChunkAccess chunkAccess = this.lastChunk[i];
+-                    if (chunkAccess != null || !load) {
+-                        return chunkAccess;
++            gameprofilerfiller.incrementCounter("getChunk");
++            long k = ChunkPos.asLong(chunkX, chunkZ);
++
++            ChunkAccess ichunkaccess;
++
++            for (int l = 0; l < 4; ++l) {
++                if (k == this.lastChunkPos[l] && requiredStatus == this.lastChunkStatus[l]) {
++                    ichunkaccess = this.lastChunk[l];
++                    if (ichunkaccess != null) { // CraftBukkit - the chunk can become accessible in the meantime TODO for non-null chunks it might also make sense to check that the chunk's state hasn't changed in the meantime
++                        return ichunkaccess;
+                     }
+                 }
+             }
+@@ -229,18 +232,26 @@
+         return chunkFutureMainThread;
+     }
+ 
+-    private CompletableFuture<Either<ChunkAccess, ChunkHolder.ChunkLoadingFailure>> getChunkFutureMainThread(
+-        int x, int y, ChunkStatus chunkStatus, boolean load
+-    ) {
+-        ChunkPos chunkPos = new ChunkPos(x, y);
+-        long l = chunkPos.toLong();
+-        int i = ChunkLevel.byStatus(chunkStatus);
+-        ChunkHolder visibleChunkIfPresent = this.getVisibleChunkIfPresent(l);
+-        if (load) {
+-            this.distanceManager.addTicket(TicketType.UNKNOWN, chunkPos, i, chunkPos);
+-            if (this.chunkAbsent(visibleChunkIfPresent, i)) {
+-                ProfilerFiller profiler = this.level.getProfiler();
+-                profiler.push("chunkLoad");
++    private CompletableFuture<Either<ChunkAccess, ChunkHolder.Failure>> getChunkFutureMainThread(int x, int y, ChunkStatus chunkStatus, boolean load) {
++        ChunkPos chunkcoordintpair = new ChunkPos(x, y);
++        long k = chunkcoordintpair.toLong();
++        int l = ChunkLevel.byStatus(chunkStatus);
++        ChunkHolder playerchunk = this.getVisibleChunkIfPresent(k);
++
++        // CraftBukkit start - don't add new ticket for currently unloading chunk
++        boolean currentlyUnloading = false;
++        if (playerchunk != null) {
++            FullChunkStatus oldChunkState = ChunkLevel.fullStatus(playerchunk.oldTicketLevel);
++            FullChunkStatus currentChunkState = ChunkLevel.fullStatus(playerchunk.getTicketLevel());
++            currentlyUnloading = (oldChunkState.isOrAfter(FullChunkStatus.FULL) && !currentChunkState.isOrAfter(FullChunkStatus.FULL));
++        }
++        if (load && !currentlyUnloading) {
++            // CraftBukkit end
++            this.distanceManager.addTicket(TicketType.UNKNOWN, chunkcoordintpair, l, chunkcoordintpair);
++            if (this.chunkAbsent(playerchunk, l)) {
++                ProfilerFiller gameprofilerfiller = this.level.getProfiler();
++
++                gameprofilerfiller.push("chunkLoad");
+                 this.runDistanceManagerUpdates();
+                 visibleChunkIfPresent = this.getVisibleChunkIfPresent(l);
+                 profiler.pop();
+@@ -256,7 +265,7 @@
+     }
+ 
+     private boolean chunkAbsent(@Nullable ChunkHolder chunkHolder, int status) {
+-        return chunkHolder == null || chunkHolder.getTicketLevel() > status;
++        return chunkHolder == null || chunkHolder.oldTicketLevel > status; // CraftBukkit using oldTicketLevel for isLoaded checks
+     }
+ 
+     @Override
+@@ -331,11 +346,31 @@
+ 
+     @Override
+     public void close() throws IOException {
+-        this.save(true);
++        // CraftBukkit start
++        close(true);
++    }
++
++    public void close(boolean save) throws IOException {
++        if (save) {
++            this.save(true);
++        }
++        // CraftBukkit end
+         this.lightEngine.close();
+         this.chunkMap.close();
+     }
+ 
++    // CraftBukkit start - modelled on below
++    public void purgeUnload() {
++        this.level.getProfiler().push("purge");
++        this.distanceManager.purgeStaleTickets();
++        this.runDistanceManagerUpdates();
++        this.level.getProfiler().popPush("unload");
++        this.chunkMap.tick(() -> true);
++        this.level.getProfiler().pop();
++        this.clearCache();
++    }
++    // CraftBukkit end
++
+     @Override
+     public void tick(BooleanSupplier hasTimeLeft, boolean tickChunks) {
+         this.level.getProfiler().push("purge");
+@@ -371,17 +411,18 @@
+             }
+ 
+             if (this.level.getServer().tickRateManager().runsNormally()) {
+-                profiler.popPush("naturalSpawnCount");
+-                int naturalSpawnChunkCount = this.distanceManager.getNaturalSpawnChunkCount();
+-                NaturalSpawner.SpawnState spawnState = NaturalSpawner.createState(
+-                    naturalSpawnChunkCount, this.level.getAllEntities(), this::getFullChunk, new LocalMobCapCalculator(this.chunkMap)
+-                );
+-                this.lastSpawnState = spawnState;
+-                profiler.popPush("spawnAndTick");
+-                boolean _boolean = this.level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING);
++                gameprofilerfiller.popPush("naturalSpawnCount");
++                int k = this.distanceManager.getNaturalSpawnChunkCount();
++                NaturalSpawner.SpawnState spawnercreature_d = NaturalSpawner.createState(k, this.level.getAllEntities(), this::getFullChunk, new LocalMobCapCalculator(this.chunkMap));
++
++                this.lastSpawnState = spawnercreature_d;
++                gameprofilerfiller.popPush("spawnAndTick");
++                boolean flag = this.level.getGameRules().getBoolean(GameRules.RULE_DOMOBSPAWNING) && !this.level.players().isEmpty(); // CraftBukkit
++
+                 Util.shuffle(list, this.level.random);
+-                int _int = this.level.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
+-                boolean flag = this.level.getLevelData().getGameTime() % 400L == 0L;
++                int l = this.level.getGameRules().getInt(GameRules.RULE_RANDOMTICKING);
++                boolean flag1 = this.level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) != 0L && this.level.getLevelData().getGameTime() % this.level.ticksPerSpawnCategory.getLong(org.bukkit.entity.SpawnCategory.ANIMAL) == 0L; // CraftBukkit
++                Iterator iterator1 = list.iterator();
+ 
+                 for (ServerChunkCache.ChunkAndHolder chunkAndHolder : list) {
+                     LevelChunk levelChunk = chunkAndHolder.chunk;
+@@ -574,6 +624,7 @@
+         }
+ 
+         @Override
++        // CraftBukkit start - process pending Chunk loadCallback() and unloadCallback() after each run task
+         public boolean pollTask() {
+             if (ServerChunkCache.this.runDistanceManagerUpdates()) {
+                 return true;
+@@ -582,5 +636,7 @@
+                 return super.pollTask();
+             }
+         }
++        // CraftBukkit end
++        }
+     }
+ }

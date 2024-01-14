@@ -1,0 +1,354 @@
+--- a/net/minecraft/world/inventory/LoomMenu.java
++++ b/net/minecraft/world/inventory/LoomMenu.java
+@@ -12,7 +12,6 @@
+ import net.minecraft.world.Container;
+ import net.minecraft.world.SimpleContainer;
+ import net.minecraft.world.entity.player.Inventory;
+-import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.BannerItem;
+ import net.minecraft.world.item.BannerPatternItem;
+ import net.minecraft.world.item.BlockItem;
+@@ -23,9 +22,30 @@
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.entity.BannerPattern;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
++// CraftBukkit start
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.inventory.CraftInventoryLoom;
++import org.bukkit.craftbukkit.inventory.CraftInventoryView;
++import org.bukkit.entity.Player;
++// CraftBukkit end
+ 
+ public class LoomMenu extends AbstractContainerMenu {
+ 
++    // CraftBukkit start
++    private CraftInventoryView bukkitEntity = null;
++    private Player player;
++
++    @Override
++    public CraftInventoryView getBukkitView() {
++        if (bukkitEntity != null) {
++            return bukkitEntity;
++        }
++
++        CraftInventoryLoom inventory = new CraftInventoryLoom(this.inputContainer, this.outputContainer);
++        bukkitEntity = new CraftInventoryView(this.player, inventory, this);
++        return bukkitEntity;
++    }
++    // CraftBukkit end
+     private static final int PATTERN_NOT_SET = -1;
+     private static final int INV_SLOT_START = 4;
+     private static final int INV_SLOT_END = 31;
+@@ -43,81 +63,88 @@
+     private final Container inputContainer;
+     private final Container outputContainer;
+ 
+-    public LoomMenu(int i, Inventory inventory) {
+-        this(i, inventory, ContainerLevelAccess.NULL);
++    public LoomMenu(int containerId, Inventory playerInventory) {
++        this(containerId, playerInventory, ContainerLevelAccess.NULL);
+     }
+ 
+-    public LoomMenu(int i, Inventory inventory, final ContainerLevelAccess containerlevelaccess) {
+-        super(MenuType.LOOM, i);
++    public LoomMenu(int containerId, Inventory playerInventory, final ContainerLevelAccess access) {
++        super(MenuType.LOOM, containerId);
+         this.selectedBannerPatternIndex = DataSlot.standalone();
+         this.selectablePatterns = List.of();
+         this.slotUpdateListener = () -> {
+         };
+         this.inputContainer = new SimpleContainer(3) {
+             @Override
+-            @Override
+             public void setChanged() {
+                 super.setChanged();
+                 LoomMenu.this.slotsChanged(this);
+                 LoomMenu.this.slotUpdateListener.run();
+             }
++
++            // CraftBukkit start
++            @Override
++            public Location getLocation() {
++                return access.getLocation();
++            }
++            // CraftBukkit end
+         };
+         this.outputContainer = new SimpleContainer(1) {
+             @Override
+-            @Override
+             public void setChanged() {
+                 super.setChanged();
+                 LoomMenu.this.slotUpdateListener.run();
+             }
++
++            // CraftBukkit start
++            @Override
++            public Location getLocation() {
++                return access.getLocation();
++            }
++            // CraftBukkit end
+         };
+-        this.access = containerlevelaccess;
++        this.access = access;
+         this.bannerSlot = this.addSlot(new Slot(this.inputContainer, 0, 13, 26) {
+             @Override
+-            @Override
+-            public boolean mayPlace(ItemStack itemstack) {
+-                return itemstack.getItem() instanceof BannerItem;
++            public boolean mayPlace(ItemStack stack) {
++                return stack.getItem() instanceof BannerItem;
+             }
+         });
+         this.dyeSlot = this.addSlot(new Slot(this.inputContainer, 1, 33, 26) {
+             @Override
+-            @Override
+-            public boolean mayPlace(ItemStack itemstack) {
+-                return itemstack.getItem() instanceof DyeItem;
++            public boolean mayPlace(ItemStack stack) {
++                return stack.getItem() instanceof DyeItem;
+             }
+         });
+         this.patternSlot = this.addSlot(new Slot(this.inputContainer, 2, 23, 45) {
+             @Override
+-            @Override
+-            public boolean mayPlace(ItemStack itemstack) {
+-                return itemstack.getItem() instanceof BannerPatternItem;
++            public boolean mayPlace(ItemStack stack) {
++                return stack.getItem() instanceof BannerPatternItem;
+             }
+         });
+         this.resultSlot = this.addSlot(new Slot(this.outputContainer, 0, 143, 57) {
+             @Override
+-            @Override
+-            public boolean mayPlace(ItemStack itemstack) {
++            public boolean mayPlace(ItemStack stack) {
+                 return false;
+             }
+ 
+             @Override
+-            @Override
+-            public void onTake(Player player, ItemStack itemstack) {
++            public void onTake(net.minecraft.world.entity.player.Player player, ItemStack stack) {
+                 LoomMenu.this.bannerSlot.remove(1);
+                 LoomMenu.this.dyeSlot.remove(1);
+                 if (!LoomMenu.this.bannerSlot.hasItem() || !LoomMenu.this.dyeSlot.hasItem()) {
+                     LoomMenu.this.selectedBannerPatternIndex.set(-1);
+                 }
+ 
+-                containerlevelaccess.execute((level, blockpos) -> {
+-                    long j = level.getGameTime();
++                access.execute((world, blockposition) -> {
++                    long j = world.getGameTime();
+ 
+                     if (LoomMenu.this.lastSoundTime != j) {
+-                        level.playSound((Player) null, blockpos, SoundEvents.UI_LOOM_TAKE_RESULT, SoundSource.BLOCKS, 1.0F, 1.0F);
++                        world.playSound((net.minecraft.world.entity.player.Player) null, blockposition, SoundEvents.UI_LOOM_TAKE_RESULT, SoundSource.BLOCKS, 1.0F, 1.0F);
+                         LoomMenu.this.lastSoundTime = j;
+                     }
+ 
+                 });
+-                super.onTake(player, itemstack);
++                super.onTake(player, stack);
+             }
+         });
+ 
+@@ -125,58 +152,57 @@
+ 
+         for (j = 0; j < 3; ++j) {
+             for (int k = 0; k < 9; ++k) {
+-                this.addSlot(new Slot(inventory, k + j * 9 + 9, 8 + k * 18, 84 + j * 18));
++                this.addSlot(new Slot(playerInventory, k + j * 9 + 9, 8 + k * 18, 84 + j * 18));
+             }
+         }
+ 
+         for (j = 0; j < 9; ++j) {
+-            this.addSlot(new Slot(inventory, j, 8 + j * 18, 142));
++            this.addSlot(new Slot(playerInventory, j, 8 + j * 18, 142));
+         }
+ 
+         this.addDataSlot(this.selectedBannerPatternIndex);
++        player = (Player) playerInventory.player.getBukkitEntity(); // CraftBukkit
+     }
+ 
+     @Override
+-    @Override
+-    public boolean stillValid(Player player) {
++    public boolean stillValid(net.minecraft.world.entity.player.Player player) {
++        if (!this.checkReachable) return true; // CraftBukkit
+         return stillValid(this.access, player, Blocks.LOOM);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean clickMenuButton(Player player, int i) {
+-        if (i >= 0 && i < this.selectablePatterns.size()) {
+-            this.selectedBannerPatternIndex.set(i);
+-            this.setupResultSlot((Holder) this.selectablePatterns.get(i));
++    public boolean clickMenuButton(net.minecraft.world.entity.player.Player player, int id) {
++        if (id >= 0 && id < this.selectablePatterns.size()) {
++            this.selectedBannerPatternIndex.set(id);
++            this.setupResultSlot((Holder) this.selectablePatterns.get(id));
+             return true;
+         } else {
+             return false;
+         }
+     }
+ 
+-    private List<Holder<BannerPattern>> getSelectablePatterns(ItemStack itemstack) {
+-        if (itemstack.isEmpty()) {
++    private List<Holder<BannerPattern>> getSelectablePatterns(ItemStack stack) {
++        if (stack.isEmpty()) {
+             return (List) BuiltInRegistries.BANNER_PATTERN.getTag(BannerPatternTags.NO_ITEM_REQUIRED).map(ImmutableList::copyOf).orElse(ImmutableList.of());
+         } else {
+-            Item item = itemstack.getItem();
++            Item item = stack.getItem();
+ 
+             if (item instanceof BannerPatternItem) {
+-                BannerPatternItem bannerpatternitem = (BannerPatternItem) item;
++                BannerPatternItem itembannerpattern = (BannerPatternItem) item;
+ 
+-                return (List) BuiltInRegistries.BANNER_PATTERN.getTag(bannerpatternitem.getBannerPattern()).map(ImmutableList::copyOf).orElse(ImmutableList.of());
++                return (List) BuiltInRegistries.BANNER_PATTERN.getTag(itembannerpattern.getBannerPattern()).map(ImmutableList::copyOf).orElse(ImmutableList.of());
+             } else {
+                 return List.of();
+             }
+         }
+     }
+ 
+-    private boolean isValidPatternIndex(int i) {
+-        return i >= 0 && i < this.selectablePatterns.size();
++    private boolean isValidPatternIndex(int index) {
++        return index >= 0 && index < this.selectablePatterns.size();
+     }
+ 
+     @Override
+-    @Override
+-    public void slotsChanged(Container container) {
++    public void slotsChanged(Container inventory) {
+         ItemStack itemstack = this.bannerSlot.getItem();
+         ItemStack itemstack1 = this.dyeSlot.getItem();
+         ItemStack itemstack2 = this.patternSlot.getItem();
+@@ -209,8 +235,8 @@
+             }
+ 
+             if (holder != null) {
+-                CompoundTag compoundtag = BlockItem.getBlockEntityData(itemstack);
+-                boolean flag1 = compoundtag != null && compoundtag.contains("Patterns", 9) && !itemstack.isEmpty() && compoundtag.getList("Patterns", 10).size() >= 6;
++                CompoundTag nbttagcompound = BlockItem.getBlockEntityData(itemstack);
++                boolean flag1 = nbttagcompound != null && nbttagcompound.contains("Patterns", 9) && !itemstack.isEmpty() && nbttagcompound.getList("Patterns", 10).size() >= 6;
+ 
+                 if (flag1) {
+                     this.selectedBannerPatternIndex.set(-1);
+@@ -238,27 +264,26 @@
+         return this.selectedBannerPatternIndex.get();
+     }
+ 
+-    public void registerUpdateListener(Runnable runnable) {
+-        this.slotUpdateListener = runnable;
++    public void registerUpdateListener(Runnable listener) {
++        this.slotUpdateListener = listener;
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack quickMoveStack(Player player, int i) {
++    public ItemStack quickMoveStack(net.minecraft.world.entity.player.Player player, int index) {
+         ItemStack itemstack = ItemStack.EMPTY;
+-        Slot slot = (Slot) this.slots.get(i);
++        Slot slot = (Slot) this.slots.get(index);
+ 
+         if (slot != null && slot.hasItem()) {
+             ItemStack itemstack1 = slot.getItem();
+ 
+             itemstack = itemstack1.copy();
+-            if (i == this.resultSlot.index) {
++            if (index == this.resultSlot.index) {
+                 if (!this.moveItemStackTo(itemstack1, 4, 40, true)) {
+                     return ItemStack.EMPTY;
+                 }
+ 
+                 slot.onQuickCraft(itemstack1, itemstack);
+-            } else if (i != this.dyeSlot.index && i != this.bannerSlot.index && i != this.patternSlot.index) {
++            } else if (index != this.dyeSlot.index && index != this.bannerSlot.index && index != this.patternSlot.index) {
+                 if (itemstack1.getItem() instanceof BannerItem) {
+                     if (!this.moveItemStackTo(itemstack1, this.bannerSlot.index, this.bannerSlot.index + 1, false)) {
+                         return ItemStack.EMPTY;
+@@ -271,11 +296,11 @@
+                     if (!this.moveItemStackTo(itemstack1, this.patternSlot.index, this.patternSlot.index + 1, false)) {
+                         return ItemStack.EMPTY;
+                     }
+-                } else if (i >= 4 && i < 31) {
++                } else if (index >= 4 && index < 31) {
+                     if (!this.moveItemStackTo(itemstack1, 31, 40, false)) {
+                         return ItemStack.EMPTY;
+                     }
+-                } else if (i >= 31 && i < 40 && !this.moveItemStackTo(itemstack1, 4, 31, false)) {
++                } else if (index >= 31 && index < 40 && !this.moveItemStackTo(itemstack1, 4, 31, false)) {
+                     return ItemStack.EMPTY;
+                 }
+             } else if (!this.moveItemStackTo(itemstack1, 4, 40, false)) {
+@@ -299,42 +324,46 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void removed(Player player) {
++    public void removed(net.minecraft.world.entity.player.Player player) {
+         super.removed(player);
+-        this.access.execute((level, blockpos) -> {
++        this.access.execute((world, blockposition) -> {
+             this.clearContainer(player, this.inputContainer);
+         });
+     }
+ 
+-    private void setupResultSlot(Holder<BannerPattern> holder) {
++    private void setupResultSlot(Holder<BannerPattern> pattern) {
+         ItemStack itemstack = this.bannerSlot.getItem();
+         ItemStack itemstack1 = this.dyeSlot.getItem();
+         ItemStack itemstack2 = ItemStack.EMPTY;
+ 
+         if (!itemstack.isEmpty() && !itemstack1.isEmpty()) {
+             itemstack2 = itemstack.copyWithCount(1);
+-            DyeColor dyecolor = ((DyeItem) itemstack1.getItem()).getDyeColor();
+-            CompoundTag compoundtag = BlockItem.getBlockEntityData(itemstack2);
+-            ListTag listtag;
++            DyeColor enumcolor = ((DyeItem) itemstack1.getItem()).getDyeColor();
++            CompoundTag nbttagcompound = BlockItem.getBlockEntityData(itemstack2);
++            ListTag nbttaglist;
+ 
+-            if (compoundtag != null && compoundtag.contains("Patterns", 9)) {
+-                listtag = compoundtag.getList("Patterns", 10);
++            if (nbttagcompound != null && nbttagcompound.contains("Patterns", 9)) {
++                nbttaglist = nbttagcompound.getList("Patterns", 10);
++                // CraftBukkit start
++                while (nbttaglist.size() > 20) {
++                    nbttaglist.remove(20);
++                }
++                // CraftBukkit end
+             } else {
+-                listtag = new ListTag();
+-                if (compoundtag == null) {
+-                    compoundtag = new CompoundTag();
++                nbttaglist = new ListTag();
++                if (nbttagcompound == null) {
++                    nbttagcompound = new CompoundTag();
+                 }
+ 
+-                compoundtag.put("Patterns", listtag);
++                nbttagcompound.put("Patterns", nbttaglist);
+             }
+ 
+-            CompoundTag compoundtag1 = new CompoundTag();
++            CompoundTag nbttagcompound1 = new CompoundTag();
+ 
+-            compoundtag1.putString("Pattern", ((BannerPattern) holder.value()).getHashname());
+-            compoundtag1.putInt("Color", dyecolor.getId());
+-            listtag.add(compoundtag1);
+-            BlockItem.setBlockEntityData(itemstack2, BlockEntityType.BANNER, compoundtag);
++            nbttagcompound1.putString("Pattern", ((BannerPattern) pattern.value()).getHashname());
++            nbttagcompound1.putInt("Color", enumcolor.getId());
++            nbttaglist.add(nbttagcompound1);
++            BlockItem.setBlockEntityData(itemstack2, BlockEntityType.BANNER, nbttagcompound);
+         }
+ 
+         if (!ItemStack.matches(itemstack2, this.resultSlot.getItem())) {

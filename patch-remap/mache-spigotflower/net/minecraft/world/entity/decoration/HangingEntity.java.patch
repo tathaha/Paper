@@ -1,0 +1,420 @@
+--- a/net/minecraft/world/entity/decoration/HangingEntity.java
++++ b/net/minecraft/world/entity/decoration/HangingEntity.java
+@@ -3,16 +3,11 @@
+ import com.mojang.logging.LogUtils;
+ import java.util.function.Predicate;
+ import javax.annotation.Nullable;
+-import net.minecraft.core.BlockPos;
+-import net.minecraft.core.Direction;
+-import net.minecraft.nbt.CompoundTag;
+-import net.minecraft.server.level.ServerLevel;
+-import net.minecraft.util.Mth;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.LightningBolt;
+-import net.minecraft.world.entity.MoverType;
+ import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+@@ -20,11 +15,22 @@
+ import net.minecraft.world.level.block.DiodeBlock;
+ import net.minecraft.world.level.block.Mirror;
+ import net.minecraft.world.level.block.Rotation;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.apache.commons.lang3.Validate;
+ import org.slf4j.Logger;
++import net.minecraft.core.BlockPos;
++import net.minecraft.core.Direction;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.server.level.ServerLevel;
++// CraftBukkit start
++import net.minecraft.tags.DamageTypeTags;
++import net.minecraft.util.Mth;
++import org.bukkit.entity.Hanging;
++import org.bukkit.event.hanging.HangingBreakByEntityEvent;
++import org.bukkit.event.hanging.HangingBreakEvent;
++// CraftBukkit end
+ 
+ public abstract class HangingEntity extends Entity {
+ 
+@@ -33,27 +39,26 @@
+         return entity instanceof HangingEntity;
+     };
+     private int checkInterval;
+-    protected BlockPos pos;
++    public BlockPos pos;
+     protected Direction direction;
+ 
+-    protected HangingEntity(EntityType<? extends HangingEntity> entitytype, Level level) {
+-        super(entitytype, level);
++    protected HangingEntity(EntityType<? extends HangingEntity> entityType, Level level) {
++        super(entityType, level);
+         this.direction = Direction.SOUTH;
+     }
+ 
+-    protected HangingEntity(EntityType<? extends HangingEntity> entitytype, Level level, BlockPos blockpos) {
+-        this(entitytype, level);
+-        this.pos = blockpos;
++    protected HangingEntity(EntityType<? extends HangingEntity> entityType, Level level, BlockPos pos) {
++        this(entityType, level);
++        this.pos = pos;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {}
+ 
+-    protected void setDirection(Direction direction) {
+-        Validate.notNull(direction);
+-        Validate.isTrue(direction.getAxis().isHorizontal());
+-        this.direction = direction;
++    public void setDirection(Direction facingDirection) {
++        Validate.notNull(facingDirection);
++        Validate.isTrue(facingDirection.getAxis().isHorizontal());
++        this.direction = facingDirection;
+         this.setYRot((float) (this.direction.get2DDataValue() * 90));
+         this.yRotO = this.getYRot();
+         this.recalculateBoundingBox();
+@@ -61,26 +66,37 @@
+ 
+     protected void recalculateBoundingBox() {
+         if (this.direction != null) {
+-            double d0 = (double) this.pos.getX() + 0.5D;
+-            double d1 = (double) this.pos.getY() + 0.5D;
+-            double d2 = (double) this.pos.getZ() + 0.5D;
++            // CraftBukkit start code moved in to calculateBoundingBox
++            this.setBoundingBox(calculateBoundingBox(this, this.pos, this.direction, this.getWidth(), this.getHeight()));
++            // CraftBukkit end
++        }
++    }
++
++    // CraftBukkit start - break out BB calc into own method
++    public static AABB calculateBoundingBox(@Nullable Entity entity, BlockPos blockPosition, Direction direction, int width, int height) {
++        {
++            double d0 = (double) blockPosition.getX() + 0.5D;
++            double d1 = (double) blockPosition.getY() + 0.5D;
++            double d2 = (double) blockPosition.getZ() + 0.5D;
+             double d3 = 0.46875D;
+-            double d4 = this.offs(this.getWidth());
+-            double d5 = this.offs(this.getHeight());
++            double d4 = offs(width);
++            double d5 = offs(height);
+ 
+-            d0 -= (double) this.direction.getStepX() * 0.46875D;
+-            d2 -= (double) this.direction.getStepZ() * 0.46875D;
++            d0 -= (double) direction.getStepX() * 0.46875D;
++            d2 -= (double) direction.getStepZ() * 0.46875D;
+             d1 += d5;
+-            Direction direction = this.direction.getCounterClockWise();
++            Direction enumdirection = direction.getCounterClockWise();
+ 
+-            d0 += d4 * (double) direction.getStepX();
+-            d2 += d4 * (double) direction.getStepZ();
+-            this.setPosRaw(d0, d1, d2);
+-            double d6 = (double) this.getWidth();
+-            double d7 = (double) this.getHeight();
+-            double d8 = (double) this.getWidth();
++            d0 += d4 * (double) enumdirection.getStepX();
++            d2 += d4 * (double) enumdirection.getStepZ();
++            if (entity != null) {
++                entity.setPosRaw(d0, d1, d2);
++            }
++            double d6 = (double) width;
++            double d7 = (double) height;
++            double d8 = (double) width;
+ 
+-            if (this.direction.getAxis() == Direction.Axis.Z) {
++            if (direction.getAxis() == Direction.Axis.Z) {
+                 d8 = 1.0D;
+             } else {
+                 d6 = 1.0D;
+@@ -89,22 +105,40 @@
+             d6 /= 32.0D;
+             d7 /= 32.0D;
+             d8 /= 32.0D;
+-            this.setBoundingBox(new AABB(d0 - d6, d1 - d7, d2 - d8, d0 + d6, d1 + d7, d2 + d8));
++            return new AABB(d0 - d6, d1 - d7, d2 - d8, d0 + d6, d1 + d7, d2 + d8);
+         }
+     }
++    // CraftBukkit end
+ 
+-    private double offs(int i) {
++    private static double offs(int i) { // CraftBukkit - static
+         return i % 32 == 0 ? 0.5D : 0.0D;
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         if (!this.level().isClientSide) {
+             this.checkBelowWorld();
+             if (this.checkInterval++ == 100) {
+                 this.checkInterval = 0;
+                 if (!this.isRemoved() && !this.survives()) {
++                    // CraftBukkit start - fire break events
++                    IBlockData material = this.level().getBlockState(this.blockPosition());
++                    HangingBreakEvent.RemoveCause cause;
++
++                    if (!material.isAir()) {
++                        // TODO: This feels insufficient to catch 100% of suffocation cases
++                        cause = HangingBreakEvent.RemoveCause.OBSTRUCTION;
++                    } else {
++                        cause = HangingBreakEvent.RemoveCause.PHYSICS;
++                    }
++
++                    HangingBreakEvent event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), cause);
++                    this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                    if (this.isRemoved() || event.isCancelled()) {
++                        return;
++                    }
++                    // CraftBukkit end
+                     this.discard();
+                     this.dropItem((Entity) null);
+                 }
+@@ -119,19 +153,19 @@
+         } else {
+             int i = Math.max(1, this.getWidth() / 16);
+             int j = Math.max(1, this.getHeight() / 16);
+-            BlockPos blockpos = this.pos.relative(this.direction.getOpposite());
+-            Direction direction = this.direction.getCounterClockWise();
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
++            BlockPos blockposition = this.pos.relative(this.direction.getOpposite());
++            Direction enumdirection = this.direction.getCounterClockWise();
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+ 
+             for (int k = 0; k < i; ++k) {
+                 for (int l = 0; l < j; ++l) {
+                     int i1 = (i - 1) / -2;
+                     int j1 = (j - 1) / -2;
+ 
+-                    blockpos_mutableblockpos.set(blockpos).move(direction, k + i1).move(Direction.UP, l + j1);
+-                    BlockState blockstate = this.level().getBlockState(blockpos_mutableblockpos);
++                    blockposition_mutableblockposition.set(blockposition).move(enumdirection, k + i1).move(Direction.UP, l + j1);
++                    IBlockData iblockdata = this.level().getBlockState(blockposition_mutableblockposition);
+ 
+-                    if (!blockstate.isSolid() && !DiodeBlock.isDiode(blockstate)) {
++                    if (!iblockdata.isSolid() && !DiodeBlock.isDiode(iblockdata)) {
+                         return false;
+                     }
+                 }
+@@ -142,39 +176,51 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+     public boolean skipAttackInteraction(Entity entity) {
+         if (entity instanceof Player) {
+-            Player player = (Player) entity;
++            Player entityhuman = (Player) entity;
+ 
+-            return !this.level().mayInteract(player, this.pos) ? true : this.hurt(this.damageSources().playerAttack(player), 0.0F);
++            return !this.level().mayInteract(entityhuman, this.pos) ? true : this.hurt(this.damageSources().playerAttack(entityhuman), 0.0F);
+         } else {
+             return false;
+         }
+     }
+ 
+     @Override
+-    @Override
+     public Direction getDirection() {
+         return this.direction;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
+-        if (this.isInvulnerableTo(damagesource)) {
++    public boolean hurt(DamageSource source, float amount) {
++        if (this.isInvulnerableTo(source)) {
+             return false;
+         } else {
+             if (!this.isRemoved() && !this.level().isClientSide) {
++                // CraftBukkit start - fire break events
++                Entity damager = (source.isIndirect()) ? source.getEntity() : source.getDirectEntity();
++                HangingBreakEvent event;
++                if (damager != null) {
++                    event = new HangingBreakByEntityEvent((Hanging) this.getBukkitEntity(), damager.getBukkitEntity(), source.is(DamageTypeTags.IS_EXPLOSION) ? HangingBreakEvent.RemoveCause.EXPLOSION : HangingBreakEvent.RemoveCause.ENTITY);
++                } else {
++                    event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), source.is(DamageTypeTags.IS_EXPLOSION) ? HangingBreakEvent.RemoveCause.EXPLOSION : HangingBreakEvent.RemoveCause.DEFAULT);
++                }
++
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (this.isRemoved() || event.isCancelled()) {
++                    return true;
++                }
++                // CraftBukkit end
++
+                 this.kill();
+                 this.markHurt();
+-                this.dropItem(damagesource.getEntity());
++                this.dropItem(source.getEntity());
+             }
+ 
+             return true;
+@@ -182,9 +228,20 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void move(MoverType movertype, Vec3 vec3) {
+-        if (!this.level().isClientSide && !this.isRemoved() && vec3.lengthSqr() > 0.0D) {
++    public void move(EnumMoveType type, Vec3 pos) {
++        if (!this.level().isClientSide && !this.isRemoved() && pos.lengthSqr() > 0.0D) {
++            if (this.isRemoved()) return; // CraftBukkit
++
++            // CraftBukkit start - fire break events
++            // TODO - Does this need its own cause? Seems to only be triggered by pistons
++            HangingBreakEvent event = new HangingBreakEvent((Hanging) this.getBukkitEntity(), HangingBreakEvent.RemoveCause.PHYSICS);
++            this.level().getCraftServer().getPluginManager().callEvent(event);
++
++            if (this.isRemoved() || event.isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++
+             this.kill();
+             this.dropItem((Entity) null);
+         }
+@@ -192,34 +249,40 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void push(double d0, double d1, double d2) {
+-        if (!this.level().isClientSide && !this.isRemoved() && d0 * d0 + d1 * d1 + d2 * d2 > 0.0D) {
++    public void push(double x, double d1, double y) {
++        if (false && !this.level().isClientSide && !this.isRemoved() && x * x + d1 * d1 + y * y > 0.0D) { // CraftBukkit - not needed
+             this.kill();
+             this.dropItem((Entity) null);
+         }
+ 
+     }
+ 
++    // CraftBukkit start - selectively save tile position
+     @Override
++    public void addAdditionalSaveData(CompoundTag nbttagcompound, boolean includeAll) {
++        if (includeAll) {
++            addAdditionalSaveData(nbttagcompound);
++        }
++    }
++    // CraftBukkit end
++
+     @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        BlockPos blockpos = this.getPos();
++    public void addAdditionalSaveData(CompoundTag compound) {
++        BlockPos blockposition = this.getPos();
+ 
+-        compoundtag.putInt("TileX", blockpos.getX());
+-        compoundtag.putInt("TileY", blockpos.getY());
+-        compoundtag.putInt("TileZ", blockpos.getZ());
++        compound.putInt("TileX", blockposition.getX());
++        compound.putInt("TileY", blockposition.getY());
++        compound.putInt("TileZ", blockposition.getZ());
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        BlockPos blockpos = new BlockPos(compoundtag.getInt("TileX"), compoundtag.getInt("TileY"), compoundtag.getInt("TileZ"));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        BlockPos blockposition = new BlockPos(compound.getInt("TileX"), compound.getInt("TileY"), compound.getInt("TileZ"));
+ 
+-        if (!blockpos.closerThan(this.blockPosition(), 16.0D)) {
+-            HangingEntity.LOGGER.error("Hanging entity at invalid position: {}", blockpos);
++        if (!blockposition.closerThan(this.blockPosition(), 16.0D)) {
++            HangingEntity.LOGGER.error("Hanging entity at invalid position: {}", blockposition);
+         } else {
+-            this.pos = blockpos;
++            this.pos = blockposition;
+         }
+     }
+ 
+@@ -232,25 +295,22 @@
+     public abstract void playPlacementSound();
+ 
+     @Override
+-    @Override
+-    public ItemEntity spawnAtLocation(ItemStack itemstack, float f) {
+-        ItemEntity itementity = new ItemEntity(this.level(), this.getX() + (double) ((float) this.direction.getStepX() * 0.15F), this.getY() + (double) f, this.getZ() + (double) ((float) this.direction.getStepZ() * 0.15F), itemstack);
++    public ItemEntity spawnAtLocation(ItemStack stack, float offsetY) {
++        ItemEntity entityitem = new ItemEntity(this.level(), this.getX() + (double) ((float) this.direction.getStepX() * 0.15F), this.getY() + (double) offsetY, this.getZ() + (double) ((float) this.direction.getStepZ() * 0.15F), stack);
+ 
+-        itementity.setDefaultPickUpDelay();
+-        this.level().addFreshEntity(itementity);
+-        return itementity;
++        entityitem.setDefaultPickUpDelay();
++        this.level().addFreshEntity(entityitem);
++        return entityitem;
+     }
+ 
+     @Override
+-    @Override
+     protected boolean repositionEntityAfterLoad() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public void setPos(double d0, double d1, double d2) {
+-        this.pos = BlockPos.containing(d0, d1, d2);
++    public void setPos(double x, double d1, double y) {
++        this.pos = BlockPos.containing(x, d1, y);
+         this.recalculateBoundingBox();
+         this.hasImpulse = true;
+     }
+@@ -260,10 +320,9 @@
+     }
+ 
+     @Override
+-    @Override
+-    public float rotate(Rotation rotation) {
++    public float rotate(Rotation transformRotation) {
+         if (this.direction.getAxis() != Direction.Axis.Y) {
+-            switch (rotation) {
++            switch (transformRotation) {
+                 case CLOCKWISE_180:
+                     this.direction = this.direction.getOpposite();
+                     break;
+@@ -277,7 +336,7 @@
+ 
+         float f = Mth.wrapDegrees(this.getYRot());
+ 
+-        switch (rotation) {
++        switch (transformRotation) {
+             case CLOCKWISE_180:
+                 return f + 180.0F;
+             case COUNTERCLOCKWISE_90:
+@@ -290,16 +349,13 @@
+     }
+ 
+     @Override
+-    @Override
+-    public float mirror(Mirror mirror) {
+-        return this.rotate(mirror.getRotation(this.direction));
++    public float mirror(Mirror transformMirror) {
++        return this.rotate(transformMirror.getRotation(this.direction));
+     }
+ 
+     @Override
+-    @Override
+-    public void thunderHit(ServerLevel serverlevel, LightningBolt lightningbolt) {}
++    public void thunderHit(ServerLevel level, LightningBolt lightning) {}
+ 
+     @Override
+-    @Override
+     public void refreshDimensions() {}
+ }

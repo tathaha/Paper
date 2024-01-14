@@ -1,0 +1,70 @@
+--- a/net/minecraft/commands/CommandSourceStack.java
++++ b/net/minecraft/commands/CommandSourceStack.java
+@@ -42,6 +43,7 @@
+ import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.phys.Vec2;
+ import net.minecraft.world.phys.Vec3;
++import com.mojang.brigadier.tree.CommandNode; // CraftBukkit
+ 
+ public class CommandSourceStack implements ExecutionCommandSource<CommandSourceStack>, SharedSuggestionProvider {
+     public static final SimpleCommandExceptionType ERROR_NOT_PLAYER = new SimpleCommandExceptionType(Component.translatable("permissions.requires.player"));
+@@ -61,6 +64,7 @@
+     private final Vec2 rotation;
+     private final CommandSigningContext signingContext;
+     private final TaskChainer chatMessageChainer;
++    public volatile CommandNode currentCommand; // CraftBukkit
+ 
+     public CommandSourceStack(
+         CommandSource source,
+@@ -389,9 +171,23 @@
+ 
+     @Override
+     public boolean hasPermission(int level) {
++        // CraftBukkit start
++        CommandNode currentCommand = this.currentCommand;
++        if (currentCommand != null) {
++            return hasPermission(level, org.bukkit.craftbukkit.command.VanillaCommandWrapper.getPermission(currentCommand));
++        }
++        // CraftBukkit end
++
+         return this.permissionLevel >= level;
+     }
+ 
++    // CraftBukkit start
++    public boolean hasPermission(int i, String bukkitPermission) {
++        // World is null when loading functions
++        return ((getLevel() == null || !getLevel().getCraftServer().ignoreVanillaPermissions) && this.permissionLevel >= i) || getBukkitSender().hasPermission(bukkitPermission);
++    }
++    // CraftBukkit end
++
+     public Vec3 getPosition() {
+         return this.worldPosition;
+     }
+@@ -496,9 +315,13 @@
+     private void broadcastToAdmins(Component message) {
+         Component component = Component.translatable("chat.type.admin", this.getDisplayName(), message).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC);
+         if (this.server.getGameRules().getBoolean(GameRules.RULE_SENDCOMMANDFEEDBACK)) {
+-            for (ServerPlayer serverPlayer : this.server.getPlayerList().getPlayers()) {
+-                if (serverPlayer != this.source && this.server.getPlayerList().isOp(serverPlayer.getGameProfile())) {
+-                    serverPlayer.sendSystemMessage(component);
++            Iterator iterator = this.server.getPlayerList().getPlayers().iterator();
++
++            while (iterator.hasNext()) {
++                ServerPlayer entityplayer = (ServerPlayer) iterator.next();
++
++                if (entityplayer != this.source && entityplayer.getBukkitEntity().hasPermission("minecraft.admin.command_feedback")) { // CraftBukkit
++                    entityplayer.sendSystemMessage(ichatmutablecomponent);
+                 }
+             }
+         }
+@@ -592,4 +413,10 @@
+     public boolean isSilent() {
+         return this.silent;
+     }
++
++    // CraftBukkit start
++    public org.bukkit.command.CommandSender getBukkitSender() {
++        return source.getBukkitSender(this);
++    }
++    // CraftBukkit end
+ }

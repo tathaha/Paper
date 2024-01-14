@@ -1,0 +1,180 @@
+--- a/net/minecraft/world/inventory/SmithingMenu.java
++++ b/net/minecraft/world/inventory/SmithingMenu.java
+@@ -3,7 +3,6 @@
+ import java.util.List;
+ import java.util.OptionalInt;
+ import javax.annotation.Nullable;
+-import net.minecraft.core.BlockPos;
+ import net.minecraft.world.entity.player.Inventory;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+@@ -12,9 +11,12 @@
+ import net.minecraft.world.item.crafting.SmithingRecipe;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ 
++import org.bukkit.craftbukkit.inventory.CraftInventoryView; // CraftBukkit
++
+ public class SmithingMenu extends ItemCombinerMenu {
++
+     public static final int TEMPLATE_SLOT = 0;
+     public static final int BASE_SLOT = 1;
+     public static final int ADDITIONAL_SLOT = 2;
+@@ -28,6 +30,9 @@
+     @Nullable
+     private RecipeHolder<SmithingRecipe> selectedRecipe;
+     private final List<RecipeHolder<SmithingRecipe>> recipes;
++    // CraftBukkit start
++    private CraftInventoryView bukkitEntity;
++    // CraftBukkit end
+ 
+     public SmithingMenu(int containerId, Inventory playerInventory) {
+         this(containerId, playerInventory, ContainerLevelAccess.NULL);
+@@ -41,22 +46,29 @@
+ 
+     @Override
+     protected ItemCombinerMenuSlotDefinition createInputSlotDefinitions() {
+-        return ItemCombinerMenuSlotDefinition.create()
+-            .withSlot(0, 8, 48, itemStack -> this.recipes.stream().anyMatch(recipeHolder -> recipeHolder.value().isTemplateIngredient(itemStack)))
+-            .withSlot(1, 26, 48, itemStack -> this.recipes.stream().anyMatch(recipeHolder -> recipeHolder.value().isBaseIngredient(itemStack)))
+-            .withSlot(2, 44, 48, itemStack -> this.recipes.stream().anyMatch(recipeHolder -> recipeHolder.value().isAdditionIngredient(itemStack)))
+-            .withResultSlot(3, 98, 48)
+-            .build();
++        return ItemCombinerMenuSlotDefinition.create().withSlot(0, 8, 48, (itemstack) -> {
++            return this.recipes.stream().anyMatch((recipeholder) -> {
++                return ((SmithingRecipe) recipeholder.value()).isTemplateIngredient(itemstack);
++            });
++        }).withSlot(1, 26, 48, (itemstack) -> {
++            return this.recipes.stream().anyMatch((recipeholder) -> {
++                return ((SmithingRecipe) recipeholder.value()).isBaseIngredient(itemstack);
++            });
++        }).withSlot(2, 44, 48, (itemstack) -> {
++            return this.recipes.stream().anyMatch((recipeholder) -> {
++                return ((SmithingRecipe) recipeholder.value()).isAdditionIngredient(itemstack);
++            });
++        }).withResultSlot(3, 98, 48).build();
+     }
+ 
+     @Override
+-    protected boolean isValidBlock(BlockState state) {
++    protected boolean isValidBlock(IBlockData state) {
+         return state.is(Blocks.SMITHING_TABLE);
+     }
+ 
+     @Override
+     protected boolean mayPickup(Player player, boolean hasStack) {
+-        return this.selectedRecipe != null && this.selectedRecipe.value().matches(this.inputSlots, this.level);
++        return this.selectedRecipe != null && ((SmithingRecipe) this.selectedRecipe.value()).matches(this.inputSlots, this.level);
+     }
+ 
+     @Override
+@@ -66,7 +78,9 @@
+         this.shrinkStackInSlot(0);
+         this.shrinkStackInSlot(1);
+         this.shrinkStackInSlot(2);
+-        this.access.execute((level, blockPos) -> level.levelEvent(1044, blockPos, 0));
++        this.access.execute((world, blockposition) -> {
++            world.levelEvent(1044, blockposition, 0);
++        });
+     }
+ 
+     private List<ItemStack> getRelevantItems() {
+@@ -74,27 +88,34 @@
+     }
+ 
+     private void shrinkStackInSlot(int index) {
+-        ItemStack item = this.inputSlots.getItem(index);
+-        if (!item.isEmpty()) {
+-            item.shrink(1);
+-            this.inputSlots.setItem(index, item);
++        ItemStack itemstack = this.inputSlots.getItem(index);
++
++        if (!itemstack.isEmpty()) {
++            itemstack.shrink(1);
++            this.inputSlots.setItem(index, itemstack);
+         }
++
+     }
+ 
+     @Override
+     public void createResult() {
+-        List<RecipeHolder<SmithingRecipe>> recipesFor = this.level.getRecipeManager().getRecipesFor(RecipeType.SMITHING, this.inputSlots, this.level);
+-        if (recipesFor.isEmpty()) {
+-            this.resultSlots.setItem(0, ItemStack.EMPTY);
++        List<RecipeHolder<SmithingRecipe>> list = this.level.getRecipeManager().getRecipesFor(RecipeType.SMITHING, this.inputSlots, this.level);
++
++        if (list.isEmpty()) {
++            org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareSmithingEvent(getBukkitView(), ItemStack.EMPTY); // CraftBukkit
+         } else {
+-            RecipeHolder<SmithingRecipe> recipeHolder = recipesFor.get(0);
+-            ItemStack itemStack = recipeHolder.value().assemble(this.inputSlots, this.level.registryAccess());
+-            if (itemStack.isItemEnabled(this.level.enabledFeatures())) {
+-                this.selectedRecipe = recipeHolder;
+-                this.resultSlots.setRecipeUsed(recipeHolder);
+-                this.resultSlots.setItem(0, itemStack);
++            RecipeHolder<SmithingRecipe> recipeholder = (RecipeHolder) list.get(0);
++            ItemStack itemstack = ((SmithingRecipe) recipeholder.value()).assemble(this.inputSlots, this.level.registryAccess());
++
++            if (itemstack.isItemEnabled(this.level.enabledFeatures())) {
++                this.selectedRecipe = recipeholder;
++                this.resultSlots.setRecipeUsed(recipeholder);
++                // CraftBukkit start
++                org.bukkit.craftbukkit.event.CraftEventFactory.callPrepareSmithingEvent(getBukkitView(), itemstack);
++                // CraftBukkit end
+             }
+         }
++
+     }
+ 
+     @Override
+@@ -102,14 +123,8 @@
+         return this.findSlotToQuickMoveTo(stack).orElse(0);
+     }
+ 
+-    private static OptionalInt findSlotMatchingIngredient(SmithingRecipe smithingRecipe, ItemStack itemStack) {
+-        if (smithingRecipe.isTemplateIngredient(itemStack)) {
+-            return OptionalInt.of(0);
+-        } else if (smithingRecipe.isBaseIngredient(itemStack)) {
+-            return OptionalInt.of(1);
+-        } else {
+-            return smithingRecipe.isAdditionIngredient(itemStack) ? OptionalInt.of(2) : OptionalInt.empty();
+-        }
++    private static OptionalInt findSlotMatchingIngredient(SmithingRecipe smithingrecipe, ItemStack itemstack) {
++        return smithingrecipe.isTemplateIngredient(itemstack) ? OptionalInt.of(0) : (smithingrecipe.isBaseIngredient(itemstack) ? OptionalInt.of(1) : (smithingrecipe.isAdditionIngredient(itemstack) ? OptionalInt.of(2) : OptionalInt.empty()));
+     }
+ 
+     @Override
+@@ -122,11 +137,25 @@
+         return this.findSlotToQuickMoveTo(stack).isPresent();
+     }
+ 
+-    private OptionalInt findSlotToQuickMoveTo(ItemStack itemStack) {
+-        return this.recipes
+-            .stream()
+-            .flatMapToInt(recipeHolder -> findSlotMatchingIngredient(recipeHolder.value(), itemStack).stream())
+-            .filter(i -> !this.getSlot(i).hasItem())
+-            .findFirst();
++    private OptionalInt findSlotToQuickMoveTo(ItemStack itemstack) {
++        return this.recipes.stream().flatMapToInt((recipeholder) -> {
++            return findSlotMatchingIngredient((SmithingRecipe) recipeholder.value(), itemstack).stream();
++        }).filter((i) -> {
++            return !this.getSlot(i).hasItem();
++        }).findFirst();
+     }
++
++    // CraftBukkit start
++    @Override
++    public CraftInventoryView getBukkitView() {
++        if (bukkitEntity != null) {
++            return bukkitEntity;
++        }
++
++        org.bukkit.craftbukkit.inventory.CraftInventory inventory = new org.bukkit.craftbukkit.inventory.CraftInventorySmithing(
++                access.getLocation(), this.inputSlots, this.resultSlots);
++        bukkitEntity = new CraftInventoryView(this.player.getBukkitEntity(), inventory, this);
++        return bukkitEntity;
++    }
++    // CraftBukkit end
+ }

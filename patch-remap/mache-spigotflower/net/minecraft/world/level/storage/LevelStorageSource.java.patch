@@ -1,0 +1,578 @@
+--- a/net/minecraft/world/level/storage/LevelStorageSource.java
++++ b/net/minecraft/world/level/storage/LevelStorageSource.java
+@@ -71,7 +71,6 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelSettings;
+ import net.minecraft.world.level.WorldDataConfiguration;
+-import net.minecraft.world.level.dimension.DimensionType;
+ import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.levelgen.WorldDimensions;
+ import net.minecraft.world.level.levelgen.WorldGenSettings;
+@@ -91,29 +90,29 @@
+     };
+     public static final String ALLOWED_SYMLINKS_CONFIG_NAME = "allowed_symlinks.txt";
+     private static final int UNCOMPRESSED_NBT_QUOTA = 104857600;
+-    private final Path baseDir;
++    public final Path baseDir;
+     private final Path backupDir;
+     final DataFixer fixerUpper;
+     private final DirectoryValidator worldDirValidator;
+ 
+-    public LevelStorageSource(Path path, Path path1, DirectoryValidator directoryvalidator, DataFixer datafixer) {
+-        this.fixerUpper = datafixer;
++    public LevelStorageSource(Path baseDir, Path backupDir, DirectoryValidator worldDirValidator, DataFixer fixerUpper) {
++        this.fixerUpper = fixerUpper;
+ 
+         try {
+-            FileUtil.createDirectoriesSafe(path);
++            FileUtil.createDirectoriesSafe(baseDir);
+         } catch (IOException ioexception) {
+             throw new UncheckedIOException(ioexception);
+         }
+ 
+-        this.baseDir = path;
+-        this.backupDir = path1;
+-        this.worldDirValidator = directoryvalidator;
++        this.baseDir = baseDir;
++        this.backupDir = backupDir;
++        this.worldDirValidator = worldDirValidator;
+     }
+ 
+-    public static DirectoryValidator parseValidator(Path path) {
+-        if (Files.exists(path, new LinkOption[0])) {
++    public static DirectoryValidator parseValidator(Path validator) {
++        if (Files.exists(validator, new LinkOption[0])) {
+             try {
+-                BufferedReader bufferedreader = Files.newBufferedReader(path);
++                BufferedReader bufferedreader = Files.newBufferedReader(validator);
+ 
+                 DirectoryValidator directoryvalidator;
+ 
+@@ -144,42 +143,43 @@
+         return new DirectoryValidator(LevelStorageSource.NO_SYMLINKS_ALLOWED);
+     }
+ 
+-    public static LevelStorageSource createDefault(Path path) {
+-        DirectoryValidator directoryvalidator = parseValidator(path.resolve("allowed_symlinks.txt"));
++    public static LevelStorageSource createDefault(Path savesDir) {
++        DirectoryValidator directoryvalidator = parseValidator(savesDir.resolve("allowed_symlinks.txt"));
+ 
+-        return new LevelStorageSource(path, path.resolve("../backups"), directoryvalidator, DataFixers.getDataFixer());
++        return new LevelStorageSource(savesDir, savesDir.resolve("../backups"), directoryvalidator, DataFixers.getDataFixer());
+     }
+ 
+     public static WorldDataConfiguration readDataConfig(Dynamic<?> dynamic) {
+-        DataResult dataresult = WorldDataConfiguration.CODEC.parse(dynamic);
++        DataResult<WorldDataConfiguration> dataresult = WorldDataConfiguration.CODEC.parse(dynamic); // CraftBukkit - decompile error
+         Logger logger = LevelStorageSource.LOGGER;
+ 
+         Objects.requireNonNull(logger);
+         return (WorldDataConfiguration) dataresult.resultOrPartial(logger::error).orElse(WorldDataConfiguration.DEFAULT);
+     }
+ 
+-    public static WorldLoader.PackConfig getPackConfig(Dynamic<?> dynamic, PackRepository packrepository, boolean flag) {
+-        return new WorldLoader.PackConfig(packrepository, readDataConfig(dynamic), flag, false);
++    public static WorldLoader.d getPackConfig(Dynamic<?> dynamic, PackRepository resourcepackrepository, boolean flag) {
++        return new WorldLoader.d(resourcepackrepository, readDataConfig(dynamic), flag, false);
+     }
+ 
+-    public static LevelDataAndDimensions getLevelDataAndDimensions(Dynamic<?> dynamic, WorldDataConfiguration worlddataconfiguration, Registry<LevelStem> registry, RegistryAccess.Frozen registryaccess_frozen) {
+-        Dynamic<?> dynamic1 = wrapWithRegistryOps(dynamic, registryaccess_frozen);
++    public static LevelDataAndDimensions getLevelDataAndDimensions(Dynamic<?> dynamic, WorldDataConfiguration worlddataconfiguration, Registry<LevelStem> iregistry, RegistryAccess.Dimension iregistrycustom_dimension) {
++        Dynamic<?> dynamic1 = wrapWithRegistryOps(dynamic, iregistrycustom_dimension);
+         Dynamic<?> dynamic2 = dynamic1.get("WorldGenSettings").orElseEmptyMap();
+         DataResult dataresult = WorldGenSettings.CODEC.parse(dynamic2);
+         Logger logger = LevelStorageSource.LOGGER;
+ 
+         Objects.requireNonNull(logger);
+-        WorldGenSettings worldgensettings = (WorldGenSettings) dataresult.getOrThrow(false, Util.prefix("WorldGenSettings: ", logger::error));
+-        LevelSettings levelsettings = LevelSettings.parse(dynamic1, worlddataconfiguration);
+-        WorldDimensions.Complete worlddimensions_complete = worldgensettings.dimensions().bake(registry);
+-        Lifecycle lifecycle = worlddimensions_complete.lifecycle().add(registryaccess_frozen.allRegistriesLifecycle());
+-        PrimaryLevelData primaryleveldata = PrimaryLevelData.parse(dynamic1, levelsettings, worlddimensions_complete.specialWorldProperty(), worldgensettings.options(), lifecycle);
++        WorldGenSettings generatorsettings = (WorldGenSettings) dataresult.getOrThrow(false, Util.prefix("WorldGenSettings: ", logger::error));
++        LevelSettings worldsettings = LevelSettings.parse(dynamic1, worlddataconfiguration);
++        WorldDimensions.b worlddimensions_b = generatorsettings.dimensions().bake(iregistry);
++        Lifecycle lifecycle = worlddimensions_b.lifecycle().add(iregistrycustom_dimension.allRegistriesLifecycle());
++        PrimaryLevelData worlddataserver = PrimaryLevelData.parse(dynamic1, worldsettings, worlddimensions_b.specialWorldProperty(), generatorsettings.options(), lifecycle);
++        worlddataserver.pdc = ((Dynamic<Tag>) dynamic1).getElement("BukkitValues", null); // CraftBukkit - Add PDC to world
+ 
+-        return new LevelDataAndDimensions(primaryleveldata, worlddimensions_complete);
++        return new LevelDataAndDimensions(worlddataserver, worlddimensions_b);
+     }
+ 
+-    private static <T> Dynamic<T> wrapWithRegistryOps(Dynamic<T> dynamic, RegistryAccess.Frozen registryaccess_frozen) {
+-        RegistryOps<T> registryops = RegistryOps.create(dynamic.getOps(), (HolderLookup.Provider) registryaccess_frozen);
++    private static <T> Dynamic<T> wrapWithRegistryOps(Dynamic<T> dynamic, RegistryAccess.Dimension iregistrycustom_dimension) {
++        RegistryOps<T> registryops = RegistryOps.create(dynamic.getOps(), (HolderLookup.Provider) iregistrycustom_dimension);
+ 
+         return new Dynamic(registryops, dynamic.getValue());
+     }
+@@ -188,23 +188,23 @@
+         return "Anvil";
+     }
+ 
+-    public LevelStorageSource.LevelCandidates findLevelCandidates() throws LevelStorageException {
++    public LevelStorageSource.a findLevelCandidates() throws LevelStorageException {
+         if (!Files.isDirectory(this.baseDir, new LinkOption[0])) {
+             throw new LevelStorageException(Component.translatable("selectWorld.load_folder_access"));
+         } else {
+             try {
+-                Stream stream = Files.list(this.baseDir);
++                Stream<Path> stream = Files.list(this.baseDir); // CraftBukkit - decompile error
+ 
+-                LevelStorageSource.LevelCandidates levelstoragesource_levelcandidates;
++                LevelStorageSource.a convertable_a;
+ 
+                 try {
+                     List<LevelStorageSource.LevelDirectory> list = stream.filter((path) -> {
+                         return Files.isDirectory(path, new LinkOption[0]);
+-                    }).map(LevelStorageSource.LevelDirectory::new).filter((levelstoragesource_leveldirectory) -> {
+-                        return Files.isRegularFile(levelstoragesource_leveldirectory.dataFile(), new LinkOption[0]) || Files.isRegularFile(levelstoragesource_leveldirectory.oldDataFile(), new LinkOption[0]);
++                    }).map(LevelStorageSource.LevelDirectory::new).filter((convertable_b) -> {
++                        return Files.isRegularFile(convertable_b.dataFile(), new LinkOption[0]) || Files.isRegularFile(convertable_b.oldDataFile(), new LinkOption[0]);
+                     }).toList();
+ 
+-                    levelstoragesource_levelcandidates = new LevelStorageSource.LevelCandidates(list);
++                    convertable_a = new LevelStorageSource.a(list);
+                 } catch (Throwable throwable) {
+                     if (stream != null) {
+                         try {
+@@ -221,52 +221,52 @@
+                     stream.close();
+                 }
+ 
+-                return levelstoragesource_levelcandidates;
++                return convertable_a;
+             } catch (IOException ioexception) {
+                 throw new LevelStorageException(Component.translatable("selectWorld.load_folder_access"));
+             }
+         }
+     }
+ 
+-    public CompletableFuture<List<LevelSummary>> loadLevelSummaries(LevelStorageSource.LevelCandidates levelstoragesource_levelcandidates) {
+-        List<CompletableFuture<LevelSummary>> list = new ArrayList(levelstoragesource_levelcandidates.levels.size());
+-        Iterator iterator = levelstoragesource_levelcandidates.levels.iterator();
++    public CompletableFuture<List<LevelSummary>> loadLevelSummaries(LevelStorageSource.a candidates) {
++        List<CompletableFuture<LevelSummary>> list = new ArrayList(candidates.levels.size());
++        Iterator iterator = candidates.levels.iterator();
+ 
+         while (iterator.hasNext()) {
+-            LevelStorageSource.LevelDirectory levelstoragesource_leveldirectory = (LevelStorageSource.LevelDirectory) iterator.next();
++            LevelStorageSource.LevelDirectory convertable_b = (LevelStorageSource.LevelDirectory) iterator.next();
+ 
+             list.add(CompletableFuture.supplyAsync(() -> {
+                 boolean flag;
+ 
+                 try {
+-                    flag = DirectoryLock.isLocked(levelstoragesource_leveldirectory.path());
++                    flag = DirectoryLock.isLocked(convertable_b.path());
+                 } catch (Exception exception) {
+-                    LevelStorageSource.LOGGER.warn("Failed to read {} lock", levelstoragesource_leveldirectory.path(), exception);
++                    LevelStorageSource.LOGGER.warn("Failed to read {} lock", convertable_b.path(), exception);
+                     return null;
+                 }
+ 
+                 try {
+-                    return this.readLevelSummary(levelstoragesource_leveldirectory, flag);
++                    return this.readLevelSummary(convertable_b, flag);
+                 } catch (OutOfMemoryError outofmemoryerror) {
+                     MemoryReserve.release();
+                     System.gc();
+-                    String s = "Ran out of memory trying to read summary of world folder \"" + levelstoragesource_leveldirectory.directoryName() + "\"";
++                    String s = "Ran out of memory trying to read summary of world folder \"" + convertable_b.directoryName() + "\"";
+ 
+                     LevelStorageSource.LOGGER.error(LogUtils.FATAL_MARKER, s);
+                     OutOfMemoryError outofmemoryerror1 = new OutOfMemoryError("Ran out of memory reading level data");
+ 
+                     outofmemoryerror1.initCause(outofmemoryerror);
+                     CrashReport crashreport = CrashReport.forThrowable(outofmemoryerror1, s);
+-                    CrashReportCategory crashreportcategory = crashreport.addCategory("World details");
++                    CrashReportCategory crashreportsystemdetails = crashreport.addCategory("World details");
+ 
+-                    crashreportcategory.setDetail("Folder Name", (Object) levelstoragesource_leveldirectory.directoryName());
++                    crashreportsystemdetails.setDetail("Folder Name", (Object) convertable_b.directoryName());
+ 
+                     try {
+-                        long i = Files.size(levelstoragesource_leveldirectory.dataFile());
++                        long i = Files.size(convertable_b.dataFile());
+ 
+-                        crashreportcategory.setDetail("level.dat size", (Object) i);
++                        crashreportsystemdetails.setDetail("level.dat size", (Object) i);
+                     } catch (IOException ioexception) {
+-                        crashreportcategory.setDetailError("level.dat size", ioexception);
++                        crashreportsystemdetails.setDetailError("level.dat size", ioexception);
+                     }
+ 
+                     throw new ReportedException(crashreport);
+@@ -288,10 +288,10 @@
+     }
+ 
+     static Dynamic<?> readLevelDataTagFixed(Path path, DataFixer datafixer) throws IOException {
+-        CompoundTag compoundtag = readLevelDataTagRaw(path);
+-        CompoundTag compoundtag1 = compoundtag.getCompound("Data");
+-        int i = NbtUtils.getDataVersion(compoundtag1, -1);
+-        Dynamic<?> dynamic = DataFixTypes.LEVEL.updateToCurrentVersion(datafixer, new Dynamic(NbtOps.INSTANCE, compoundtag1), i);
++        CompoundTag nbttagcompound = readLevelDataTagRaw(path);
++        CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
++        int i = NbtUtils.getDataVersion(nbttagcompound1, -1);
++        Dynamic<?> dynamic = DataFixTypes.LEVEL.updateToCurrentVersion(datafixer, new Dynamic(NbtOps.INSTANCE, nbttagcompound1), i);
+         Dynamic<?> dynamic1 = dynamic.get("Player").orElseEmptyMap();
+         Dynamic<?> dynamic2 = DataFixTypes.PLAYER.updateToCurrentVersion(datafixer, dynamic1, i);
+ 
+@@ -303,8 +303,8 @@
+         return dynamic;
+     }
+ 
+-    private LevelSummary readLevelSummary(LevelStorageSource.LevelDirectory levelstoragesource_leveldirectory, boolean flag) {
+-        Path path = levelstoragesource_leveldirectory.dataFile();
++    private LevelSummary readLevelSummary(LevelStorageSource.LevelDirectory convertable_b, boolean flag) {
++        Path path = convertable_b.dataFile();
+ 
+         if (Files.exists(path, new LinkOption[0])) {
+             try {
+@@ -313,19 +313,19 @@
+ 
+                     if (!list.isEmpty()) {
+                         LevelStorageSource.LOGGER.warn("{}", ContentValidationException.getMessage(path, list));
+-                        return new LevelSummary.SymlinkLevelSummary(levelstoragesource_leveldirectory.directoryName(), levelstoragesource_leveldirectory.iconFile());
++                        return new LevelSummary.SymlinkLevelSummary(convertable_b.directoryName(), convertable_b.iconFile());
+                     }
+                 }
+ 
+-                Tag tag = readLightweightData(path);
++                Tag nbtbase = readLightweightData(path);
+ 
+-                if (tag instanceof CompoundTag) {
+-                    CompoundTag compoundtag = (CompoundTag) tag;
+-                    CompoundTag compoundtag1 = compoundtag.getCompound("Data");
+-                    int i = NbtUtils.getDataVersion(compoundtag1, -1);
+-                    Dynamic<?> dynamic = DataFixTypes.LEVEL.updateToCurrentVersion(this.fixerUpper, new Dynamic(NbtOps.INSTANCE, compoundtag1), i);
++                if (nbtbase instanceof CompoundTag) {
++                    CompoundTag nbttagcompound = (CompoundTag) nbtbase;
++                    CompoundTag nbttagcompound1 = nbttagcompound.getCompound("Data");
++                    int i = NbtUtils.getDataVersion(nbttagcompound1, -1);
++                    Dynamic<?> dynamic = DataFixTypes.LEVEL.updateToCurrentVersion(this.fixerUpper, new Dynamic(NbtOps.INSTANCE, nbttagcompound1), i);
+ 
+-                    return this.makeLevelSummary(dynamic, levelstoragesource_leveldirectory, flag);
++                    return this.makeLevelSummary(dynamic, convertable_b, flag);
+                 }
+ 
+                 LevelStorageSource.LOGGER.warn("Invalid root tag in {}", path);
+@@ -334,14 +334,14 @@
+             }
+         }
+ 
+-        return new LevelSummary.CorruptedLevelSummary(levelstoragesource_leveldirectory.directoryName(), levelstoragesource_leveldirectory.iconFile(), getFileModificationTime(levelstoragesource_leveldirectory));
++        return new LevelSummary.b(convertable_b.directoryName(), convertable_b.iconFile(), getFileModificationTime(convertable_b));
+     }
+ 
+-    private static long getFileModificationTime(LevelStorageSource.LevelDirectory levelstoragesource_leveldirectory) {
+-        Instant instant = getFileModificationTime(levelstoragesource_leveldirectory.dataFile());
++    private static long getFileModificationTime(LevelStorageSource.LevelDirectory convertable_b) {
++        Instant instant = getFileModificationTime(convertable_b.dataFile());
+ 
+         if (instant == null) {
+-            instant = getFileModificationTime(levelstoragesource_leveldirectory.oldDataFile());
++            instant = getFileModificationTime(convertable_b.oldDataFile());
+         }
+ 
+         return instant == null ? -1L : instant.toEpochMilli();
+@@ -356,7 +356,7 @@
+         }
+     }
+ 
+-    LevelSummary makeLevelSummary(Dynamic<?> dynamic, LevelStorageSource.LevelDirectory levelstoragesource_leveldirectory, boolean flag) {
++    LevelSummary makeLevelSummary(Dynamic<?> dynamic, LevelStorageSource.LevelDirectory convertable_b, boolean flag) {
+         LevelVersion levelversion = LevelVersion.parse(dynamic);
+         int i = levelversion.levelDataVersion();
+ 
+@@ -364,36 +364,36 @@
+             throw new NbtFormatException("Unknown data version: " + Integer.toHexString(i));
+         } else {
+             boolean flag1 = i != this.getStorageVersion();
+-            Path path = levelstoragesource_leveldirectory.iconFile();
++            Path path = convertable_b.iconFile();
+             WorldDataConfiguration worlddataconfiguration = readDataConfig(dynamic);
+-            LevelSettings levelsettings = LevelSettings.parse(dynamic, worlddataconfiguration);
++            LevelSettings worldsettings = LevelSettings.parse(dynamic, worlddataconfiguration);
+             FeatureFlagSet featureflagset = parseFeatureFlagsFromSummary(dynamic);
+             boolean flag2 = FeatureFlags.isExperimental(featureflagset);
+ 
+-            return new LevelSummary(levelsettings, levelversion, levelstoragesource_leveldirectory.directoryName(), flag1, flag, flag2, path);
++            return new LevelSummary(worldsettings, levelversion, convertable_b.directoryName(), flag1, flag, flag2, path);
+         }
+     }
+ 
+-    private static FeatureFlagSet parseFeatureFlagsFromSummary(Dynamic<?> dynamic) {
+-        Set<ResourceLocation> set = (Set) dynamic.get("enabled_features").asStream().flatMap((dynamic1) -> {
++    private static FeatureFlagSet parseFeatureFlagsFromSummary(Dynamic<?> dataDynamic) {
++        Set<ResourceLocation> set = (Set) dataDynamic.get("enabled_features").asStream().flatMap((dynamic1) -> {
+             return dynamic1.asString().result().map(ResourceLocation::tryParse).stream();
+         }).collect(Collectors.toSet());
+ 
+-        return FeatureFlags.REGISTRY.fromNames(set, (resourcelocation) -> {
++        return FeatureFlags.REGISTRY.fromNames(set, (minecraftkey) -> {
+         });
+     }
+ 
+     @Nullable
+-    private static Tag readLightweightData(Path path) throws IOException {
++    private static Tag readLightweightData(Path file) throws IOException {
+         SkipFields skipfields = new SkipFields(new FieldSelector[]{new FieldSelector("Data", CompoundTag.TYPE, "Player"), new FieldSelector("Data", CompoundTag.TYPE, "WorldGenSettings")});
+ 
+-        NbtIo.parseCompressed(path, skipfields, NbtAccounter.create(104857600L));
++        NbtIo.parseCompressed(file, skipfields, NbtAccounter.create(104857600L));
+         return skipfields.getResult();
+     }
+ 
+-    public boolean isNewLevelIdAcceptable(String s) {
++    public boolean isNewLevelIdAcceptable(String saveName) {
+         try {
+-            Path path = this.getLevelPath(s);
++            Path path = this.getLevelPath(saveName);
+ 
+             Files.createDirectory(path);
+             Files.deleteIfExists(path);
+@@ -403,16 +403,16 @@
+         }
+     }
+ 
+-    public boolean levelExists(String s) {
++    public boolean levelExists(String saveName) {
+         try {
+-            return Files.isDirectory(this.getLevelPath(s), new LinkOption[0]);
++            return Files.isDirectory(this.getLevelPath(saveName), new LinkOption[0]);
+         } catch (InvalidPathException invalidpathexception) {
+             return false;
+         }
+     }
+ 
+-    public Path getLevelPath(String s) {
+-        return this.baseDir.resolve(s);
++    public Path getLevelPath(String saveName) {
++        return this.baseDir.resolve(saveName);
+     }
+ 
+     public Path getBaseDir() {
+@@ -423,34 +423,47 @@
+         return this.backupDir;
+     }
+ 
+-    public LevelStorageSource.LevelStorageAccess validateAndCreateAccess(String s) throws IOException, ContentValidationException {
++    public LevelStorageSource.LevelStorageAccess validateAndCreateAccess(String s, ResourceKey<LevelStem> dimensionType) throws IOException, ContentValidationException { // CraftBukkit
+         Path path = this.getLevelPath(s);
+         List<ForbiddenSymlinkInfo> list = this.worldDirValidator.validateDirectory(path, true);
+ 
+         if (!list.isEmpty()) {
+             throw new ContentValidationException(path, list);
+         } else {
+-            return new LevelStorageSource.LevelStorageAccess(s, path);
++            return new LevelStorageSource.LevelStorageAccess(s, path, dimensionType); // CraftBukkit
+         }
+     }
+ 
+-    public LevelStorageSource.LevelStorageAccess createAccess(String s) throws IOException {
++    public LevelStorageSource.LevelStorageAccess createAccess(String s, ResourceKey<LevelStem> dimensionType) throws IOException { // CraftBukkit
+         Path path = this.getLevelPath(s);
+ 
+-        return new LevelStorageSource.LevelStorageAccess(s, path);
++        return new LevelStorageSource.LevelStorageAccess(s, path, dimensionType); // CraftBukkit
+     }
+ 
+     public DirectoryValidator getWorldDirValidator() {
+         return this.worldDirValidator;
+     }
+ 
+-    public static record LevelCandidates(List<LevelStorageSource.LevelDirectory> levels) implements Iterable<LevelStorageSource.LevelDirectory> {
++    // CraftBukkit start
++    public static Path getStorageFolder(Path path, ResourceKey<LevelStem> dimensionType) {
++        if (dimensionType == LevelStem.OVERWORLD) {
++            return path;
++        } else if (dimensionType == LevelStem.NETHER) {
++            return path.resolve("DIM-1");
++        } else if (dimensionType == LevelStem.END) {
++            return path.resolve("DIM1");
++        } else {
++            return path.resolve("dimensions").resolve(dimensionType.location().getNamespace()).resolve(dimensionType.location().getPath());
++        }
++    }
++    // CraftBukkit end
+ 
++    public static record a(List<LevelStorageSource.LevelDirectory> levels) implements Iterable<LevelStorageSource.LevelDirectory> {
++
+         public boolean isEmpty() {
+             return this.levels.isEmpty();
+         }
+ 
+-        @Override
+         public Iterator<LevelStorageSource.LevelDirectory> iterator() {
+             return this.levels.iterator();
+         }
+@@ -470,11 +483,11 @@
+             return this.resourcePath(LevelResource.OLD_LEVEL_DATA_FILE);
+         }
+ 
+-        public Path corruptedDataFile(LocalDateTime localdatetime) {
++        public Path corruptedDataFile(LocalDateTime dateTime) {
+             Path path = this.path;
+             String s = LevelResource.LEVEL_DATA_FILE.getId();
+ 
+-            return path.resolve(s + "_corrupted_" + localdatetime.format(LevelStorageSource.FORMATTER));
++            return path.resolve(s + "_corrupted_" + dateTime.format(LevelStorageSource.FORMATTER));
+         }
+ 
+         public Path rawDataFile(LocalDateTime localdatetime) {
+@@ -492,19 +505,23 @@
+             return this.resourcePath(LevelResource.LOCK_FILE);
+         }
+ 
+-        public Path resourcePath(LevelResource levelresource) {
+-            return this.path.resolve(levelresource.getId());
++        public Path resourcePath(LevelResource resource) {
++            return this.path.resolve(resource.getId());
+         }
+     }
+ 
+     public class LevelStorageAccess implements AutoCloseable {
+ 
+         final DirectoryLock lock;
+-        final LevelStorageSource.LevelDirectory levelDirectory;
++        public final LevelStorageSource.LevelDirectory levelDirectory;
+         private final String levelId;
+         private final Map<LevelResource, Path> resources = Maps.newHashMap();
++        // CraftBukkit start
++        public final ResourceKey<LevelStem> dimensionType;
+ 
+-        LevelStorageAccess(String s, Path path) throws IOException {
++        LevelStorageAccess(String s, Path path, ResourceKey<LevelStem> dimensionType) throws IOException {
++            this.dimensionType = dimensionType;
++            // CraftBukkit end
+             this.levelId = s;
+             this.levelDirectory = new LevelStorageSource.LevelDirectory(path);
+             this.lock = DirectoryLock.create(path);
+@@ -531,16 +548,16 @@
+             return this.levelId;
+         }
+ 
+-        public Path getLevelPath(LevelResource levelresource) {
+-            Map map = this.resources;
+-            LevelStorageSource.LevelDirectory levelstoragesource_leveldirectory = this.levelDirectory;
++        public Path getLevelPath(LevelResource folderName) {
++            Map<LevelResource, Path> map = this.resources; // CraftBukkit - decompile error
++            LevelStorageSource.LevelDirectory convertable_b = this.levelDirectory;
+ 
+             Objects.requireNonNull(this.levelDirectory);
+-            return (Path) map.computeIfAbsent(levelresource, levelstoragesource_leveldirectory::resourcePath);
++            return (Path) map.computeIfAbsent(folderName, convertable_b::resourcePath);
+         }
+ 
+-        public Path getDimensionPath(ResourceKey<Level> resourcekey) {
+-            return DimensionType.getStorageFolder(resourcekey, this.levelDirectory.path());
++        public Path getDimensionPath(ResourceKey<Level> dimensionPath) {
++            return getStorageFolder(this.levelDirectory.path(), this.dimensionType); // CraftBukkit
+         }
+ 
+         private void checkLock() {
+@@ -572,25 +589,25 @@
+             return LevelStorageSource.readLevelDataTagFixed(flag ? this.levelDirectory.oldDataFile() : this.levelDirectory.dataFile(), LevelStorageSource.this.fixerUpper);
+         }
+ 
+-        public void saveDataTag(RegistryAccess registryaccess, WorldData worlddata) {
+-            this.saveDataTag(registryaccess, worlddata, (CompoundTag) null);
++        public void saveDataTag(RegistryAccess registries, WorldData serverConfiguration) {
++            this.saveDataTag(registries, serverConfiguration, (CompoundTag) null);
+         }
+ 
+-        public void saveDataTag(RegistryAccess registryaccess, WorldData worlddata, @Nullable CompoundTag compoundtag) {
+-            CompoundTag compoundtag1 = worlddata.createTag(registryaccess, compoundtag);
+-            CompoundTag compoundtag2 = new CompoundTag();
++        public void saveDataTag(RegistryAccess registries, WorldData serverConfiguration, @Nullable CompoundTag hostPlayerNBT) {
++            CompoundTag nbttagcompound1 = serverConfiguration.createTag(registries, hostPlayerNBT);
++            CompoundTag nbttagcompound2 = new CompoundTag();
+ 
+-            compoundtag2.put("Data", compoundtag1);
+-            this.saveLevelData(compoundtag2);
++            nbttagcompound2.put("Data", nbttagcompound1);
++            this.saveLevelData(nbttagcompound2);
+         }
+ 
+-        private void saveLevelData(CompoundTag compoundtag) {
++        private void saveLevelData(CompoundTag nbttagcompound) {
+             Path path = this.levelDirectory.path();
+ 
+             try {
+                 Path path1 = Files.createTempFile(path, "level", ".dat");
+ 
+-                NbtIo.writeCompressed(compoundtag, path1);
++                NbtIo.writeCompressed(nbttagcompound, path1);
+                 Path path2 = this.levelDirectory.oldDataFile();
+                 Path path3 = this.levelDirectory.dataFile();
+ 
+@@ -617,7 +634,6 @@
+ 
+                 try {
+                     Files.walkFileTree(this.levelDirectory.path(), new SimpleFileVisitor<Path>() {
+-                        @Override
+                         public FileVisitResult visitFile(Path path1, BasicFileAttributes basicfileattributes) throws IOException {
+                             if (!path1.equals(path)) {
+                                 LevelStorageSource.LOGGER.debug("Deleting {}", path1);
+@@ -627,7 +643,6 @@
+                             return FileVisitResult.CONTINUE;
+                         }
+ 
+-                        @Override
+                         public FileVisitResult postVisitDirectory(Path path1, @Nullable IOException ioexception) throws IOException {
+                             if (ioexception != null) {
+                                 throw ioexception;
+@@ -662,25 +677,25 @@
+ 
+         }
+ 
+-        public void renameLevel(String s) throws IOException {
+-            this.modifyLevelDataWithoutDatafix((compoundtag) -> {
+-                compoundtag.putString("LevelName", s.trim());
++        public void renameLevel(String saveName) throws IOException {
++            this.modifyLevelDataWithoutDatafix((nbttagcompound) -> {
++                nbttagcompound.putString("LevelName", saveName.trim());
+             });
+         }
+ 
+         public void renameAndDropPlayer(String s) throws IOException {
+-            this.modifyLevelDataWithoutDatafix((compoundtag) -> {
+-                compoundtag.putString("LevelName", s.trim());
+-                compoundtag.remove("Player");
++            this.modifyLevelDataWithoutDatafix((nbttagcompound) -> {
++                nbttagcompound.putString("LevelName", s.trim());
++                nbttagcompound.remove("Player");
+             });
+         }
+ 
+         private void modifyLevelDataWithoutDatafix(Consumer<CompoundTag> consumer) throws IOException {
+             this.checkLock();
+-            CompoundTag compoundtag = LevelStorageSource.readLevelDataTagRaw(this.levelDirectory.dataFile());
++            CompoundTag nbttagcompound = LevelStorageSource.readLevelDataTagRaw(this.levelDirectory.dataFile());
+ 
+-            consumer.accept(compoundtag.getCompound("Data"));
+-            this.saveLevelData(compoundtag);
++            consumer.accept(nbttagcompound.getCompound("Data"));
++            this.saveLevelData(nbttagcompound);
+         }
+ 
+         public long makeWorldBackup() throws IOException {
+@@ -702,7 +717,6 @@
+                 final Path path2 = Paths.get(this.levelId);
+ 
+                 Files.walkFileTree(this.levelDirectory.path(), new SimpleFileVisitor<Path>() {
+-                    @Override
+                     public FileVisitResult visitFile(Path path3, BasicFileAttributes basicfileattributes) throws IOException {
+                         if (path3.endsWith("session.lock")) {
+                             return FileVisitResult.CONTINUE;
+@@ -735,7 +749,6 @@
+             return Files.exists(this.levelDirectory.dataFile(), new LinkOption[0]) || Files.exists(this.levelDirectory.oldDataFile(), new LinkOption[0]);
+         }
+ 
+-        @Override
+         public void close() throws IOException {
+             this.lock.close();
+         }

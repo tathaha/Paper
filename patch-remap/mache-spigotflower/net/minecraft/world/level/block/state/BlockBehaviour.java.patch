@@ -1,0 +1,1487 @@
+--- a/net/minecraft/world/level/block/state/BlockBehaviour.java
++++ b/net/minecraft/world/level/block/state/BlockBehaviour.java
+@@ -28,9 +28,9 @@
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.RandomSource;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
++import net.minecraft.world.ITileInventory;
+ import net.minecraft.world.InteractionResult;
+-import net.minecraft.world.MenuProvider;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
+ import net.minecraft.world.entity.player.Player;
+@@ -52,8 +52,8 @@
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.EntityBlock;
++import net.minecraft.world.level.block.EnumRenderType;
+ import net.minecraft.world.level.block.Mirror;
+-import net.minecraft.world.level.block.RenderShape;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.block.SoundType;
+ import net.minecraft.world.level.block.SupportType;
+@@ -62,12 +62,12 @@
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+ import net.minecraft.world.level.block.state.properties.NoteBlockInstrument;
+ import net.minecraft.world.level.block.state.properties.Property;
++import net.minecraft.world.level.material.EnumPistonReaction;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+ import net.minecraft.world.level.material.MapColor;
+-import net.minecraft.world.level.material.PushReaction;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.level.storage.loot.BuiltInLootTables;
+ import net.minecraft.world.level.storage.loot.LootParams;
+ import net.minecraft.world.level.storage.loot.LootTable;
+@@ -96,18 +96,18 @@
+     @Nullable
+     protected ResourceLocation drops;
+ 
+-    public BlockBehaviour(BlockBehaviour.Properties blockbehaviour_properties) {
+-        this.hasCollision = blockbehaviour_properties.hasCollision;
+-        this.drops = blockbehaviour_properties.drops;
+-        this.explosionResistance = blockbehaviour_properties.explosionResistance;
+-        this.isRandomlyTicking = blockbehaviour_properties.isRandomlyTicking;
+-        this.soundType = blockbehaviour_properties.soundType;
+-        this.friction = blockbehaviour_properties.friction;
+-        this.speedFactor = blockbehaviour_properties.speedFactor;
+-        this.jumpFactor = blockbehaviour_properties.jumpFactor;
+-        this.dynamicShape = blockbehaviour_properties.dynamicShape;
+-        this.requiredFeatures = blockbehaviour_properties.requiredFeatures;
+-        this.properties = blockbehaviour_properties;
++    public BlockBehaviour(BlockBehaviour.Properties properties) {
++        this.hasCollision = properties.hasCollision;
++        this.drops = properties.drops;
++        this.explosionResistance = properties.explosionResistance;
++        this.isRandomlyTicking = properties.isRandomlyTicking;
++        this.soundType = properties.soundType;
++        this.friction = properties.friction;
++        this.speedFactor = properties.speedFactor;
++        this.jumpFactor = properties.jumpFactor;
++        this.dynamicShape = properties.dynamicShape;
++        this.requiredFeatures = properties.requiredFeatures;
++        this.properties = properties;
+     }
+ 
+     public BlockBehaviour.Properties properties() {
+@@ -128,18 +128,18 @@
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void updateIndirectNeighbourShapes(BlockState blockstate, LevelAccessor levelaccessor, BlockPos blockpos, int i, int j) {}
++    public void updateIndirectNeighbourShapes(IBlockData state, LevelAccessor level, BlockPos pos, int flags, int recursionLeft) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
+-        switch (pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
++        switch (type) {
+             case LAND:
+-                return !blockstate.isCollisionShapeFullBlock(blockgetter, blockpos);
++                return !state.isCollisionShapeFullBlock(level, pos);
+             case WATER:
+-                return blockgetter.getFluidState(blockpos).is(FluidTags.WATER);
++                return level.getFluidState(pos).is(FluidTags.WATER);
+             case AIR:
+-                return !blockstate.isCollisionShapeFullBlock(blockgetter, blockpos);
++                return !state.isCollisionShapeFullBlock(level, pos);
+             default:
+                 return false;
+         }
+@@ -147,101 +147,103 @@
+ 
+     /** @deprecated */
+     @Deprecated
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        return blockstate;
++    public IBlockData updateShape(IBlockData state, Direction direction, IBlockData neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
++        return state;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean skipRendering(BlockState blockstate, BlockState blockstate1, Direction direction) {
++    public boolean skipRendering(IBlockData state, IBlockData adjacentState, Direction direction) {
+         return false;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void neighborChanged(BlockState blockstate, Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-        DebugPackets.sendNeighborsUpdatePacket(level, blockpos);
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block neighborBlock, BlockPos neighborPos, boolean movedByPiston) {
++        DebugPackets.sendNeighborsUpdatePacket(level, pos);
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {}
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean movedByPiston) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (blockstate.hasBlockEntity() && !blockstate.is(blockstate1.getBlock())) {
+-            level.removeBlockEntity(blockpos);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean movedByPiston) {
++        if (state.hasBlockEntity() && !state.is(newState.getBlock())) {
++            level.removeBlockEntity(pos);
+         }
+ 
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void onExplosionHit(BlockState blockstate, Level level, BlockPos blockpos, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
+-        if (!blockstate.isAir() && explosion.getBlockInteraction() != Explosion.BlockInteraction.TRIGGER_BLOCK) {
+-            Block block = blockstate.getBlock();
++    public void onExplosionHit(IBlockData iblockdata, Level world, BlockPos blockposition, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
++        if (!iblockdata.isAir() && explosion.getBlockInteraction() != Explosion.Effect.TRIGGER_BLOCK) {
++            Block block = iblockdata.getBlock();
+             boolean flag = explosion.getIndirectSourceEntity() instanceof Player;
+ 
+-            if (block.dropFromExplosion(explosion) && level instanceof ServerLevel) {
+-                ServerLevel serverlevel = (ServerLevel) level;
+-                BlockEntity blockentity = blockstate.hasBlockEntity() ? level.getBlockEntity(blockpos) : null;
+-                LootParams.Builder lootparams_builder = (new LootParams.Builder(serverlevel)).withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockpos)).withParameter(LootContextParams.TOOL, ItemStack.EMPTY).withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockentity).withOptionalParameter(LootContextParams.THIS_ENTITY, explosion.getDirectSourceEntity());
++            if (block.dropFromExplosion(explosion) && world instanceof ServerLevel) {
++                ServerLevel worldserver = (ServerLevel) world;
++                BlockEntity tileentity = iblockdata.hasBlockEntity() ? world.getBlockEntity(blockposition) : null;
++                LootParams.Builder lootparams_a = (new LootParams.Builder(worldserver)).withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockposition)).withParameter(LootContextParams.TOOL, ItemStack.EMPTY).withOptionalParameter(LootContextParams.BLOCK_ENTITY, tileentity).withOptionalParameter(LootContextParams.THIS_ENTITY, explosion.getDirectSourceEntity());
+ 
+-                if (explosion.getBlockInteraction() == Explosion.BlockInteraction.DESTROY_WITH_DECAY) {
+-                    lootparams_builder.withParameter(LootContextParams.EXPLOSION_RADIUS, explosion.radius());
++                // CraftBukkit start - add yield
++                if (explosion.yield < 1.0F) {
++                    lootparams_a.withParameter(LootContextParams.EXPLOSION_RADIUS, 1.0F / explosion.yield);
++                    // CraftBukkit end
+                 }
+ 
+-                blockstate.spawnAfterBreak(serverlevel, blockpos, ItemStack.EMPTY, flag);
+-                blockstate.getDrops(lootparams_builder).forEach((itemstack) -> {
+-                    biconsumer.accept(itemstack, blockpos);
++                iblockdata.spawnAfterBreak(worldserver, blockposition, ItemStack.EMPTY, flag);
++                iblockdata.getDrops(lootparams_a).forEach((itemstack) -> {
++                    biconsumer.accept(itemstack, blockposition);
+                 });
+             }
+ 
+-            level.setBlock(blockpos, Blocks.AIR.defaultBlockState(), 3);
+-            block.wasExploded(level, blockpos, explosion);
++            world.setBlock(blockposition, Blocks.AIR.defaultBlockState(), 3);
++            block.wasExploded(world, blockposition, explosion);
+         }
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public InteractionResult use(BlockState blockstate, Level level, BlockPos blockpos, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
+         return InteractionResult.PASS;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean triggerEvent(BlockState blockstate, Level level, BlockPos blockpos, int i, int j) {
++    public boolean triggerEvent(IBlockData state, Level level, BlockPos pos, int id, int param) {
+         return false;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.MODEL;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.MODEL;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean useShapeForLightOcclusion(BlockState blockstate) {
++    public boolean useShapeForLightOcclusion(IBlockData state) {
+         return false;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean isSignalSource(BlockState blockstate) {
++    public boolean isSignalSource(IBlockData state) {
+         return false;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public FluidState getFluidState(BlockState blockstate) {
++    public FluidState getFluidState(IBlockData state) {
+         return Fluids.EMPTY.defaultFluidState();
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean hasAnalogOutputSignal(BlockState blockstate) {
++    public boolean hasAnalogOutputSignal(IBlockData state) {
+         return false;
+     }
+ 
+@@ -254,46 +256,45 @@
+     }
+ 
+     @Override
+-    @Override
+     public FeatureFlagSet requiredFeatures() {
+         return this.requiredFeatures;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public BlockState rotate(BlockState blockstate, Rotation rotation) {
+-        return blockstate;
++    public IBlockData rotate(IBlockData state, Rotation rotation) {
++        return state;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public BlockState mirror(BlockState blockstate, Mirror mirror) {
+-        return blockstate;
++    public IBlockData mirror(IBlockData state, Mirror mirror) {
++        return state;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean canBeReplaced(BlockState blockstate, BlockPlaceContext blockplacecontext) {
+-        return blockstate.canBeReplaced() && (blockplacecontext.getItemInHand().isEmpty() || !blockplacecontext.getItemInHand().is(this.asItem()));
++    public boolean canBeReplaced(IBlockData state, BlockPlaceContext useContext) {
++        return state.canBeReplaced() && (useContext.getItemInHand().isEmpty() || !useContext.getItemInHand().is(this.asItem()));
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean canBeReplaced(BlockState blockstate, Fluid fluid) {
+-        return blockstate.canBeReplaced() || !blockstate.isSolid();
++    public boolean canBeReplaced(IBlockData state, Fluid fluid) {
++        return state.canBeReplaced() || !state.isSolid();
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public List<ItemStack> getDrops(BlockState blockstate, LootParams.Builder lootparams_builder) {
+-        ResourceLocation resourcelocation = this.getLootTable();
++    public List<ItemStack> getDrops(IBlockData state, LootParams.Builder params) {
++        ResourceLocation minecraftkey = this.getLootTable();
+ 
+-        if (resourcelocation == BuiltInLootTables.EMPTY) {
++        if (minecraftkey == BuiltInLootTables.EMPTY) {
+             return Collections.emptyList();
+         } else {
+-            LootParams lootparams = lootparams_builder.withParameter(LootContextParams.BLOCK_STATE, blockstate).create(LootContextParamSets.BLOCK);
+-            ServerLevel serverlevel = lootparams.getLevel();
+-            LootTable loottable = serverlevel.getServer().getLootData().getLootTable(resourcelocation);
++            LootParams lootparams = params.withParameter(LootContextParams.BLOCK_STATE, state).create(LootContextParamSets.BLOCK);
++            ServerLevel worldserver = lootparams.getLevel();
++            LootTable loottable = worldserver.getServer().getLootData().getLootTable(minecraftkey);
+ 
+             return loottable.getRandomItems(lootparams);
+         }
+@@ -301,140 +302,140 @@
+ 
+     /** @deprecated */
+     @Deprecated
+-    public long getSeed(BlockState blockstate, BlockPos blockpos) {
+-        return Mth.getSeed(blockpos);
++    public long getSeed(IBlockData state, BlockPos pos) {
++        return Mth.getSeed(pos);
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getOcclusionShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return blockstate.getShape(blockgetter, blockpos);
++    public VoxelShape getOcclusionShape(IBlockData state, BlockGetter level, BlockPos pos) {
++        return state.getShape(level, pos);
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getBlockSupportShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return this.getCollisionShape(blockstate, blockgetter, blockpos, CollisionContext.empty());
++    public VoxelShape getBlockSupportShape(IBlockData state, BlockGetter level, BlockPos pos) {
++        return this.getCollisionShape(state, level, pos, CollisionContext.empty());
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getInteractionShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
++    public VoxelShape getInteractionShape(IBlockData state, BlockGetter level, BlockPos pos) {
+         return Shapes.empty();
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public int getLightBlock(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return blockstate.isSolidRender(blockgetter, blockpos) ? blockgetter.getMaxLightLevel() : (blockstate.propagatesSkylightDown(blockgetter, blockpos) ? 0 : 1);
++    public int getLightBlock(IBlockData state, BlockGetter level, BlockPos pos) {
++        return state.isSolidRender(level, pos) ? level.getMaxLightLevel() : (state.propagatesSkylightDown(level, pos) ? 0 : 1);
+     }
+ 
+     /** @deprecated */
+     @Nullable
+     @Deprecated
+-    public MenuProvider getMenuProvider(BlockState blockstate, Level level, BlockPos blockpos) {
++    public ITileInventory getMenuProvider(IBlockData state, Level level, BlockPos pos) {
+         return null;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean canSurvive(BlockState blockstate, LevelReader levelreader, BlockPos blockpos) {
++    public boolean canSurvive(IBlockData state, LevelReader level, BlockPos pos) {
+         return true;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public float getShadeBrightness(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return blockstate.isCollisionShapeFullBlock(blockgetter, blockpos) ? 0.2F : 1.0F;
++    public float getShadeBrightness(IBlockData state, BlockGetter level, BlockPos pos) {
++        return state.isCollisionShapeFullBlock(level, pos) ? 0.2F : 1.0F;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public int getAnalogOutputSignal(BlockState blockstate, Level level, BlockPos blockpos) {
++    public int getAnalogOutputSignal(IBlockData state, Level level, BlockPos pos) {
+         return 0;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return Shapes.block();
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getCollisionShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return this.hasCollision ? blockstate.getShape(blockgetter, blockpos) : Shapes.empty();
++    public VoxelShape getCollisionShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return this.hasCollision ? state.getShape(level, pos) : Shapes.empty();
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean isCollisionShapeFullBlock(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return Block.isShapeFullBlock(blockstate.getCollisionShape(blockgetter, blockpos));
++    public boolean isCollisionShapeFullBlock(IBlockData state, BlockGetter level, BlockPos pos) {
++        return Block.isShapeFullBlock(state.getCollisionShape(level, pos));
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public boolean isOcclusionShapeFullBlock(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return Block.isShapeFullBlock(blockstate.getOcclusionShape(blockgetter, blockpos));
++    public boolean isOcclusionShapeFullBlock(IBlockData state, BlockGetter level, BlockPos pos) {
++        return Block.isShapeFullBlock(state.getOcclusionShape(level, pos));
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public VoxelShape getVisualShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return this.getCollisionShape(blockstate, blockgetter, blockpos, collisioncontext);
++    public VoxelShape getVisualShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return this.getCollisionShape(state, level, pos, context);
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void randomTick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {}
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void tick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {}
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public float getDestroyProgress(BlockState blockstate, Player player, BlockGetter blockgetter, BlockPos blockpos) {
+-        float f = blockstate.getDestroySpeed(blockgetter, blockpos);
++    public float getDestroyProgress(IBlockData state, Player player, BlockGetter level, BlockPos pos) {
++        float f = state.getDestroySpeed(level, pos);
+ 
+         if (f == -1.0F) {
+             return 0.0F;
+         } else {
+-            int i = player.hasCorrectToolForDrops(blockstate) ? 30 : 100;
++            int i = player.hasCorrectToolForDrops(state) ? 30 : 100;
+ 
+-            return player.getDestroySpeed(blockstate) / f / (float) i;
++            return player.getDestroySpeed(state) / f / (float) i;
+         }
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void spawnAfterBreak(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, ItemStack itemstack, boolean flag) {}
++    public void spawnAfterBreak(IBlockData state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void attack(BlockState blockstate, Level level, BlockPos blockpos, Player player) {}
++    public void attack(IBlockData state, Level level, BlockPos pos, Player player) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public int getSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
++    public int getSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
+         return 0;
+     }
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void entityInside(BlockState blockstate, Level level, BlockPos blockpos, Entity entity) {}
++    public void entityInside(IBlockData state, Level level, BlockPos pos, Entity entity) {}
+ 
+     /** @deprecated */
+     @Deprecated
+-    public int getDirectSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
++    public int getDirectSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
+         return 0;
+     }
+ 
+     public final ResourceLocation getLootTable() {
+         if (this.drops == null) {
+-            ResourceLocation resourcelocation = BuiltInRegistries.BLOCK.getKey(this.asBlock());
++            ResourceLocation minecraftkey = BuiltInRegistries.BLOCK.getKey(this.asBlock());
+ 
+-            this.drops = resourcelocation.withPrefix("blocks/");
++            this.drops = minecraftkey.withPrefix("blocks/");
+         }
+ 
+         return this.drops;
+@@ -442,7 +443,7 @@
+ 
+     /** @deprecated */
+     @Deprecated
+-    public void onProjectileHit(Level level, BlockState blockstate, BlockHitResult blockhitresult, Projectile projectile) {}
++    public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {}
+ 
+     public abstract Item asItem();
+ 
+@@ -461,12 +462,12 @@
+         public static final Codec<BlockBehaviour.Properties> CODEC = Codec.unit(() -> {
+             return of();
+         });
+-        Function<BlockState, MapColor> mapColor = (blockstate) -> {
++        Function<IBlockData, MapColor> mapColor = (iblockdata) -> {
+             return MapColor.NONE;
+         };
+         boolean hasCollision = true;
+         SoundType soundType;
+-        ToIntFunction<BlockState> lightEmission;
++        ToIntFunction<IBlockData> lightEmission;
+         float explosionResistance;
+         float destroyTime;
+         boolean requiresCorrectToolForDrops;
+@@ -485,7 +486,7 @@
+         @Deprecated
+         boolean forceSolidOff;
+         boolean forceSolidOn;
+-        PushReaction pushReaction;
++        EnumPistonReaction pushReaction;
+         boolean spawnTerrainParticles;
+         NoteBlockInstrument instrument;
+         boolean replaceable;
+@@ -501,30 +502,30 @@
+ 
+         private Properties() {
+             this.soundType = SoundType.STONE;
+-            this.lightEmission = (blockstate) -> {
++            this.lightEmission = (iblockdata) -> {
+                 return 0;
+             };
+             this.friction = 0.6F;
+             this.speedFactor = 1.0F;
+             this.jumpFactor = 1.0F;
+             this.canOcclude = true;
+-            this.pushReaction = PushReaction.NORMAL;
++            this.pushReaction = EnumPistonReaction.NORMAL;
+             this.spawnTerrainParticles = true;
+             this.instrument = NoteBlockInstrument.HARP;
+-            this.isValidSpawn = (blockstate, blockgetter, blockpos, entitytype) -> {
+-                return blockstate.isFaceSturdy(blockgetter, blockpos, Direction.UP) && blockstate.getLightEmission() < 14;
++            this.isValidSpawn = (iblockdata, iblockaccess, blockposition, entitytypes) -> {
++                return iblockdata.isFaceSturdy(iblockaccess, blockposition, Direction.UP) && iblockdata.getLightEmission() < 14;
+             };
+-            this.isRedstoneConductor = (blockstate, blockgetter, blockpos) -> {
+-                return blockstate.isCollisionShapeFullBlock(blockgetter, blockpos);
++            this.isRedstoneConductor = (iblockdata, iblockaccess, blockposition) -> {
++                return iblockdata.isCollisionShapeFullBlock(iblockaccess, blockposition);
+             };
+-            this.isSuffocating = (blockstate, blockgetter, blockpos) -> {
+-                return blockstate.blocksMotion() && blockstate.isCollisionShapeFullBlock(blockgetter, blockpos);
++            this.isSuffocating = (iblockdata, iblockaccess, blockposition) -> {
++                return iblockdata.blocksMotion() && iblockdata.isCollisionShapeFullBlock(iblockaccess, blockposition);
+             };
+             this.isViewBlocking = this.isSuffocating;
+-            this.hasPostProcess = (blockstate, blockgetter, blockpos) -> {
++            this.hasPostProcess = (iblockdata, iblockaccess, blockposition) -> {
+                 return false;
+             };
+-            this.emissiveRendering = (blockstate, blockgetter, blockpos) -> {
++            this.emissiveRendering = (iblockdata, iblockaccess, blockposition) -> {
+                 return false;
+             };
+             this.requiredFeatures = FeatureFlags.VANILLA_SET;
+@@ -535,69 +536,69 @@
+             return new BlockBehaviour.Properties();
+         }
+ 
+-        public static BlockBehaviour.Properties ofFullCopy(BlockBehaviour blockbehaviour) {
+-            BlockBehaviour.Properties blockbehaviour_properties = ofLegacyCopy(blockbehaviour);
+-            BlockBehaviour.Properties blockbehaviour_properties1 = blockbehaviour.properties;
++        public static BlockBehaviour.Properties ofFullCopy(BlockBehaviour blockbase) {
++            BlockBehaviour.Properties blockbase_info = ofLegacyCopy(blockbase);
++            BlockBehaviour.Properties blockbase_info1 = blockbase.properties;
+ 
+-            blockbehaviour_properties.jumpFactor = blockbehaviour_properties1.jumpFactor;
+-            blockbehaviour_properties.isRedstoneConductor = blockbehaviour_properties1.isRedstoneConductor;
+-            blockbehaviour_properties.isValidSpawn = blockbehaviour_properties1.isValidSpawn;
+-            blockbehaviour_properties.hasPostProcess = blockbehaviour_properties1.hasPostProcess;
+-            blockbehaviour_properties.isSuffocating = blockbehaviour_properties1.isSuffocating;
+-            blockbehaviour_properties.isViewBlocking = blockbehaviour_properties1.isViewBlocking;
+-            blockbehaviour_properties.drops = blockbehaviour_properties1.drops;
+-            return blockbehaviour_properties;
++            blockbase_info.jumpFactor = blockbase_info1.jumpFactor;
++            blockbase_info.isRedstoneConductor = blockbase_info1.isRedstoneConductor;
++            blockbase_info.isValidSpawn = blockbase_info1.isValidSpawn;
++            blockbase_info.hasPostProcess = blockbase_info1.hasPostProcess;
++            blockbase_info.isSuffocating = blockbase_info1.isSuffocating;
++            blockbase_info.isViewBlocking = blockbase_info1.isViewBlocking;
++            blockbase_info.drops = blockbase_info1.drops;
++            return blockbase_info;
+         }
+ 
+         /** @deprecated */
+         @Deprecated
+-        public static BlockBehaviour.Properties ofLegacyCopy(BlockBehaviour blockbehaviour) {
+-            BlockBehaviour.Properties blockbehaviour_properties = new BlockBehaviour.Properties();
+-            BlockBehaviour.Properties blockbehaviour_properties1 = blockbehaviour.properties;
++        public static BlockBehaviour.Properties ofLegacyCopy(BlockBehaviour blockbase) {
++            BlockBehaviour.Properties blockbase_info = new BlockBehaviour.Properties();
++            BlockBehaviour.Properties blockbase_info1 = blockbase.properties;
+ 
+-            blockbehaviour_properties.destroyTime = blockbehaviour_properties1.destroyTime;
+-            blockbehaviour_properties.explosionResistance = blockbehaviour_properties1.explosionResistance;
+-            blockbehaviour_properties.hasCollision = blockbehaviour_properties1.hasCollision;
+-            blockbehaviour_properties.isRandomlyTicking = blockbehaviour_properties1.isRandomlyTicking;
+-            blockbehaviour_properties.lightEmission = blockbehaviour_properties1.lightEmission;
+-            blockbehaviour_properties.mapColor = blockbehaviour_properties1.mapColor;
+-            blockbehaviour_properties.soundType = blockbehaviour_properties1.soundType;
+-            blockbehaviour_properties.friction = blockbehaviour_properties1.friction;
+-            blockbehaviour_properties.speedFactor = blockbehaviour_properties1.speedFactor;
+-            blockbehaviour_properties.dynamicShape = blockbehaviour_properties1.dynamicShape;
+-            blockbehaviour_properties.canOcclude = blockbehaviour_properties1.canOcclude;
+-            blockbehaviour_properties.isAir = blockbehaviour_properties1.isAir;
+-            blockbehaviour_properties.ignitedByLava = blockbehaviour_properties1.ignitedByLava;
+-            blockbehaviour_properties.liquid = blockbehaviour_properties1.liquid;
+-            blockbehaviour_properties.forceSolidOff = blockbehaviour_properties1.forceSolidOff;
+-            blockbehaviour_properties.forceSolidOn = blockbehaviour_properties1.forceSolidOn;
+-            blockbehaviour_properties.pushReaction = blockbehaviour_properties1.pushReaction;
+-            blockbehaviour_properties.requiresCorrectToolForDrops = blockbehaviour_properties1.requiresCorrectToolForDrops;
+-            blockbehaviour_properties.offsetFunction = blockbehaviour_properties1.offsetFunction;
+-            blockbehaviour_properties.spawnTerrainParticles = blockbehaviour_properties1.spawnTerrainParticles;
+-            blockbehaviour_properties.requiredFeatures = blockbehaviour_properties1.requiredFeatures;
+-            blockbehaviour_properties.emissiveRendering = blockbehaviour_properties1.emissiveRendering;
+-            blockbehaviour_properties.instrument = blockbehaviour_properties1.instrument;
+-            blockbehaviour_properties.replaceable = blockbehaviour_properties1.replaceable;
+-            return blockbehaviour_properties;
++            blockbase_info.destroyTime = blockbase_info1.destroyTime;
++            blockbase_info.explosionResistance = blockbase_info1.explosionResistance;
++            blockbase_info.hasCollision = blockbase_info1.hasCollision;
++            blockbase_info.isRandomlyTicking = blockbase_info1.isRandomlyTicking;
++            blockbase_info.lightEmission = blockbase_info1.lightEmission;
++            blockbase_info.mapColor = blockbase_info1.mapColor;
++            blockbase_info.soundType = blockbase_info1.soundType;
++            blockbase_info.friction = blockbase_info1.friction;
++            blockbase_info.speedFactor = blockbase_info1.speedFactor;
++            blockbase_info.dynamicShape = blockbase_info1.dynamicShape;
++            blockbase_info.canOcclude = blockbase_info1.canOcclude;
++            blockbase_info.isAir = blockbase_info1.isAir;
++            blockbase_info.ignitedByLava = blockbase_info1.ignitedByLava;
++            blockbase_info.liquid = blockbase_info1.liquid;
++            blockbase_info.forceSolidOff = blockbase_info1.forceSolidOff;
++            blockbase_info.forceSolidOn = blockbase_info1.forceSolidOn;
++            blockbase_info.pushReaction = blockbase_info1.pushReaction;
++            blockbase_info.requiresCorrectToolForDrops = blockbase_info1.requiresCorrectToolForDrops;
++            blockbase_info.offsetFunction = blockbase_info1.offsetFunction;
++            blockbase_info.spawnTerrainParticles = blockbase_info1.spawnTerrainParticles;
++            blockbase_info.requiredFeatures = blockbase_info1.requiredFeatures;
++            blockbase_info.emissiveRendering = blockbase_info1.emissiveRendering;
++            blockbase_info.instrument = blockbase_info1.instrument;
++            blockbase_info.replaceable = blockbase_info1.replaceable;
++            return blockbase_info;
+         }
+ 
+-        public BlockBehaviour.Properties mapColor(DyeColor dyecolor) {
+-            this.mapColor = (blockstate) -> {
+-                return dyecolor.getMapColor();
++        public BlockBehaviour.Properties mapColor(DyeColor mapColor) {
++            this.mapColor = (iblockdata) -> {
++                return mapColor.getMapColor();
+             };
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties mapColor(MapColor mapcolor) {
+-            this.mapColor = (blockstate) -> {
+-                return mapcolor;
++        public BlockBehaviour.Properties mapColor(MapColor mapColor) {
++            this.mapColor = (iblockdata) -> {
++                return mapColor;
+             };
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties mapColor(Function<BlockState, MapColor> function) {
+-            this.mapColor = function;
++        public BlockBehaviour.Properties mapColor(Function<IBlockData, MapColor> mapColor) {
++            this.mapColor = mapColor;
+             return this;
+         }
+ 
+@@ -612,41 +613,41 @@
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties friction(float f) {
+-            this.friction = f;
++        public BlockBehaviour.Properties friction(float friction) {
++            this.friction = friction;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties speedFactor(float f) {
+-            this.speedFactor = f;
++        public BlockBehaviour.Properties speedFactor(float speedFactor) {
++            this.speedFactor = speedFactor;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties jumpFactor(float f) {
+-            this.jumpFactor = f;
++        public BlockBehaviour.Properties jumpFactor(float jumpFactor) {
++            this.jumpFactor = jumpFactor;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties sound(SoundType soundtype) {
+-            this.soundType = soundtype;
++        public BlockBehaviour.Properties sound(SoundType soundType) {
++            this.soundType = soundType;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties lightLevel(ToIntFunction<BlockState> tointfunction) {
+-            this.lightEmission = tointfunction;
++        public BlockBehaviour.Properties lightLevel(ToIntFunction<IBlockData> lightEmission) {
++            this.lightEmission = lightEmission;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties strength(float f, float f1) {
+-            return this.destroyTime(f).explosionResistance(f1);
++        public BlockBehaviour.Properties strength(float destroyTime, float explosionResistance) {
++            return this.destroyTime(destroyTime).explosionResistance(explosionResistance);
+         }
+ 
+         public BlockBehaviour.Properties instabreak() {
+             return this.strength(0.0F);
+         }
+ 
+-        public BlockBehaviour.Properties strength(float f) {
+-            this.strength(f, f);
++        public BlockBehaviour.Properties strength(float strength) {
++            this.strength(strength, strength);
+             return this;
+         }
+ 
+@@ -692,8 +693,8 @@
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties pushReaction(PushReaction pushreaction) {
+-            this.pushReaction = pushreaction;
++        public BlockBehaviour.Properties pushReaction(EnumPistonReaction pushReaction) {
++            this.pushReaction = pushReaction;
+             return this;
+         }
+ 
+@@ -702,33 +703,33 @@
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties isValidSpawn(BlockBehaviour.StateArgumentPredicate<EntityType<?>> blockbehaviour_stateargumentpredicate) {
+-            this.isValidSpawn = blockbehaviour_stateargumentpredicate;
++        public BlockBehaviour.Properties isValidSpawn(BlockBehaviour.StateArgumentPredicate<EntityType<?>> isValidSpawn) {
++            this.isValidSpawn = isValidSpawn;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties isRedstoneConductor(BlockBehaviour.StatePredicate blockbehaviour_statepredicate) {
+-            this.isRedstoneConductor = blockbehaviour_statepredicate;
++        public BlockBehaviour.Properties isRedstoneConductor(BlockBehaviour.StatePredicate isRedstoneConductor) {
++            this.isRedstoneConductor = isRedstoneConductor;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties isSuffocating(BlockBehaviour.StatePredicate blockbehaviour_statepredicate) {
+-            this.isSuffocating = blockbehaviour_statepredicate;
++        public BlockBehaviour.Properties isSuffocating(BlockBehaviour.StatePredicate isSuffocating) {
++            this.isSuffocating = isSuffocating;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties isViewBlocking(BlockBehaviour.StatePredicate blockbehaviour_statepredicate) {
+-            this.isViewBlocking = blockbehaviour_statepredicate;
++        public BlockBehaviour.Properties isViewBlocking(BlockBehaviour.StatePredicate isViewBlocking) {
++            this.isViewBlocking = isViewBlocking;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties hasPostProcess(BlockBehaviour.StatePredicate blockbehaviour_statepredicate) {
+-            this.hasPostProcess = blockbehaviour_statepredicate;
++        public BlockBehaviour.Properties hasPostProcess(BlockBehaviour.StatePredicate hasPostProcess) {
++            this.hasPostProcess = hasPostProcess;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties emissiveRendering(BlockBehaviour.StatePredicate blockbehaviour_statepredicate) {
+-            this.emissiveRendering = blockbehaviour_statepredicate;
++        public BlockBehaviour.Properties emissiveRendering(BlockBehaviour.StatePredicate emissiveRendering) {
++            this.emissiveRendering = emissiveRendering;
+             return this;
+         }
+ 
+@@ -737,22 +738,22 @@
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties destroyTime(float f) {
+-            this.destroyTime = f;
++        public BlockBehaviour.Properties destroyTime(float destroyTime) {
++            this.destroyTime = destroyTime;
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties explosionResistance(float f) {
+-            this.explosionResistance = Math.max(0.0F, f);
++        public BlockBehaviour.Properties explosionResistance(float explosionResistance) {
++            this.explosionResistance = Math.max(0.0F, explosionResistance);
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties offsetType(BlockBehaviour.OffsetType blockbehaviour_offsettype) {
+-            switch (blockbehaviour_offsettype) {
++        public BlockBehaviour.Properties offsetType(BlockBehaviour.EnumRandomOffset offsetType) {
++            switch (offsetType) {
+                 case XYZ:
+-                    this.offsetFunction = Optional.of((blockstate, blockgetter, blockpos) -> {
+-                        Block block = blockstate.getBlock();
+-                        long i = Mth.getSeed(blockpos.getX(), 0, blockpos.getZ());
++                    this.offsetFunction = Optional.of((iblockdata, iblockaccess, blockposition) -> {
++                        Block block = iblockdata.getBlock();
++                        long i = Mth.getSeed(blockposition.getX(), 0, blockposition.getZ());
+                         double d0 = ((double) ((float) (i >> 4 & 15L) / 15.0F) - 1.0D) * (double) block.getMaxVerticalOffset();
+                         float f = block.getMaxHorizontalOffset();
+                         double d1 = Mth.clamp(((double) ((float) (i & 15L) / 15.0F) - 0.5D) * 0.5D, (double) (-f), (double) f);
+@@ -762,9 +763,9 @@
+                     });
+                     break;
+                 case XZ:
+-                    this.offsetFunction = Optional.of((blockstate, blockgetter, blockpos) -> {
+-                        Block block = blockstate.getBlock();
+-                        long i = Mth.getSeed(blockpos.getX(), 0, blockpos.getZ());
++                    this.offsetFunction = Optional.of((iblockdata, iblockaccess, blockposition) -> {
++                        Block block = iblockdata.getBlock();
++                        long i = Mth.getSeed(blockposition.getX(), 0, blockposition.getZ());
+                         float f = block.getMaxHorizontalOffset();
+                         double d0 = Mth.clamp(((double) ((float) (i & 15L) / 15.0F) - 0.5D) * 0.5D, (double) (-f), (double) f);
+                         double d1 = Mth.clamp(((double) ((float) (i >> 8 & 15L) / 15.0F) - 0.5D) * 0.5D, (double) (-f), (double) f);
+@@ -784,13 +785,13 @@
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties requiredFeatures(FeatureFlag... afeatureflag) {
+-            this.requiredFeatures = FeatureFlags.REGISTRY.subset(afeatureflag);
++        public BlockBehaviour.Properties requiredFeatures(FeatureFlag... requiredFeatures) {
++            this.requiredFeatures = FeatureFlags.REGISTRY.subset(requiredFeatures);
+             return this;
+         }
+ 
+-        public BlockBehaviour.Properties instrument(NoteBlockInstrument noteblockinstrument) {
+-            this.instrument = noteblockinstrument;
++        public BlockBehaviour.Properties instrument(NoteBlockInstrument instrument) {
++            this.instrument = instrument;
+             return this;
+         }
+ 
+@@ -802,20 +803,20 @@
+ 
+     public interface StateArgumentPredicate<A> {
+ 
+-        boolean test(BlockState state, BlockGetter level, BlockPos pos, A value);
++        boolean test(IBlockData state, BlockGetter level, BlockPos pos, A value);
+     }
+ 
+     public interface OffsetFunction {
+ 
+-        Vec3 evaluate(BlockState state, BlockGetter level, BlockPos pos);
++        Vec3 evaluate(IBlockData state, BlockGetter level, BlockPos pos);
+     }
+ 
+     public interface StatePredicate {
+ 
+-        boolean test(BlockState state, BlockGetter level, BlockPos pos);
++        boolean test(IBlockData state, BlockGetter level, BlockPos pos);
+     }
+ 
+-    public abstract static class BlockStateBase extends StateHolder<Block, BlockState> {
++    public abstract static class BlockStateBase extends StateHolder<Block, IBlockData> {
+ 
+         private final int lightEmission;
+         private final boolean useShapeForLightOcclusion;
+@@ -827,9 +828,9 @@
+         /** @deprecated */
+         @Deprecated
+         private boolean legacySolid;
+-        private final PushReaction pushReaction;
++        private final EnumPistonReaction pushReaction;
+         private final MapColor mapColor;
+-        private final float destroySpeed;
++        public final float destroySpeed;
+         private final boolean requiresCorrectToolForDrops;
+         private final boolean canOcclude;
+         private final BlockBehaviour.StatePredicate isRedstoneConductor;
+@@ -846,30 +847,30 @@
+         private FluidState fluidState;
+         private boolean isRandomlyTicking;
+ 
+-        protected BlockStateBase(Block block, ImmutableMap<Property<?>, Comparable<?>> immutablemap, MapCodec<BlockState> mapcodec) {
+-            super(block, immutablemap, mapcodec);
++        protected BlockStateBase(Block owner, ImmutableMap<Property<?>, Comparable<?>> values, MapCodec<IBlockData> propertiesCodec) {
++            super(owner, values, propertiesCodec);
+             this.fluidState = Fluids.EMPTY.defaultFluidState();
+-            BlockBehaviour.Properties blockbehaviour_properties = block.properties;
++            BlockBehaviour.Properties blockbase_info = owner.properties;
+ 
+-            this.lightEmission = blockbehaviour_properties.lightEmission.applyAsInt(this.asState());
+-            this.useShapeForLightOcclusion = block.useShapeForLightOcclusion(this.asState());
+-            this.isAir = blockbehaviour_properties.isAir;
+-            this.ignitedByLava = blockbehaviour_properties.ignitedByLava;
+-            this.liquid = blockbehaviour_properties.liquid;
+-            this.pushReaction = blockbehaviour_properties.pushReaction;
+-            this.mapColor = (MapColor) blockbehaviour_properties.mapColor.apply(this.asState());
+-            this.destroySpeed = blockbehaviour_properties.destroyTime;
+-            this.requiresCorrectToolForDrops = blockbehaviour_properties.requiresCorrectToolForDrops;
+-            this.canOcclude = blockbehaviour_properties.canOcclude;
+-            this.isRedstoneConductor = blockbehaviour_properties.isRedstoneConductor;
+-            this.isSuffocating = blockbehaviour_properties.isSuffocating;
+-            this.isViewBlocking = blockbehaviour_properties.isViewBlocking;
+-            this.hasPostProcess = blockbehaviour_properties.hasPostProcess;
+-            this.emissiveRendering = blockbehaviour_properties.emissiveRendering;
+-            this.offsetFunction = blockbehaviour_properties.offsetFunction;
+-            this.spawnTerrainParticles = blockbehaviour_properties.spawnTerrainParticles;
+-            this.instrument = blockbehaviour_properties.instrument;
+-            this.replaceable = blockbehaviour_properties.replaceable;
++            this.lightEmission = blockbase_info.lightEmission.applyAsInt(this.asState());
++            this.useShapeForLightOcclusion = owner.useShapeForLightOcclusion(this.asState());
++            this.isAir = blockbase_info.isAir;
++            this.ignitedByLava = blockbase_info.ignitedByLava;
++            this.liquid = blockbase_info.liquid;
++            this.pushReaction = blockbase_info.pushReaction;
++            this.mapColor = (MapColor) blockbase_info.mapColor.apply(this.asState());
++            this.destroySpeed = blockbase_info.destroyTime;
++            this.requiresCorrectToolForDrops = blockbase_info.requiresCorrectToolForDrops;
++            this.canOcclude = blockbase_info.canOcclude;
++            this.isRedstoneConductor = blockbase_info.isRedstoneConductor;
++            this.isSuffocating = blockbase_info.isSuffocating;
++            this.isViewBlocking = blockbase_info.isViewBlocking;
++            this.hasPostProcess = blockbase_info.hasPostProcess;
++            this.emissiveRendering = blockbase_info.emissiveRendering;
++            this.offsetFunction = blockbase_info.offsetFunction;
++            this.spawnTerrainParticles = blockbase_info.spawnTerrainParticles;
++            this.instrument = blockbase_info.instrument;
++            this.replaceable = blockbase_info.replaceable;
+         }
+ 
+         private boolean calculateSolid() {
+@@ -885,9 +886,9 @@
+                 if (voxelshape.isEmpty()) {
+                     return false;
+                 } else {
+-                    AABB aabb = voxelshape.bounds();
++                    AABB axisalignedbb = voxelshape.bounds();
+ 
+-                    return aabb.getSize() >= 0.7291666666666666D ? true : aabb.getYsize() >= 1.0D;
++                    return axisalignedbb.getSize() >= 0.7291666666666666D ? true : axisalignedbb.getYsize() >= 1.0D;
+                 }
+             }
+         }
+@@ -924,24 +925,24 @@
+             return this.legacySolid;
+         }
+ 
+-        public boolean isValidSpawn(BlockGetter blockgetter, BlockPos blockpos, EntityType<?> entitytype) {
+-            return this.getBlock().properties.isValidSpawn.test(this.asState(), blockgetter, blockpos, entitytype);
++        public boolean isValidSpawn(BlockGetter level, BlockPos pos, EntityType<?> entityType) {
++            return this.getBlock().properties.isValidSpawn.test(this.asState(), level, pos, entityType);
+         }
+ 
+-        public boolean propagatesSkylightDown(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.cache != null ? this.cache.propagatesSkylightDown : this.getBlock().propagatesSkylightDown(this.asState(), blockgetter, blockpos);
++        public boolean propagatesSkylightDown(BlockGetter level, BlockPos pos) {
++            return this.cache != null ? this.cache.propagatesSkylightDown : this.getBlock().propagatesSkylightDown(this.asState(), level, pos);
+         }
+ 
+-        public int getLightBlock(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.cache != null ? this.cache.lightBlock : this.getBlock().getLightBlock(this.asState(), blockgetter, blockpos);
++        public int getLightBlock(BlockGetter level, BlockPos pos) {
++            return this.cache != null ? this.cache.lightBlock : this.getBlock().getLightBlock(this.asState(), level, pos);
+         }
+ 
+-        public VoxelShape getFaceOcclusionShape(BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-            return this.cache != null && this.cache.occlusionShapes != null ? this.cache.occlusionShapes[direction.ordinal()] : Shapes.getFaceShape(this.getOcclusionShape(blockgetter, blockpos), direction);
++        public VoxelShape getFaceOcclusionShape(BlockGetter level, BlockPos pos, Direction direction) {
++            return this.cache != null && this.cache.occlusionShapes != null ? this.cache.occlusionShapes[direction.ordinal()] : Shapes.getFaceShape(this.getOcclusionShape(level, pos), direction);
+         }
+ 
+-        public VoxelShape getOcclusionShape(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getBlock().getOcclusionShape(this.asState(), blockgetter, blockpos);
++        public VoxelShape getOcclusionShape(BlockGetter level, BlockPos pos) {
++            return this.getBlock().getOcclusionShape(this.asState(), level, pos);
+         }
+ 
+         public boolean hasLargeCollisionShape() {
+@@ -970,73 +971,73 @@
+             return this.liquid;
+         }
+ 
+-        public MapColor getMapColor(BlockGetter blockgetter, BlockPos blockpos) {
++        public MapColor getMapColor(BlockGetter level, BlockPos pos) {
+             return this.mapColor;
+         }
+ 
+-        public BlockState rotate(Rotation rotation) {
++        public IBlockData rotate(Rotation rotation) {
+             return this.getBlock().rotate(this.asState(), rotation);
+         }
+ 
+-        public BlockState mirror(Mirror mirror) {
++        public IBlockData mirror(Mirror mirror) {
+             return this.getBlock().mirror(this.asState(), mirror);
+         }
+ 
+-        public RenderShape getRenderShape() {
++        public EnumRenderType getRenderShape() {
+             return this.getBlock().getRenderShape(this.asState());
+         }
+ 
+-        public boolean emissiveRendering(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.emissiveRendering.test(this.asState(), blockgetter, blockpos);
++        public boolean emissiveRendering(BlockGetter level, BlockPos pos) {
++            return this.emissiveRendering.test(this.asState(), level, pos);
+         }
+ 
+-        public float getShadeBrightness(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getBlock().getShadeBrightness(this.asState(), blockgetter, blockpos);
++        public float getShadeBrightness(BlockGetter level, BlockPos pos) {
++            return this.getBlock().getShadeBrightness(this.asState(), level, pos);
+         }
+ 
+-        public boolean isRedstoneConductor(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.isRedstoneConductor.test(this.asState(), blockgetter, blockpos);
++        public boolean isRedstoneConductor(BlockGetter level, BlockPos pos) {
++            return this.isRedstoneConductor.test(this.asState(), level, pos);
+         }
+ 
+         public boolean isSignalSource() {
+             return this.getBlock().isSignalSource(this.asState());
+         }
+ 
+-        public int getSignal(BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-            return this.getBlock().getSignal(this.asState(), blockgetter, blockpos, direction);
++        public int getSignal(BlockGetter level, BlockPos pos, Direction direction) {
++            return this.getBlock().getSignal(this.asState(), level, pos, direction);
+         }
+ 
+         public boolean hasAnalogOutputSignal() {
+             return this.getBlock().hasAnalogOutputSignal(this.asState());
+         }
+ 
+-        public int getAnalogOutputSignal(Level level, BlockPos blockpos) {
+-            return this.getBlock().getAnalogOutputSignal(this.asState(), level, blockpos);
++        public int getAnalogOutputSignal(Level level, BlockPos pos) {
++            return this.getBlock().getAnalogOutputSignal(this.asState(), level, pos);
+         }
+ 
+-        public float getDestroySpeed(BlockGetter blockgetter, BlockPos blockpos) {
++        public float getDestroySpeed(BlockGetter level, BlockPos pos) {
+             return this.destroySpeed;
+         }
+ 
+-        public float getDestroyProgress(Player player, BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getBlock().getDestroyProgress(this.asState(), player, blockgetter, blockpos);
++        public float getDestroyProgress(Player player, BlockGetter level, BlockPos pos) {
++            return this.getBlock().getDestroyProgress(this.asState(), player, level, pos);
+         }
+ 
+-        public int getDirectSignal(BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-            return this.getBlock().getDirectSignal(this.asState(), blockgetter, blockpos, direction);
++        public int getDirectSignal(BlockGetter level, BlockPos pos, Direction direction) {
++            return this.getBlock().getDirectSignal(this.asState(), level, pos, direction);
+         }
+ 
+-        public PushReaction getPistonPushReaction() {
++        public EnumPistonReaction getPistonPushReaction() {
+             return this.pushReaction;
+         }
+ 
+-        public boolean isSolidRender(BlockGetter blockgetter, BlockPos blockpos) {
++        public boolean isSolidRender(BlockGetter level, BlockPos pos) {
+             if (this.cache != null) {
+                 return this.cache.solidRender;
+             } else {
+-                BlockState blockstate = this.asState();
++                IBlockData iblockdata = this.asState();
+ 
+-                return blockstate.canOcclude() ? Block.isShapeFullBlock(blockstate.getOcclusionShape(blockgetter, blockpos)) : false;
++                return iblockdata.canOcclude() ? Block.isShapeFullBlock(iblockdata.getOcclusionShape(level, pos)) : false;
+             }
+         }
+ 
+@@ -1044,49 +1045,49 @@
+             return this.canOcclude;
+         }
+ 
+-        public boolean skipRendering(BlockState blockstate, Direction direction) {
+-            return this.getBlock().skipRendering(this.asState(), blockstate, direction);
++        public boolean skipRendering(IBlockData state, Direction face) {
++            return this.getBlock().skipRendering(this.asState(), state, face);
+         }
+ 
+-        public VoxelShape getShape(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getShape(blockgetter, blockpos, CollisionContext.empty());
++        public VoxelShape getShape(BlockGetter level, BlockPos pos) {
++            return this.getShape(level, pos, CollisionContext.empty());
+         }
+ 
+-        public VoxelShape getShape(BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-            return this.getBlock().getShape(this.asState(), blockgetter, blockpos, collisioncontext);
++        public VoxelShape getShape(BlockGetter level, BlockPos pos, CollisionContext context) {
++            return this.getBlock().getShape(this.asState(), level, pos, context);
+         }
+ 
+-        public VoxelShape getCollisionShape(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.cache != null ? this.cache.collisionShape : this.getCollisionShape(blockgetter, blockpos, CollisionContext.empty());
++        public VoxelShape getCollisionShape(BlockGetter level, BlockPos pos) {
++            return this.cache != null ? this.cache.collisionShape : this.getCollisionShape(level, pos, CollisionContext.empty());
+         }
+ 
+-        public VoxelShape getCollisionShape(BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-            return this.getBlock().getCollisionShape(this.asState(), blockgetter, blockpos, collisioncontext);
++        public VoxelShape getCollisionShape(BlockGetter level, BlockPos pos, CollisionContext context) {
++            return this.getBlock().getCollisionShape(this.asState(), level, pos, context);
+         }
+ 
+-        public VoxelShape getBlockSupportShape(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getBlock().getBlockSupportShape(this.asState(), blockgetter, blockpos);
++        public VoxelShape getBlockSupportShape(BlockGetter level, BlockPos pos) {
++            return this.getBlock().getBlockSupportShape(this.asState(), level, pos);
+         }
+ 
+-        public VoxelShape getVisualShape(BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-            return this.getBlock().getVisualShape(this.asState(), blockgetter, blockpos, collisioncontext);
++        public VoxelShape getVisualShape(BlockGetter level, BlockPos pos, CollisionContext context) {
++            return this.getBlock().getVisualShape(this.asState(), level, pos, context);
+         }
+ 
+-        public VoxelShape getInteractionShape(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.getBlock().getInteractionShape(this.asState(), blockgetter, blockpos);
++        public VoxelShape getInteractionShape(BlockGetter level, BlockPos pos) {
++            return this.getBlock().getInteractionShape(this.asState(), level, pos);
+         }
+ 
+-        public final boolean entityCanStandOn(BlockGetter blockgetter, BlockPos blockpos, Entity entity) {
+-            return this.entityCanStandOnFace(blockgetter, blockpos, entity, Direction.UP);
++        public final boolean entityCanStandOn(BlockGetter level, BlockPos pos, Entity entity) {
++            return this.entityCanStandOnFace(level, pos, entity, Direction.UP);
+         }
+ 
+-        public final boolean entityCanStandOnFace(BlockGetter blockgetter, BlockPos blockpos, Entity entity, Direction direction) {
+-            return Block.isFaceFull(this.getCollisionShape(blockgetter, blockpos, CollisionContext.of(entity)), direction);
++        public final boolean entityCanStandOnFace(BlockGetter level, BlockPos pos, Entity entity, Direction face) {
++            return Block.isFaceFull(this.getCollisionShape(level, pos, CollisionContext.of(entity)), face);
+         }
+ 
+-        public Vec3 getOffset(BlockGetter blockgetter, BlockPos blockpos) {
+-            return (Vec3) this.offsetFunction.map((blockbehaviour_offsetfunction) -> {
+-                return blockbehaviour_offsetfunction.evaluate(this.asState(), blockgetter, blockpos);
++        public Vec3 getOffset(BlockGetter level, BlockPos pos) {
++            return (Vec3) this.offsetFunction.map((blockbase_b) -> {
++                return blockbase_b.evaluate(this.asState(), level, pos);
+             }).orElse(Vec3.ZERO);
+         }
+ 
+@@ -1094,100 +1095,100 @@
+             return this.offsetFunction.isPresent();
+         }
+ 
+-        public boolean triggerEvent(Level level, BlockPos blockpos, int i, int j) {
+-            return this.getBlock().triggerEvent(this.asState(), level, blockpos, i, j);
++        public boolean triggerEvent(Level level, BlockPos pos, int id, int param) {
++            return this.getBlock().triggerEvent(this.asState(), level, pos, id, param);
+         }
+ 
+         /** @deprecated */
+         @Deprecated
+-        public void neighborChanged(Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-            this.getBlock().neighborChanged(this.asState(), level, blockpos, block, blockpos1, flag);
++        public void neighborChanged(Level level, BlockPos pos, Block neighborBlock, BlockPos neighborPos, boolean movedByPiston) {
++            this.getBlock().neighborChanged(this.asState(), level, pos, neighborBlock, neighborPos, movedByPiston);
+         }
+ 
+-        public final void updateNeighbourShapes(LevelAccessor levelaccessor, BlockPos blockpos, int i) {
+-            this.updateNeighbourShapes(levelaccessor, blockpos, i, 512);
++        public final void updateNeighbourShapes(LevelAccessor level, BlockPos pos, int flags) {
++            this.updateNeighbourShapes(level, pos, flags, 512);
+         }
+ 
+-        public final void updateNeighbourShapes(LevelAccessor levelaccessor, BlockPos blockpos, int i, int j) {
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
+-            Direction[] adirection = BlockBehaviour.UPDATE_SHAPE_ORDER;
+-            int k = adirection.length;
++        public final void updateNeighbourShapes(LevelAccessor level, BlockPos pos, int flags, int recursionLeft) {
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++            Direction[] aenumdirection = BlockBehaviour.UPDATE_SHAPE_ORDER;
++            int k = aenumdirection.length;
+ 
+             for (int l = 0; l < k; ++l) {
+-                Direction direction = adirection[l];
++                Direction enumdirection = aenumdirection[l];
+ 
+-                blockpos_mutableblockpos.setWithOffset(blockpos, direction);
+-                levelaccessor.neighborShapeChanged(direction.getOpposite(), this.asState(), blockpos_mutableblockpos, blockpos, i, j);
++                blockposition_mutableblockposition.setWithOffset(pos, enumdirection);
++                level.neighborShapeChanged(enumdirection.getOpposite(), this.asState(), blockposition_mutableblockposition, pos, flags, recursionLeft);
+             }
+ 
+         }
+ 
+-        public final void updateIndirectNeighbourShapes(LevelAccessor levelaccessor, BlockPos blockpos, int i) {
+-            this.updateIndirectNeighbourShapes(levelaccessor, blockpos, i, 512);
++        public final void updateIndirectNeighbourShapes(LevelAccessor level, BlockPos pos, int flags) {
++            this.updateIndirectNeighbourShapes(level, pos, flags, 512);
+         }
+ 
+-        public void updateIndirectNeighbourShapes(LevelAccessor levelaccessor, BlockPos blockpos, int i, int j) {
+-            this.getBlock().updateIndirectNeighbourShapes(this.asState(), levelaccessor, blockpos, i, j);
++        public void updateIndirectNeighbourShapes(LevelAccessor level, BlockPos pos, int flags, int recursionLeft) {
++            this.getBlock().updateIndirectNeighbourShapes(this.asState(), level, pos, flags, recursionLeft);
+         }
+ 
+-        public void onPlace(Level level, BlockPos blockpos, BlockState blockstate, boolean flag) {
+-            this.getBlock().onPlace(this.asState(), level, blockpos, blockstate, flag);
++        public void onPlace(Level level, BlockPos pos, IBlockData oldState, boolean movedByPiston) {
++            this.getBlock().onPlace(this.asState(), level, pos, oldState, movedByPiston);
+         }
+ 
+-        public void onRemove(Level level, BlockPos blockpos, BlockState blockstate, boolean flag) {
+-            this.getBlock().onRemove(this.asState(), level, blockpos, blockstate, flag);
++        public void onRemove(Level level, BlockPos pos, IBlockData newState, boolean movedByPiston) {
++            this.getBlock().onRemove(this.asState(), level, pos, newState, movedByPiston);
+         }
+ 
+-        public void onExplosionHit(Level level, BlockPos blockpos, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
+-            this.getBlock().onExplosionHit(this.asState(), level, blockpos, explosion, biconsumer);
++        public void onExplosionHit(Level world, BlockPos blockposition, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
++            this.getBlock().onExplosionHit(this.asState(), world, blockposition, explosion, biconsumer);
+         }
+ 
+-        public void tick(ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-            this.getBlock().tick(this.asState(), serverlevel, blockpos, randomsource);
++        public void tick(ServerLevel level, BlockPos pos, RandomSource random) {
++            this.getBlock().tick(this.asState(), level, pos, random);
+         }
+ 
+-        public void randomTick(ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-            this.getBlock().randomTick(this.asState(), serverlevel, blockpos, randomsource);
++        public void randomTick(ServerLevel level, BlockPos pos, RandomSource random) {
++            this.getBlock().randomTick(this.asState(), level, pos, random);
+         }
+ 
+-        public void entityInside(Level level, BlockPos blockpos, Entity entity) {
+-            this.getBlock().entityInside(this.asState(), level, blockpos, entity);
++        public void entityInside(Level level, BlockPos pos, Entity entity) {
++            this.getBlock().entityInside(this.asState(), level, pos, entity);
+         }
+ 
+-        public void spawnAfterBreak(ServerLevel serverlevel, BlockPos blockpos, ItemStack itemstack, boolean flag) {
+-            this.getBlock().spawnAfterBreak(this.asState(), serverlevel, blockpos, itemstack, flag);
++        public void spawnAfterBreak(ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
++            this.getBlock().spawnAfterBreak(this.asState(), level, pos, stack, dropExperience);
+         }
+ 
+-        public List<ItemStack> getDrops(LootParams.Builder lootparams_builder) {
+-            return this.getBlock().getDrops(this.asState(), lootparams_builder);
++        public List<ItemStack> getDrops(LootParams.Builder lootParams) {
++            return this.getBlock().getDrops(this.asState(), lootParams);
+         }
+ 
+-        public InteractionResult use(Level level, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
+-            return this.getBlock().use(this.asState(), level, blockhitresult.getBlockPos(), player, interactionhand, blockhitresult);
++        public InteractionResult use(Level level, Player player, EnumHand hand, BlockHitResult result) {
++            return this.getBlock().use(this.asState(), level, result.getBlockPos(), player, hand, result);
+         }
+ 
+-        public void attack(Level level, BlockPos blockpos, Player player) {
+-            this.getBlock().attack(this.asState(), level, blockpos, player);
++        public void attack(Level level, BlockPos pos, Player player) {
++            this.getBlock().attack(this.asState(), level, pos, player);
+         }
+ 
+-        public boolean isSuffocating(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.isSuffocating.test(this.asState(), blockgetter, blockpos);
++        public boolean isSuffocating(BlockGetter level, BlockPos pos) {
++            return this.isSuffocating.test(this.asState(), level, pos);
+         }
+ 
+-        public boolean isViewBlocking(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.isViewBlocking.test(this.asState(), blockgetter, blockpos);
++        public boolean isViewBlocking(BlockGetter level, BlockPos pos) {
++            return this.isViewBlocking.test(this.asState(), level, pos);
+         }
+ 
+-        public BlockState updateShape(Direction direction, BlockState blockstate, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-            return this.getBlock().updateShape(this.asState(), direction, blockstate, levelaccessor, blockpos, blockpos1);
++        public IBlockData updateShape(Direction direction, IBlockData neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
++            return this.getBlock().updateShape(this.asState(), direction, neighborState, level, pos, neighborPos);
+         }
+ 
+-        public boolean isPathfindable(BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
+-            return this.getBlock().isPathfindable(this.asState(), blockgetter, blockpos, pathcomputationtype);
++        public boolean isPathfindable(BlockGetter level, BlockPos pos, PathMode type) {
++            return this.getBlock().isPathfindable(this.asState(), level, pos, type);
+         }
+ 
+-        public boolean canBeReplaced(BlockPlaceContext blockplacecontext) {
+-            return this.getBlock().canBeReplaced(this.asState(), blockplacecontext);
++        public boolean canBeReplaced(BlockPlaceContext useContext) {
++            return this.getBlock().canBeReplaced(this.asState(), useContext);
+         }
+ 
+         public boolean canBeReplaced(Fluid fluid) {
+@@ -1198,29 +1199,29 @@
+             return this.replaceable;
+         }
+ 
+-        public boolean canSurvive(LevelReader levelreader, BlockPos blockpos) {
+-            return this.getBlock().canSurvive(this.asState(), levelreader, blockpos);
++        public boolean canSurvive(LevelReader level, BlockPos pos) {
++            return this.getBlock().canSurvive(this.asState(), level, pos);
+         }
+ 
+-        public boolean hasPostProcess(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.hasPostProcess.test(this.asState(), blockgetter, blockpos);
++        public boolean hasPostProcess(BlockGetter level, BlockPos pos) {
++            return this.hasPostProcess.test(this.asState(), level, pos);
+         }
+ 
+         @Nullable
+-        public MenuProvider getMenuProvider(Level level, BlockPos blockpos) {
+-            return this.getBlock().getMenuProvider(this.asState(), level, blockpos);
++        public ITileInventory getMenuProvider(Level level, BlockPos pos) {
++            return this.getBlock().getMenuProvider(this.asState(), level, pos);
+         }
+ 
+-        public boolean is(TagKey<Block> tagkey) {
+-            return this.getBlock().builtInRegistryHolder().is(tagkey);
++        public boolean is(TagKey<Block> tag) {
++            return this.getBlock().builtInRegistryHolder().is(tag);
+         }
+ 
+-        public boolean is(TagKey<Block> tagkey, Predicate<BlockBehaviour.BlockStateBase> predicate) {
+-            return this.is(tagkey) && predicate.test(this);
++        public boolean is(TagKey<Block> tag, Predicate<BlockBehaviour.BlockStateBase> predicate) {
++            return this.is(tag) && predicate.test(this);
+         }
+ 
+-        public boolean is(HolderSet<Block> holderset) {
+-            return holderset.contains(this.getBlock().builtInRegistryHolder());
++        public boolean is(HolderSet<Block> holder) {
++            return holder.contains(this.getBlock().builtInRegistryHolder());
+         }
+ 
+         public boolean is(Holder<Block> holder) {
+@@ -1236,8 +1237,8 @@
+         }
+ 
+         @Nullable
+-        public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockEntityType<T> blockentitytype) {
+-            return this.getBlock() instanceof EntityBlock ? ((EntityBlock) this.getBlock()).getTicker(level, this.asState(), blockentitytype) : null;
++        public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockEntityType<T> blockEntityType) {
++            return this.getBlock() instanceof EntityBlock ? ((EntityBlock) this.getBlock()).getTicker(level, this.asState(), blockEntityType) : null;
+         }
+ 
+         public boolean is(Block block) {
+@@ -1256,31 +1257,31 @@
+             return this.isRandomlyTicking;
+         }
+ 
+-        public long getSeed(BlockPos blockpos) {
+-            return this.getBlock().getSeed(this.asState(), blockpos);
++        public long getSeed(BlockPos pos) {
++            return this.getBlock().getSeed(this.asState(), pos);
+         }
+ 
+         public SoundType getSoundType() {
+             return this.getBlock().getSoundType(this.asState());
+         }
+ 
+-        public void onProjectileHit(Level level, BlockState blockstate, BlockHitResult blockhitresult, Projectile projectile) {
+-            this.getBlock().onProjectileHit(level, blockstate, blockhitresult, projectile);
++        public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {
++            this.getBlock().onProjectileHit(level, state, hit, projectile);
+         }
+ 
+-        public boolean isFaceSturdy(BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-            return this.isFaceSturdy(blockgetter, blockpos, direction, SupportType.FULL);
++        public boolean isFaceSturdy(BlockGetter level, BlockPos pos, Direction direction) {
++            return this.isFaceSturdy(level, pos, direction, SupportType.FULL);
+         }
+ 
+-        public boolean isFaceSturdy(BlockGetter blockgetter, BlockPos blockpos, Direction direction, SupportType supporttype) {
+-            return this.cache != null ? this.cache.isFaceSturdy(direction, supporttype) : supporttype.isSupporting(this.asState(), blockgetter, blockpos, direction);
++        public boolean isFaceSturdy(BlockGetter level, BlockPos pos, Direction face, SupportType supportType) {
++            return this.cache != null ? this.cache.isFaceSturdy(face, supportType) : supportType.isSupporting(this.asState(), level, pos, face);
+         }
+ 
+-        public boolean isCollisionShapeFullBlock(BlockGetter blockgetter, BlockPos blockpos) {
+-            return this.cache != null ? this.cache.isCollisionShapeFullBlock : this.getBlock().isCollisionShapeFullBlock(this.asState(), blockgetter, blockpos);
++        public boolean isCollisionShapeFullBlock(BlockGetter level, BlockPos pos) {
++            return this.cache != null ? this.cache.isCollisionShapeFullBlock : this.getBlock().isCollisionShapeFullBlock(this.asState(), level, pos);
+         }
+ 
+-        protected abstract BlockState asState();
++        protected abstract IBlockData asState();
+ 
+         public boolean requiresCorrectToolForDrops() {
+             return this.requiresCorrectToolForDrops;
+@@ -1308,71 +1309,71 @@
+             private final boolean[] faceSturdy;
+             protected final boolean isCollisionShapeFullBlock;
+ 
+-            Cache(BlockState blockstate) {
+-                Block block = blockstate.getBlock();
++            Cache(IBlockData iblockdata) {
++                Block block = iblockdata.getBlock();
+ 
+-                this.solidRender = blockstate.isSolidRender(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+-                this.propagatesSkylightDown = block.propagatesSkylightDown(blockstate, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+-                this.lightBlock = block.getLightBlock(blockstate, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++                this.solidRender = iblockdata.isSolidRender(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++                this.propagatesSkylightDown = block.propagatesSkylightDown(iblockdata, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++                this.lightBlock = block.getLightBlock(iblockdata, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+                 int i;
+ 
+-                if (!blockstate.canOcclude()) {
++                if (!iblockdata.canOcclude()) {
+                     this.occlusionShapes = null;
+                 } else {
+                     this.occlusionShapes = new VoxelShape[BlockBehaviour.BlockStateBase.Cache.DIRECTIONS.length];
+-                    VoxelShape voxelshape = block.getOcclusionShape(blockstate, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+-                    Direction[] adirection = BlockBehaviour.BlockStateBase.Cache.DIRECTIONS;
++                    VoxelShape voxelshape = block.getOcclusionShape(iblockdata, EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
++                    Direction[] aenumdirection = BlockBehaviour.BlockStateBase.Cache.DIRECTIONS;
+ 
+-                    i = adirection.length;
++                    i = aenumdirection.length;
+ 
+                     for (int j = 0; j < i; ++j) {
+-                        Direction direction = adirection[j];
++                        Direction enumdirection = aenumdirection[j];
+ 
+-                        this.occlusionShapes[direction.ordinal()] = Shapes.getFaceShape(voxelshape, direction);
++                        this.occlusionShapes[enumdirection.ordinal()] = Shapes.getFaceShape(voxelshape, enumdirection);
+                     }
+                 }
+ 
+-                this.collisionShape = block.getCollisionShape(blockstate, EmptyBlockGetter.INSTANCE, BlockPos.ZERO, CollisionContext.empty());
+-                if (!this.collisionShape.isEmpty() && blockstate.hasOffsetFunction()) {
++                this.collisionShape = block.getCollisionShape(iblockdata, EmptyBlockGetter.INSTANCE, BlockPos.ZERO, CollisionContext.empty());
++                if (!this.collisionShape.isEmpty() && iblockdata.hasOffsetFunction()) {
+                     throw new IllegalStateException(String.format(Locale.ROOT, "%s has a collision shape and an offset type, but is not marked as dynamicShape in its properties.", BuiltInRegistries.BLOCK.getKey(block)));
+                 } else {
+-                    this.largeCollisionShape = Arrays.stream(Direction.Axis.values()).anyMatch((direction_axis) -> {
+-                        return this.collisionShape.min(direction_axis) < 0.0D || this.collisionShape.max(direction_axis) > 1.0D;
++                    this.largeCollisionShape = Arrays.stream(Direction.Axis.values()).anyMatch((enumdirection_enumaxis) -> {
++                        return this.collisionShape.min(enumdirection_enumaxis) < 0.0D || this.collisionShape.max(enumdirection_enumaxis) > 1.0D;
+                     });
+                     this.faceSturdy = new boolean[BlockBehaviour.BlockStateBase.Cache.DIRECTIONS.length * BlockBehaviour.BlockStateBase.Cache.SUPPORT_TYPE_COUNT];
+-                    Direction[] adirection1 = BlockBehaviour.BlockStateBase.Cache.DIRECTIONS;
+-                    int k = adirection1.length;
++                    Direction[] aenumdirection1 = BlockBehaviour.BlockStateBase.Cache.DIRECTIONS;
++                    int k = aenumdirection1.length;
+ 
+                     for (i = 0; i < k; ++i) {
+-                        Direction direction1 = adirection1[i];
+-                        SupportType[] asupporttype = SupportType.values();
+-                        int l = asupporttype.length;
++                        Direction enumdirection1 = aenumdirection1[i];
++                        SupportType[] aenumblocksupport = SupportType.values();
++                        int l = aenumblocksupport.length;
+ 
+                         for (int i1 = 0; i1 < l; ++i1) {
+-                            SupportType supporttype = asupporttype[i1];
++                            SupportType enumblocksupport = aenumblocksupport[i1];
+ 
+-                            this.faceSturdy[getFaceSupportIndex(direction1, supporttype)] = supporttype.isSupporting(blockstate, EmptyBlockGetter.INSTANCE, BlockPos.ZERO, direction1);
++                            this.faceSturdy[getFaceSupportIndex(enumdirection1, enumblocksupport)] = enumblocksupport.isSupporting(iblockdata, EmptyBlockGetter.INSTANCE, BlockPos.ZERO, enumdirection1);
+                         }
+                     }
+ 
+-                    this.isCollisionShapeFullBlock = Block.isShapeFullBlock(blockstate.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
++                    this.isCollisionShapeFullBlock = Block.isShapeFullBlock(iblockdata.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO));
+                 }
+             }
+ 
+-            public boolean isFaceSturdy(Direction direction, SupportType supporttype) {
+-                return this.faceSturdy[getFaceSupportIndex(direction, supporttype)];
++            public boolean isFaceSturdy(Direction enumdirection, SupportType enumblocksupport) {
++                return this.faceSturdy[getFaceSupportIndex(enumdirection, enumblocksupport)];
+             }
+ 
+-            private static int getFaceSupportIndex(Direction direction, SupportType supporttype) {
+-                return direction.ordinal() * BlockBehaviour.BlockStateBase.Cache.SUPPORT_TYPE_COUNT + supporttype.ordinal();
++            private static int getFaceSupportIndex(Direction enumdirection, SupportType enumblocksupport) {
++                return enumdirection.ordinal() * BlockBehaviour.BlockStateBase.Cache.SUPPORT_TYPE_COUNT + enumblocksupport.ordinal();
+             }
+         }
+     }
+ 
+-    public static enum OffsetType {
++    public static enum EnumRandomOffset {
+ 
+         NONE, XZ, XYZ;
+ 
+-        private OffsetType() {}
++        private EnumRandomOffset() {}
+     }
+ }

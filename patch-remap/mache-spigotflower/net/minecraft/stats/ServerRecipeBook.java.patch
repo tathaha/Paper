@@ -1,0 +1,171 @@
+--- a/net/minecraft/stats/ServerRecipeBook.java
++++ b/net/minecraft/stats/ServerRecipeBook.java
+@@ -20,6 +20,8 @@
+ import net.minecraft.world.item.crafting.RecipeManager;
+ import org.slf4j.Logger;
+ 
++import org.bukkit.craftbukkit.event.CraftEventFactory; // CraftBukkit
++
+ public class ServerRecipeBook extends RecipeBook {
+ 
+     public static final String RECIPE_BOOK_TAG = "recipeBook";
+@@ -27,113 +29,114 @@
+ 
+     public ServerRecipeBook() {}
+ 
+-    public int addRecipes(Collection<RecipeHolder<?>> collection, ServerPlayer serverplayer) {
++    public int addRecipes(Collection<RecipeHolder<?>> recipes, ServerPlayer player) {
+         List<ResourceLocation> list = Lists.newArrayList();
+         int i = 0;
+-        Iterator iterator = collection.iterator();
++        Iterator iterator = recipes.iterator();
+ 
+         while (iterator.hasNext()) {
+             RecipeHolder<?> recipeholder = (RecipeHolder) iterator.next();
+-            ResourceLocation resourcelocation = recipeholder.id();
++            ResourceLocation minecraftkey = recipeholder.id();
+ 
+-            if (!this.known.contains(resourcelocation) && !recipeholder.value().isSpecial()) {
+-                this.add(resourcelocation);
+-                this.addHighlight(resourcelocation);
+-                list.add(resourcelocation);
+-                CriteriaTriggers.RECIPE_UNLOCKED.trigger(serverplayer, recipeholder);
++            if (!this.known.contains(minecraftkey) && !recipeholder.value().isSpecial() && CraftEventFactory.handlePlayerRecipeListUpdateEvent(player, minecraftkey)) { // CraftBukkit
++                this.add(minecraftkey);
++                this.addHighlight(minecraftkey);
++                list.add(minecraftkey);
++                CriteriaTriggers.RECIPE_UNLOCKED.trigger(player, recipeholder);
+                 ++i;
+             }
+         }
+ 
+         if (list.size() > 0) {
+-            this.sendRecipes(ClientboundRecipePacket.State.ADD, serverplayer, list);
++            this.sendRecipes(ClientboundRecipePacket.Action.ADD, player, list);
+         }
+ 
+         return i;
+     }
+ 
+-    public int removeRecipes(Collection<RecipeHolder<?>> collection, ServerPlayer serverplayer) {
++    public int removeRecipes(Collection<RecipeHolder<?>> recipes, ServerPlayer player) {
+         List<ResourceLocation> list = Lists.newArrayList();
+         int i = 0;
+-        Iterator iterator = collection.iterator();
++        Iterator iterator = recipes.iterator();
+ 
+         while (iterator.hasNext()) {
+             RecipeHolder<?> recipeholder = (RecipeHolder) iterator.next();
+-            ResourceLocation resourcelocation = recipeholder.id();
++            ResourceLocation minecraftkey = recipeholder.id();
+ 
+-            if (this.known.contains(resourcelocation)) {
+-                this.remove(resourcelocation);
+-                list.add(resourcelocation);
++            if (this.known.contains(minecraftkey)) {
++                this.remove(minecraftkey);
++                list.add(minecraftkey);
+                 ++i;
+             }
+         }
+ 
+-        this.sendRecipes(ClientboundRecipePacket.State.REMOVE, serverplayer, list);
++        this.sendRecipes(ClientboundRecipePacket.Action.REMOVE, player, list);
+         return i;
+     }
+ 
+-    private void sendRecipes(ClientboundRecipePacket.State clientboundrecipepacket_state, ServerPlayer serverplayer, List<ResourceLocation> list) {
+-        serverplayer.connection.send(new ClientboundRecipePacket(clientboundrecipepacket_state, list, Collections.emptyList(), this.getBookSettings()));
++    private void sendRecipes(ClientboundRecipePacket.Action state, ServerPlayer player, List<ResourceLocation> recipes) {
++        if (player.connection == null) return; // SPIGOT-4478 during PlayerLoginEvent
++        player.connection.send(new ClientboundRecipePacket(state, recipes, Collections.emptyList(), this.getBookSettings()));
+     }
+ 
+     public CompoundTag toNbt() {
+-        CompoundTag compoundtag = new CompoundTag();
++        CompoundTag nbttagcompound = new CompoundTag();
+ 
+-        this.getBookSettings().write(compoundtag);
+-        ListTag listtag = new ListTag();
++        this.getBookSettings().write(nbttagcompound);
++        ListTag nbttaglist = new ListTag();
+         Iterator iterator = this.known.iterator();
+ 
+         while (iterator.hasNext()) {
+-            ResourceLocation resourcelocation = (ResourceLocation) iterator.next();
++            ResourceLocation minecraftkey = (ResourceLocation) iterator.next();
+ 
+-            listtag.add(StringTag.valueOf(resourcelocation.toString()));
++            nbttaglist.add(StringTag.valueOf(minecraftkey.toString()));
+         }
+ 
+-        compoundtag.put("recipes", listtag);
+-        ListTag listtag1 = new ListTag();
++        nbttagcompound.put("recipes", nbttaglist);
++        ListTag nbttaglist1 = new ListTag();
+         Iterator iterator1 = this.highlight.iterator();
+ 
+         while (iterator1.hasNext()) {
+-            ResourceLocation resourcelocation1 = (ResourceLocation) iterator1.next();
++            ResourceLocation minecraftkey1 = (ResourceLocation) iterator1.next();
+ 
+-            listtag1.add(StringTag.valueOf(resourcelocation1.toString()));
++            nbttaglist1.add(StringTag.valueOf(minecraftkey1.toString()));
+         }
+ 
+-        compoundtag.put("toBeDisplayed", listtag1);
+-        return compoundtag;
++        nbttagcompound.put("toBeDisplayed", nbttaglist1);
++        return nbttagcompound;
+     }
+ 
+-    public void fromNbt(CompoundTag compoundtag, RecipeManager recipemanager) {
+-        this.setBookSettings(RecipeBookSettings.read(compoundtag));
+-        ListTag listtag = compoundtag.getList("recipes", 8);
++    public void fromNbt(CompoundTag tag, RecipeManager recipeManager) {
++        this.setBookSettings(RecipeBookSettings.read(tag));
++        ListTag nbttaglist = tag.getList("recipes", 8);
+ 
+-        this.loadRecipes(listtag, this::add, recipemanager);
+-        ListTag listtag1 = compoundtag.getList("toBeDisplayed", 8);
++        this.loadRecipes(nbttaglist, this::add, recipeManager);
++        ListTag nbttaglist1 = tag.getList("toBeDisplayed", 8);
+ 
+-        this.loadRecipes(listtag1, this::addHighlight, recipemanager);
++        this.loadRecipes(nbttaglist1, this::addHighlight, recipeManager);
+     }
+ 
+-    private void loadRecipes(ListTag listtag, Consumer<RecipeHolder<?>> consumer, RecipeManager recipemanager) {
+-        for (int i = 0; i < listtag.size(); ++i) {
+-            String s = listtag.getString(i);
++    private void loadRecipes(ListTag tags, Consumer<RecipeHolder<?>> recipeConsumer, RecipeManager recipeManager) {
++        for (int i = 0; i < tags.size(); ++i) {
++            String s = tags.getString(i);
+ 
+             try {
+-                ResourceLocation resourcelocation = new ResourceLocation(s);
+-                Optional<RecipeHolder<?>> optional = recipemanager.byKey(resourcelocation);
++                ResourceLocation minecraftkey = new ResourceLocation(s);
++                Optional<RecipeHolder<?>> optional = recipeManager.byKey(minecraftkey);
+ 
+                 if (optional.isEmpty()) {
+-                    ServerRecipeBook.LOGGER.error("Tried to load unrecognized recipe: {} removed now.", resourcelocation);
++                    ServerRecipeBook.LOGGER.error("Tried to load unrecognized recipe: {} removed now.", minecraftkey);
+                 } else {
+-                    consumer.accept((RecipeHolder) optional.get());
++                    recipeConsumer.accept((RecipeHolder) optional.get());
+                 }
+-            } catch (ResourceLocationException resourcelocationexception) {
++            } catch (ResourceLocationException resourcekeyinvalidexception) {
+                 ServerRecipeBook.LOGGER.error("Tried to load improperly formatted recipe: {} removed now.", s);
+             }
+         }
+ 
+     }
+ 
+-    public void sendInitialRecipeBook(ServerPlayer serverplayer) {
+-        serverplayer.connection.send(new ClientboundRecipePacket(ClientboundRecipePacket.State.INIT, this.known, this.highlight, this.getBookSettings()));
++    public void sendInitialRecipeBook(ServerPlayer player) {
++        player.connection.send(new ClientboundRecipePacket(ClientboundRecipePacket.Action.INIT, this.known, this.highlight, this.getBookSettings()));
+     }
+ }

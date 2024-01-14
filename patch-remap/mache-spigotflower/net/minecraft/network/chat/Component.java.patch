@@ -1,0 +1,304 @@
+--- a/net/minecraft/network/chat/Component.java
++++ b/net/minecraft/network/chat/Component.java
+@@ -26,32 +26,45 @@
+ import net.minecraft.Util;
+ import net.minecraft.network.chat.contents.DataSource;
+ import net.minecraft.network.chat.contents.KeybindContents;
++import net.minecraft.network.chat.contents.LiteralContents;
+ import net.minecraft.network.chat.contents.NbtContents;
+-import net.minecraft.network.chat.contents.PlainTextContents;
+ import net.minecraft.network.chat.contents.ScoreContents;
+ import net.minecraft.network.chat.contents.SelectorContents;
+ import net.minecraft.network.chat.contents.TranslatableContents;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.util.FormattedCharSequence;
+ import net.minecraft.world.level.ChunkPos;
++// CraftBukkit start
++import java.util.stream.Stream;
++// CraftBukkit end
+ 
+-public interface Component extends Message, FormattedText {
++public interface Component extends Message, FormattedText, Iterable<Component> { // CraftBukkit
+ 
++    // CraftBukkit start
++    default Stream<Component> stream() {
++        return com.google.common.collect.Streams.concat(new Stream[]{Stream.of(this), this.getSiblings().stream().flatMap(Component::stream)});
++    }
++
++    @Override
++    default Iterator<Component> iterator() {
++        return this.stream().iterator();
++    }
++    // CraftBukkit end
++
+     Style getStyle();
+ 
+     ComponentContents getContents();
+ 
+     @Override
+-    @Override
+     default String getString() {
+         return FormattedText.super.getString();
+     }
+ 
+-    default String getString(int i) {
++    default String getString(int maxLength) {
+         StringBuilder stringbuilder = new StringBuilder();
+ 
+         this.visit((s) -> {
+-            int j = i - stringbuilder.length();
++            int j = maxLength - stringbuilder.length();
+ 
+             if (j <= 0) {
+                 return Component.STOP_ITERATION;
+@@ -69,11 +82,11 @@
+     default String tryCollapseToString() {
+         ComponentContents componentcontents = this.getContents();
+ 
+-        if (componentcontents instanceof PlainTextContents) {
+-            PlainTextContents plaintextcontents = (PlainTextContents) componentcontents;
++        if (componentcontents instanceof LiteralContents) {
++            LiteralContents literalcontents = (LiteralContents) componentcontents;
+ 
+             if (this.getSiblings().isEmpty() && this.getStyle().isEmpty()) {
+-                return plaintextcontents.text();
++                return literalcontents.text();
+             }
+         }
+ 
+@@ -91,10 +104,9 @@
+     FormattedCharSequence getVisualOrderText();
+ 
+     @Override
+-    @Override
+-    default <T> Optional<T> visit(FormattedText.StyledContentConsumer<T> formattedtext_styledcontentconsumer, Style style) {
+-        Style style1 = this.getStyle().applyTo(style);
+-        Optional<T> optional = this.getContents().visit(formattedtext_styledcontentconsumer, style1);
++    default <T> Optional<T> visit(FormattedText.StyledContentConsumer<T> acceptor, Style style) {
++        Style chatmodifier1 = this.getStyle().applyTo(style);
++        Optional<T> optional = this.getContents().visit(acceptor, chatmodifier1);
+ 
+         if (optional.isPresent()) {
+             return optional;
+@@ -108,9 +120,9 @@
+                     return Optional.empty();
+                 }
+ 
+-                Component component = (Component) iterator.next();
++                Component ichatbasecomponent = (Component) iterator.next();
+ 
+-                optional1 = component.visit(formattedtext_styledcontentconsumer, style1);
++                optional1 = ichatbasecomponent.visit(acceptor, chatmodifier1);
+             } while (!optional1.isPresent());
+ 
+             return optional1;
+@@ -118,9 +130,8 @@
+     }
+ 
+     @Override
+-    @Override
+-    default <T> Optional<T> visit(FormattedText.ContentConsumer<T> formattedtext_contentconsumer) {
+-        Optional<T> optional = this.getContents().visit(formattedtext_contentconsumer);
++    default <T> Optional<T> visit(FormattedText.ContentConsumer<T> acceptor) {
++        Optional<T> optional = this.getContents().visit(acceptor);
+ 
+         if (optional.isPresent()) {
+             return optional;
+@@ -134,9 +145,9 @@
+                     return Optional.empty();
+                 }
+ 
+-                Component component = (Component) iterator.next();
++                Component ichatbasecomponent = (Component) iterator.next();
+ 
+-                optional1 = component.visit(formattedtext_contentconsumer);
++                optional1 = ichatbasecomponent.visit(acceptor);
+             } while (!optional1.isPresent());
+ 
+             return optional1;
+@@ -150,9 +161,9 @@
+     default List<Component> toFlatList(Style style) {
+         List<Component> list = Lists.newArrayList();
+ 
+-        this.visit((style1, s) -> {
++        this.visit((chatmodifier1, s) -> {
+             if (!s.isEmpty()) {
+-                list.add(literal(s).withStyle(style1));
++                list.add(literal(s).withStyle(chatmodifier1));
+             }
+ 
+             return Optional.empty();
+@@ -160,31 +171,31 @@
+         return list;
+     }
+ 
+-    default boolean contains(Component component) {
+-        if (this.equals(component)) {
++    default boolean contains(Component other) {
++        if (this.equals(other)) {
+             return true;
+         } else {
+             List<Component> list = this.toFlatList();
+-            List<Component> list1 = component.toFlatList(this.getStyle());
++            List<Component> list1 = other.toFlatList(this.getStyle());
+ 
+             return Collections.indexOfSubList(list, list1) != -1;
+         }
+     }
+ 
+-    static Component nullToEmpty(@Nullable String s) {
+-        return (Component) (s != null ? literal(s) : CommonComponents.EMPTY);
++    static Component nullToEmpty(@Nullable String text) {
++        return (Component) (text != null ? literal(text) : CommonComponents.EMPTY);
+     }
+ 
+-    static MutableComponent literal(String s) {
+-        return MutableComponent.create(PlainTextContents.create(s));
++    static MutableComponent literal(String text) {
++        return MutableComponent.create(LiteralContents.create(text));
+     }
+ 
+-    static MutableComponent translatable(String s) {
+-        return MutableComponent.create(new TranslatableContents(s, (String) null, TranslatableContents.NO_ARGS));
++    static MutableComponent translatable(String key) {
++        return MutableComponent.create(new TranslatableContents(key, (String) null, TranslatableContents.NO_ARGS));
+     }
+ 
+-    static MutableComponent translatable(String s, Object... aobject) {
+-        return MutableComponent.create(new TranslatableContents(s, (String) null, aobject));
++    static MutableComponent translatable(String key, Object... args) {
++        return MutableComponent.create(new TranslatableContents(key, (String) null, args));
+     }
+ 
+     static MutableComponent translatableEscape(String s, Object... aobject) {
+@@ -199,32 +210,32 @@
+         return translatable(s, aobject);
+     }
+ 
+-    static MutableComponent translatableWithFallback(String s, @Nullable String s1) {
+-        return MutableComponent.create(new TranslatableContents(s, s1, TranslatableContents.NO_ARGS));
++    static MutableComponent translatableWithFallback(String key, @Nullable String fallback) {
++        return MutableComponent.create(new TranslatableContents(key, fallback, TranslatableContents.NO_ARGS));
+     }
+ 
+-    static MutableComponent translatableWithFallback(String s, @Nullable String s1, Object... aobject) {
+-        return MutableComponent.create(new TranslatableContents(s, s1, aobject));
++    static MutableComponent translatableWithFallback(String key, @Nullable String fallback, Object... args) {
++        return MutableComponent.create(new TranslatableContents(key, fallback, args));
+     }
+ 
+     static MutableComponent empty() {
+-        return MutableComponent.create(PlainTextContents.EMPTY);
++        return MutableComponent.create(LiteralContents.EMPTY);
+     }
+ 
+-    static MutableComponent keybind(String s) {
+-        return MutableComponent.create(new KeybindContents(s));
++    static MutableComponent keybind(String name) {
++        return MutableComponent.create(new KeybindContents(name));
+     }
+ 
+-    static MutableComponent nbt(String s, boolean flag, Optional<Component> optional, DataSource datasource) {
+-        return MutableComponent.create(new NbtContents(s, flag, optional, datasource));
++    static MutableComponent nbt(String nbtPathPattern, boolean interpreting, Optional<Component> separator, DataSource dataSource) {
++        return MutableComponent.create(new NbtContents(nbtPathPattern, interpreting, separator, dataSource));
+     }
+ 
+-    static MutableComponent score(String s, String s1) {
+-        return MutableComponent.create(new ScoreContents(s, s1));
++    static MutableComponent score(String name, String objective) {
++        return MutableComponent.create(new ScoreContents(name, objective));
+     }
+ 
+-    static MutableComponent selector(String s, Optional<Component> optional) {
+-        return MutableComponent.create(new SelectorContents(s, optional));
++    static MutableComponent selector(String pattern, Optional<Component> separator) {
++        return MutableComponent.create(new SelectorContents(pattern, separator));
+     }
+ 
+     static Component translationArg(Date date) {
+@@ -235,9 +246,9 @@
+         Object object;
+ 
+         if (message instanceof Component) {
+-            Component component = (Component) message;
++            Component ichatbasecomponent = (Component) message;
+ 
+-            object = component;
++            object = ichatbasecomponent;
+         } else {
+             object = literal(message.getString());
+         }
+@@ -249,26 +260,24 @@
+         return literal(uuid.toString());
+     }
+ 
+-    static Component translationArg(ResourceLocation resourcelocation) {
+-        return literal(resourcelocation.toString());
++    static Component translationArg(ResourceLocation minecraftkey) {
++        return literal(minecraftkey.toString());
+     }
+ 
+-    static Component translationArg(ChunkPos chunkpos) {
+-        return literal(chunkpos.toString());
++    static Component translationArg(ChunkPos chunkcoordintpair) {
++        return literal(chunkcoordintpair.toString());
+     }
+ 
+-    public static class SerializerAdapter implements JsonDeserializer<MutableComponent>, JsonSerializer<Component> {
++    public static class b implements JsonDeserializer<MutableComponent>, JsonSerializer<Component> {
+ 
+-        public SerializerAdapter() {}
++        public b() {}
+ 
+-        @Override
+         public MutableComponent deserialize(JsonElement jsonelement, Type type, JsonDeserializationContext jsondeserializationcontext) throws JsonParseException {
+             return Component.Serializer.deserialize(jsonelement);
+         }
+ 
+-        @Override
+-        public JsonElement serialize(Component component, Type type, JsonSerializationContext jsonserializationcontext) {
+-            return Component.Serializer.serialize(component);
++        public JsonElement serialize(Component ichatbasecomponent, Type type, JsonSerializationContext jsonserializationcontext) {
++            return Component.Serializer.serialize(ichatbasecomponent);
+         }
+     }
+ 
+@@ -282,8 +291,8 @@
+             return (MutableComponent) Util.getOrThrow(ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, jsonelement), JsonParseException::new);
+         }
+ 
+-        static JsonElement serialize(Component component) {
+-            return (JsonElement) Util.getOrThrow(ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, component), JsonParseException::new);
++        static JsonElement serialize(Component ichatbasecomponent) {
++            return (JsonElement) Util.getOrThrow(ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, ichatbasecomponent), JsonParseException::new);
+         }
+ 
+         public static String toJson(Component component) {
+@@ -295,20 +304,20 @@
+         }
+ 
+         @Nullable
+-        public static MutableComponent fromJson(String s) {
+-            JsonElement jsonelement = JsonParser.parseString(s);
++        public static MutableComponent fromJson(String json) {
++            JsonElement jsonelement = JsonParser.parseString(json);
+ 
+             return jsonelement == null ? null : deserialize(jsonelement);
+         }
+ 
+         @Nullable
+-        public static MutableComponent fromJson(@Nullable JsonElement jsonelement) {
+-            return jsonelement == null ? null : deserialize(jsonelement);
++        public static MutableComponent fromJson(@Nullable JsonElement json) {
++            return json == null ? null : deserialize(json);
+         }
+ 
+         @Nullable
+-        public static MutableComponent fromJsonLenient(String s) {
+-            JsonReader jsonreader = new JsonReader(new StringReader(s));
++        public static MutableComponent fromJsonLenient(String json) {
++            JsonReader jsonreader = new JsonReader(new StringReader(json));
+ 
+             jsonreader.setLenient(true);
+             JsonElement jsonelement = JsonParser.parseReader(jsonreader);

@@ -1,0 +1,169 @@
+--- a/net/minecraft/world/entity/projectile/ThrownPotion.java
++++ b/net/minecraft/world/entity/projectile/ThrownPotion.java
+@@ -30,6 +29,16 @@
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
++// CraftBukkit start
++import java.util.HashMap;
++import java.util.Map;
++import net.minecraft.world.effect.MobEffects;
++import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.level.block.CampfireBlock;
++import org.bukkit.craftbukkit.entity.CraftLivingEntity;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.entity.LivingEntity;
++// CraftBukkit end
+ 
+ public class ThrownPotion extends ThrowableItemProjectile implements ItemSupplier {
+ 
+@@ -103,11 +108,11 @@
+ 
+             if (flag) {
+                 this.applyWater();
+-            } else if (!list.isEmpty()) {
++            } else if (true || !list.isEmpty()) { // CraftBukkit - Call event even if no effects to apply
+                 if (this.isLingering()) {
+-                    this.makeAreaOfEffectCloud(itemstack, potion);
++                    this.makeAreaOfEffectCloud(itemstack, potionregistry, result); // CraftBukkit - Pass MovingObjectPosition
+                 } else {
+-                    this.applySplash(list, hitresult.getType() == HitResult.Type.ENTITY ? ((EntityHitResult) hitresult).getEntity() : null);
++                    this.applySplash(list, result.getType() == HitResult.EnumMovingObjectType.ENTITY ? ((EntityHitResult) result).getEntity() : null, result); // CraftBukkit - Pass MovingObjectPosition
+                 }
+             }
+ 
+@@ -149,9 +154,10 @@
+ 
+     }
+ 
+-    private void applySplash(List<MobEffectInstance> list, @Nullable Entity entity) {
+-        AABB aabb = this.getBoundingBox().inflate(4.0D, 2.0D, 4.0D);
+-        List<LivingEntity> list1 = this.level().getEntitiesOfClass(LivingEntity.class, aabb);
++    private void applySplash(List<MobEffectInstance> list, @Nullable Entity entity, HitResult position) { // CraftBukkit - Pass MovingObjectPosition
++        AABB axisalignedbb = this.getBoundingBox().inflate(4.0D, 2.0D, 4.0D);
++        List<net.minecraft.world.entity.LivingEntity> list1 = this.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, axisalignedbb);
++        Map<LivingEntity, Double> affected = new HashMap<LivingEntity, Double>(); // CraftBukkit
+ 
+         if (!list1.isEmpty()) {
+             Entity entity1 = this.getEffectSource();
+@@ -172,34 +178,55 @@
+                             d1 = 1.0D - Math.sqrt(d0) / 4.0D;
+                         }
+ 
+-                        Iterator iterator1 = list.iterator();
++                        // CraftBukkit start
++                        affected.put((LivingEntity) entityliving.getBukkitEntity(), d1);
++                    }
++                }
++            }
++        }
+ 
+                         while (iterator1.hasNext()) {
+                             MobEffectInstance mobeffectinstance = (MobEffectInstance) iterator1.next();
+                             MobEffect mobeffect = mobeffectinstance.getEffect();
+ 
+-                            if (mobeffect.isInstantenous()) {
+-                                mobeffect.applyInstantenousEffect(this, this.getOwner(), livingentity, mobeffectinstance.getAmplifier(), d1);
+-                            } else {
+-                                int i = mobeffectinstance.mapDuration((j) -> {
+-                                    return (int) (d1 * (double) j + 0.5D);
+-                                });
+-                                MobEffectInstance mobeffectinstance1 = new MobEffectInstance(mobeffect, i, mobeffectinstance.getAmplifier(), mobeffectinstance.isAmbient(), mobeffectinstance.isVisible());
++                net.minecraft.world.entity.LivingEntity entityliving = ((CraftLivingEntity) victim).getHandle();
++                double d1 = event.getIntensity(victim);
++                // CraftBukkit end
+ 
+-                                if (!mobeffectinstance1.endsWithin(20)) {
+-                                    livingentity.addEffect(mobeffectinstance1, entity1);
+-                                }
+-                            }
++                Iterator iterator1 = list.iterator();
++
++                while (iterator1.hasNext()) {
++                    MobEffectInstance mobeffect = (MobEffectInstance) iterator1.next();
++                    MobEffect mobeffectlist = mobeffect.getEffect();
++                    // CraftBukkit start - Abide by PVP settings - for players only!
++                    if (!this.level().pvpMode && this.getOwner() instanceof ServerPlayer && entityliving instanceof ServerPlayer && entityliving != this.getOwner()) {
++                        if (mobeffectlist == MobEffects.MOVEMENT_SLOWDOWN || mobeffectlist == MobEffects.DIG_SLOWDOWN || mobeffectlist == MobEffects.HARM || mobeffectlist == MobEffects.BLINDNESS
++                                || mobeffectlist == MobEffects.HUNGER || mobeffectlist == MobEffects.WEAKNESS || mobeffectlist == MobEffects.POISON) {
++                            continue;
+                         }
+                     }
++                    // CraftBukkit end
++
++                    if (mobeffectlist.isInstantenous()) {
++                        mobeffectlist.applyInstantenousEffect(this, this.getOwner(), entityliving, mobeffect.getAmplifier(), d1);
++                    } else {
++                        int i = mobeffect.mapDuration((j) -> {
++                            return (int) (d1 * (double) j + 0.5D);
++                        });
++                        MobEffectInstance mobeffect1 = new MobEffectInstance(mobeffectlist, i, mobeffect.getAmplifier(), mobeffect.isAmbient(), mobeffect.isVisible());
++
++                        if (!mobeffect1.endsWithin(20)) {
++                            entityliving.addEffect(mobeffect1, entity1, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.POTION_SPLASH); // CraftBukkit
++                        }
++                    }
+                 }
+             }
+         }
+ 
+     }
+ 
+-    private void makeAreaOfEffectCloud(ItemStack itemstack, Potion potion) {
+-        AreaEffectCloud areaeffectcloud = new AreaEffectCloud(this.level(), this.getX(), this.getY(), this.getZ());
++    private void makeAreaOfEffectCloud(ItemStack itemstack, Potion potionregistry, HitResult position) { // CraftBukkit - Pass MovingObjectPosition
++        AreaEffectCloud entityareaeffectcloud = new AreaEffectCloud(this.level(), this.getX(), this.getY(), this.getZ());
+         Entity entity = this.getOwner();
+ 
+         if (entity instanceof LivingEntity) {
+@@ -225,7 +256,14 @@
+             areaeffectcloud.setFixedColor(compoundtag.getInt("CustomPotionColor"));
+         }
+ 
+-        this.level().addFreshEntity(areaeffectcloud);
++        // CraftBukkit start
++        org.bukkit.event.entity.LingeringPotionSplashEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callLingeringPotionSplashEvent(this, position, entityareaeffectcloud);
++        if (!(event.isCancelled() || entityareaeffectcloud.isRemoved())) {
++            this.level().addFreshEntity(entityareaeffectcloud);
++        } else {
++            entityareaeffectcloud.discard();
++        }
++        // CraftBukkit end
+     }
+ 
+     private boolean isLingering() {
+@@ -235,14 +273,26 @@
+     private void dowseFire(BlockPos blockpos) {
+         BlockState blockstate = this.level().getBlockState(blockpos);
+ 
+-        if (blockstate.is(BlockTags.FIRE)) {
+-            this.level().destroyBlock(blockpos, false, this);
+-        } else if (AbstractCandleBlock.isLit(blockstate)) {
+-            AbstractCandleBlock.extinguish((Player) null, blockstate, this.level(), blockpos);
+-        } else if (CampfireBlock.isLitCampfire(blockstate)) {
+-            this.level().levelEvent((Player) null, 1009, blockpos, 0);
+-            CampfireBlock.dowse(this.getOwner(), this.level(), blockpos, blockstate);
+-            this.level().setBlockAndUpdate(blockpos, (BlockState) blockstate.setValue(CampfireBlock.LIT, false));
++        if (iblockdata.is(BlockTags.FIRE)) {
++            // CraftBukkit start
++            if (CraftEventFactory.callEntityChangeBlockEvent(this, pos, Blocks.AIR.defaultBlockState())) {
++                this.level().destroyBlock(pos, false, this);
++            }
++            // CraftBukkit end
++        } else if (AbstractCandleBlock.isLit(iblockdata)) {
++            // CraftBukkit start
++            if (CraftEventFactory.callEntityChangeBlockEvent(this, pos, iblockdata.setValue(AbstractCandleBlock.LIT, false))) {
++                AbstractCandleBlock.extinguish((Player) null, iblockdata, this.level(), pos);
++            }
++            // CraftBukkit end
++        } else if (CampfireBlock.isLitCampfire(iblockdata)) {
++            // CraftBukkit start
++            if (CraftEventFactory.callEntityChangeBlockEvent(this, pos, iblockdata.setValue(CampfireBlock.LIT, false))) {
++                this.level().levelEvent((Player) null, 1009, pos, 0);
++                CampfireBlock.dowse(this.getOwner(), this.level(), pos, iblockdata);
++                this.level().setBlockAndUpdate(pos, (IBlockData) iblockdata.setValue(CampfireBlock.LIT, false));
++            }
++            // CraftBukkit end
+         }
+ 
+     }

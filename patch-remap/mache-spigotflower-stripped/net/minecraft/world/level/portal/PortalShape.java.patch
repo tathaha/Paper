@@ -1,0 +1,146 @@
+--- a/net/minecraft/world/level/portal/PortalShape.java
++++ b/net/minecraft/world/level/portal/PortalShape.java
+@@ -21,6 +21,10 @@
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftPortalEvent;
++import org.bukkit.event.world.PortalCreateEvent;
++// CraftBukkit end
+ 
+ public class PortalShape {
+ 
+@@ -41,6 +45,7 @@
+     private BlockPos bottomLeft;
+     private int height;
+     private final int width;
++    org.bukkit.craftbukkit.util.BlockStateListPopulator blocks; // CraftBukkit - add field
+ 
+     public static Optional<PortalShape> findEmptyPortalShape(LevelAccessor levelaccessor, BlockPos blockpos, Direction.Axis direction_axis) {
+         return findPortalShape(levelaccessor, blockpos, (portalshape) -> {
+@@ -60,11 +65,12 @@
+         }
+     }
+ 
+-    public PortalShape(LevelAccessor levelaccessor, BlockPos blockpos, Direction.Axis direction_axis) {
+-        this.level = levelaccessor;
+-        this.axis = direction_axis;
+-        this.rightDir = direction_axis == Direction.Axis.X ? Direction.WEST : Direction.SOUTH;
+-        this.bottomLeft = this.calculateBottomLeft(blockpos);
++    public PortalShape(LevelAccessor level, BlockPos bottomLeft, Direction.Axis axis) {
++        blocks = new org.bukkit.craftbukkit.util.BlockStateListPopulator(level.getMinecraftWorld()); // CraftBukkit
++        this.level = level;
++        this.axis = axis;
++        this.rightDir = axis == Direction.Axis.X ? Direction.WEST : Direction.SOUTH;
++        this.bottomLeft = this.calculateBottomLeft(bottomLeft);
+         if (this.bottomLeft == null) {
+             this.bottomLeft = blockpos;
+             this.width = 1;
+@@ -103,8 +109,9 @@
+             blockpos_mutableblockpos.set(blockpos).move(direction, i);
+             BlockState blockstate = this.level.getBlockState(blockpos_mutableblockpos);
+ 
+-            if (!isEmpty(blockstate)) {
+-                if (PortalShape.FRAME.test(blockstate, this.level, blockpos_mutableblockpos)) {
++            if (!isEmpty(iblockdata)) {
++                if (PortalShape.FRAME.test(iblockdata, this.level, blockposition_mutableblockposition)) {
++                    blocks.setBlock(blockposition_mutableblockposition, iblockdata, 18); // CraftBukkit - lower left / right
+                     return i;
+                 }
+                 break;
+@@ -115,6 +122,7 @@
+             if (!PortalShape.FRAME.test(blockstate1, this.level, blockpos_mutableblockpos)) {
+                 break;
+             }
++            blocks.setBlock(blockposition_mutableblockposition, iblockdata1, 18); // CraftBukkit - bottom row
+         }
+ 
+         return 0;
+@@ -134,6 +142,7 @@
+             if (!PortalShape.FRAME.test(this.level.getBlockState(blockpos_mutableblockpos1), this.level, blockpos_mutableblockpos1)) {
+                 return false;
+             }
++            blocks.setBlock(blockposition_mutableblockposition1, this.level.getBlockState(blockposition_mutableblockposition1), 18); // CraftBukkit - upper row
+         }
+ 
+         return true;
+@@ -163,6 +172,10 @@
+                     ++this.numPortalBlocks;
+                 }
+             }
++            // CraftBukkit start - left and right
++            blocks.setBlock(pos.set(this.bottomLeft).move(Direction.UP, i).move(this.rightDir, -1), this.level.getBlockState(pos), 18);
++            blocks.setBlock(pos.set(this.bottomLeft).move(Direction.UP, i).move(this.rightDir, this.width), this.level.getBlockState(pos), 18);
++            // CraftBukkit end
+         }
+ 
+         return 21;
+@@ -176,12 +189,25 @@
+         return this.bottomLeft != null && this.width >= 2 && this.width <= 21 && this.height >= 3 && this.height <= 21;
+     }
+ 
+-    public void createPortalBlocks() {
+-        BlockState blockstate = (BlockState) Blocks.NETHER_PORTAL.defaultBlockState().setValue(NetherPortalBlock.AXIS, this.axis);
++    // CraftBukkit start - return boolean
++    public boolean createPortalBlocks() {
++        org.bukkit.World bworld = this.level.getMinecraftWorld().getWorld();
+ 
+         BlockPos.betweenClosed(this.bottomLeft, this.bottomLeft.relative(Direction.UP, this.height - 1).relative(this.rightDir, this.width - 1)).forEach((blockpos) -> {
+             this.level.setBlock(blockpos, blockstate, 18);
+         });
++
++        PortalCreateEvent event = new PortalCreateEvent((java.util.List<org.bukkit.block.BlockState>) (java.util.List) blocks.getList(), bworld, null, PortalCreateEvent.CreateReason.FIRE);
++        this.level.getMinecraftWorld().getServer().server.getPluginManager().callEvent(event);
++
++        if (event.isCancelled()) {
++            return false;
++        }
++        // CraftBukkit end
++        BlockPos.betweenClosed(this.bottomLeft, this.bottomLeft.relative(Direction.UP, this.height - 1).relative(this.rightDir, this.width - 1)).forEach((blockposition) -> {
++            this.level.setBlock(blockposition, iblockdata, 18);
++        });
++        return true; // CraftBukkit
+     }
+ 
+     public boolean isComplete() {
+@@ -217,23 +246,23 @@
+         return new Vec3(d3, d2, d4);
+     }
+ 
+-    public static PortalInfo createPortalInfo(ServerLevel serverlevel, BlockUtil.FoundRectangle blockutil_foundrectangle, Direction.Axis direction_axis, Vec3 vec3, Entity entity, Vec3 vec31, float f, float f1) {
+-        BlockPos blockpos = blockutil_foundrectangle.minCorner;
+-        BlockState blockstate = serverlevel.getBlockState(blockpos);
+-        Direction.Axis direction_axis1 = (Direction.Axis) blockstate.getOptionalValue(BlockStateProperties.HORIZONTAL_AXIS).orElse(Direction.Axis.X);
+-        double d0 = (double) blockutil_foundrectangle.axis1Size;
+-        double d1 = (double) blockutil_foundrectangle.axis2Size;
+-        EntityDimensions entitydimensions = entity.getDimensions(entity.getPose());
+-        int i = direction_axis == direction_axis1 ? 0 : 90;
+-        Vec3 vec32 = direction_axis == direction_axis1 ? vec31 : new Vec3(vec31.z, vec31.y, -vec31.x);
+-        double d2 = (double) entitydimensions.width / 2.0D + (d0 - (double) entitydimensions.width) * vec3.x();
+-        double d3 = (d1 - (double) entitydimensions.height) * vec3.y();
+-        double d4 = 0.5D + vec3.z();
+-        boolean flag = direction_axis1 == Direction.Axis.X;
+-        Vec3 vec33 = new Vec3((double) blockpos.getX() + (flag ? d2 : d4), (double) blockpos.getY() + d3, (double) blockpos.getZ() + (flag ? d4 : d2));
+-        Vec3 vec34 = findCollisionFreePosition(vec33, serverlevel, entity, entitydimensions);
++    public static PortalInfo createPortalInfo(ServerLevel worldserver, BlockUtil.FoundRectangle blockutil_rectangle, Direction.Axis enumdirection_enumaxis, Vec3 vec3d, Entity entity, Vec3 vec3d1, float f, float f1, CraftPortalEvent portalEventInfo) { // CraftBukkit
++        BlockPos blockposition = blockutil_rectangle.minCorner;
++        IBlockData iblockdata = worldserver.getBlockState(blockposition);
++        Direction.Axis enumdirection_enumaxis1 = (Direction.Axis) iblockdata.getOptionalValue(BlockStateProperties.HORIZONTAL_AXIS).orElse(Direction.Axis.X);
++        double d0 = (double) blockutil_rectangle.axis1Size;
++        double d1 = (double) blockutil_rectangle.axis2Size;
++        EntityDimensions entitysize = entity.getDimensions(entity.getPose());
++        int i = enumdirection_enumaxis == enumdirection_enumaxis1 ? 0 : 90;
++        Vec3 vec3d2 = enumdirection_enumaxis == enumdirection_enumaxis1 ? vec3d1 : new Vec3(vec3d1.z, vec3d1.y, -vec3d1.x);
++        double d2 = (double) entitysize.width / 2.0D + (d0 - (double) entitysize.width) * vec3d.x();
++        double d3 = (d1 - (double) entitysize.height) * vec3d.y();
++        double d4 = 0.5D + vec3d.z();
++        boolean flag = enumdirection_enumaxis1 == Direction.Axis.X;
++        Vec3 vec3d3 = new Vec3((double) blockposition.getX() + (flag ? d2 : d4), (double) blockposition.getY() + d3, (double) blockposition.getZ() + (flag ? d4 : d2));
++        Vec3 vec3d4 = findCollisionFreePosition(vec3d3, worldserver, entity, entitysize);
+ 
+-        return new PortalInfo(vec34, vec32, f + (float) i, f1);
++        return new PortalInfo(vec3d4, vec3d2, f + (float) i, f1, worldserver, portalEventInfo); // CraftBukkit
+     }
+ 
+     private static Vec3 findCollisionFreePosition(Vec3 vec3, ServerLevel serverlevel, Entity entity, EntityDimensions entitydimensions) {

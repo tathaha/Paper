@@ -1,0 +1,114 @@
+--- a/net/minecraft/world/level/block/SculkSensorBlock.java
++++ b/net/minecraft/world/level/block/SculkSensorBlock.java
+@@ -39,6 +41,10 @@
+ import net.minecraft.world.level.pathfinder.PathComputationType;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.block.BlockRedstoneEvent;
++// CraftBukkit end
+ 
+ public class SculkSensorBlock extends BaseEntityBlock implements SimpleWaterloggedBlock {
+     public static final MapCodec<SculkSensorBlock> CODEC = simpleCodec(SculkSensorBlock::new);
+@@ -100,14 +104,33 @@
+     }
+ 
+     @Override
+-    public void stepOn(Level level, BlockPos pos, BlockState state, Entity entity) {
+-        if (!level.isClientSide()
+-            && canActivate(state)
+-            && entity.getType() != EntityType.WARDEN
+-            && level.getBlockEntity(pos) instanceof SculkSensorBlockEntity sculkSensorBlockEntity
+-            && level instanceof ServerLevel serverLevel
+-            && sculkSensorBlockEntity.getVibrationUser().canReceiveVibration(serverLevel, pos, GameEvent.STEP, GameEvent.Context.of(state))) {
+-            sculkSensorBlockEntity.getListener().forceScheduleVibration(serverLevel, GameEvent.STEP, GameEvent.Context.of(entity), entity.position());
++    public void stepOn(Level level, BlockPos pos, IBlockData state, Entity entity) {
++        if (!level.isClientSide() && canActivate(state) && entity.getType() != EntityType.WARDEN) {
++            // CraftBukkit start
++            org.bukkit.event.Cancellable cancellable;
++            if (entity instanceof Player) {
++                cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent((Player) entity, org.bukkit.event.block.Action.PHYSICAL, pos, null, null, null);
++            } else {
++                cancellable = new org.bukkit.event.entity.EntityInteractEvent(entity.getBukkitEntity(), level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ()));
++                level.getCraftServer().getPluginManager().callEvent((org.bukkit.event.entity.EntityInteractEvent) cancellable);
++            }
++            if (cancellable.isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++            BlockEntity tileentity = level.getBlockEntity(pos);
++
++            if (tileentity instanceof SculkSensorBlockEntity) {
++                SculkSensorBlockEntity sculksensorblockentity = (SculkSensorBlockEntity) tileentity;
++
++                if (level instanceof ServerLevel) {
++                    ServerLevel worldserver = (ServerLevel) level;
++
++                    if (sculksensorblockentity.getVibrationUser().canReceiveVibration(worldserver, pos, GameEvent.STEP, GameEvent.Context.of(state))) {
++                        sculksensorblockentity.getListener().forceScheduleVibration(worldserver, GameEvent.STEP, GameEvent.Context.of(entity), entity.position());
++                    }
++                }
++            }
+         }
+ 
+         super.stepOn(level, pos, state, entity);
+@@ -199,8 +220,17 @@
+         return getPhase(state) == SculkSensorPhase.INACTIVE;
+     }
+ 
+-    public static void deactivate(Level level, BlockPos pos, BlockState state) {
+-        level.setBlock(pos, state.setValue(PHASE, SculkSensorPhase.COOLDOWN).setValue(POWER, Integer.valueOf(0)), 3);
++    public static void deactivate(Level level, BlockPos pos, IBlockData state) {
++        // CraftBukkit start
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), state.getValue(SculkSensorBlock.POWER), 0);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() > 0) {
++            level.setBlock(pos, state.setValue(SculkSensorBlock.POWER, eventRedstone.getNewCurrent()), 3);
++            return;
++        }
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) ((IBlockData) state.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.COOLDOWN)).setValue(SculkSensorBlock.POWER, 0), 3);
+         level.scheduleTick(pos, state.getBlock(), 10);
+         updateNeighbours(level, pos, state);
+     }
+@@ -210,8 +240,17 @@
+         return 30;
+     }
+ 
+-    public void activate(@Nullable Entity entity, Level level, BlockPos pos, BlockState state, int power, int frequency) {
+-        level.setBlock(pos, state.setValue(PHASE, SculkSensorPhase.ACTIVE).setValue(POWER, Integer.valueOf(power)), 3);
++    public void activate(@Nullable Entity entity, Level level, BlockPos pos, IBlockData state, int power, int frequency) {
++        // CraftBukkit start
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), state.getValue(SculkSensorBlock.POWER), power);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() <= 0) {
++            return;
++        }
++        power = eventRedstone.getNewCurrent();
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) ((IBlockData) state.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.ACTIVE)).setValue(SculkSensorBlock.POWER, power), 3);
+         level.scheduleTick(pos, state.getBlock(), this.getActiveTicks());
+         updateNeighbours(level, pos, state);
+         tryResonateVibration(entity, level, pos, frequency);
+@@ -288,8 +332,16 @@
+     @Override
+     public void spawnAfterBreak(BlockState state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
+         super.spawnAfterBreak(state, level, pos, stack, dropExperience);
+-        if (dropExperience) {
+-            this.tryDropExperience(level, pos, stack, ConstantInt.of(5));
++        // CraftBukkit start - Delegate to getExpDrop
++    }
++
++    @Override
++    public int getExpDrop(IBlockData iblockdata, ServerLevel worldserver, BlockPos blockposition, ItemStack itemstack, boolean flag) {
++        if (flag) {
++            return this.tryDropExperience(worldserver, blockposition, itemstack, ConstantInt.of(5));
+         }
++
++        return 0;
++        // CraftBukkit end
+     }
+ }

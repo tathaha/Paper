@@ -1,0 +1,66 @@
+--- a/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java
++++ b/net/minecraft/core/dispenser/ShulkerBoxDispenseBehavior.java
+@@ -10,6 +10,12 @@
+ import net.minecraft.world.level.block.DispenserBlock;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.block.BlockDispenseEvent;
++// CraftBukkit end
++
+ public class ShulkerBoxDispenseBehavior extends OptionalDispenseItemBehavior {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -17,20 +23,43 @@
+     public ShulkerBoxDispenseBehavior() {}
+ 
+     @Override
+-    @Override
+-    protected ItemStack execute(BlockSource blocksource, ItemStack itemstack) {
++    protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
+         this.setSuccess(false);
+         Item item = itemstack.getItem();
+ 
+         if (item instanceof BlockItem) {
+-            Direction direction = (Direction) blocksource.state().getValue(DispenserBlock.FACING);
+-            BlockPos blockpos = blocksource.pos().relative(direction);
+-            Direction direction1 = blocksource.level().isEmptyBlock(blockpos.below()) ? direction : Direction.UP;
++            Direction enumdirection = (Direction) sourceblock.state().getValue(DispenserBlock.FACING);
++            BlockPos blockposition = sourceblock.pos().relative(enumdirection);
++            Direction enumdirection1 = sourceblock.level().isEmptyBlock(blockposition.below()) ? enumdirection : Direction.UP;
+ 
++            // CraftBukkit start
++            org.bukkit.block.Block bukkitBlock = CraftBlock.at(sourceblock.level(), sourceblock.pos());
++            CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack);
++
++            BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(blockposition.getX(), blockposition.getY(), blockposition.getZ()));
++            if (!DispenserBlock.eventFired) {
++                sourceblock.level().getCraftServer().getPluginManager().callEvent(event);
++            }
++
++            if (event.isCancelled()) {
++                return itemstack;
++            }
++
++            if (!event.getItem().equals(craftItem)) {
++                // Chain to handler for new item
++                ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++                DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++                if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior != this) {
++                    idispensebehavior.dispense(sourceblock, eventStack);
++                    return itemstack;
++                }
++            }
++            // CraftBukkit end
++
+             try {
+-                this.setSuccess(((BlockItem) item).place(new DirectionalPlaceContext(blocksource.level(), blockpos, direction, itemstack, direction1)).consumesAction());
++                this.setSuccess(((BlockItem) item).place(new DirectionalPlaceContext(sourceblock.level(), blockposition, enumdirection, itemstack, enumdirection1)).consumesAction());
+             } catch (Exception exception) {
+-                ShulkerBoxDispenseBehavior.LOGGER.error("Error trying to place shulker box at {}", blockpos, exception);
++                ShulkerBoxDispenseBehavior.LOGGER.error("Error trying to place shulker box at {}", blockposition, exception);
+             }
+         }
+ 

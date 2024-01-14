@@ -1,0 +1,161 @@
+--- a/net/minecraft/world/entity/ExperienceOrb.java
++++ b/net/minecraft/world/entity/ExperienceOrb.java
+@@ -19,6 +20,12 @@
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
++import org.bukkit.event.entity.EntityTargetEvent;
++import org.bukkit.event.player.PlayerExpCooldownChangeEvent;
++// CraftBukkit end
+ 
+ public class ExperienceOrb extends Entity {
+     private static final int LIFETIME = 6000;
+@@ -58,6 +65,7 @@
+     @Override
+     public void tick() {
+         super.tick();
++        Player prevTarget = this.followingPlayer;// CraftBukkit - store old target
+         this.xo = this.getX();
+         this.yo = this.getY();
+         this.zo = this.getZ();
+@@ -87,20 +91,33 @@
+             this.followingPlayer = null;
+         }
+ 
+-        if (this.followingPlayer != null) {
+-            Vec3 vec3 = new Vec3(
+-                this.followingPlayer.getX() - this.getX(),
+-                this.followingPlayer.getY() + (double)this.followingPlayer.getEyeHeight() / 2.0 - this.getY(),
+-                this.followingPlayer.getZ() - this.getZ()
+-            );
+-            double d = vec3.lengthSqr();
+-            if (d < 64.0) {
+-                double d1 = 1.0 - Math.sqrt(d) / 8.0;
+-                this.setDeltaMovement(this.getDeltaMovement().add(vec3.normalize().scale(d1 * d1 * 0.1)));
++        // CraftBukkit start
++        boolean cancelled = false;
++        if (this.followingPlayer != prevTarget) {
++            EntityTargetLivingEntityEvent event = CraftEventFactory.callEntityTargetLivingEvent(this, followingPlayer, (followingPlayer != null) ? EntityTargetEvent.TargetReason.CLOSEST_PLAYER : EntityTargetEvent.TargetReason.FORGOT_TARGET);
++            LivingEntity target = (event.getTarget() == null) ? null : ((org.bukkit.craftbukkit.entity.CraftLivingEntity) event.getTarget()).getHandle();
++            cancelled = event.isCancelled();
++
++            if (cancelled) {
++                followingPlayer = prevTarget;
++            } else {
++                followingPlayer = (target instanceof Player) ? (Player) target : null;
+             }
+         }
+ 
+-        this.move(MoverType.SELF, this.getDeltaMovement());
++        if (this.followingPlayer != null && !cancelled) {
++            // CraftBukkit end
++            Vec3 vec3d = new Vec3(this.followingPlayer.getX() - this.getX(), this.followingPlayer.getY() + (double) this.followingPlayer.getEyeHeight() / 2.0D - this.getY(), this.followingPlayer.getZ() - this.getZ());
++            double d0 = vec3d.lengthSqr();
++
++            if (d0 < 64.0D) {
++                double d1 = 1.0D - Math.sqrt(d0) / 8.0D;
++
++                this.setDeltaMovement(this.getDeltaMovement().add(vec3d.normalize().scale(d1 * d1 * 0.1D)));
++            }
++        }
++
++        this.move(EnumMoveType.SELF, this.getDeltaMovement());
+         float f = 0.98F;
+         if (this.onGround()) {
+             f = this.level().getBlockState(this.getBlockPosBelowThatAffectsMyMovement()).getBlock().getFriction() * 0.98F;
+@@ -219,11 +249,11 @@
+     public void playerTouch(Player entity) {
+         if (!this.level().isClientSide) {
+             if (entity.takeXpDelay == 0) {
+-                entity.takeXpDelay = 2;
++                entity.takeXpDelay = CraftEventFactory.callPlayerXpCooldownEvent(entity, 2, PlayerExpCooldownChangeEvent.ChangeReason.PICKUP_ORB).getNewCooldown(); // CraftBukkit - entityhuman.takeXpDelay = 2;
+                 entity.take(this, 1);
+                 int i = this.repairPlayerItems(entity, this.value);
+                 if (i > 0) {
+-                    entity.giveExperiencePoints(i);
++                    entity.giveExperiencePoints(CraftEventFactory.callPlayerExpChangeEvent(entity, i).getAmount()); // CraftBukkit - this.value -> event.getAmount()
+                 }
+ 
+                 this.count--;
+@@ -235,13 +267,24 @@
+     }
+ 
+     private int repairPlayerItems(Player player, int repairAmount) {
+-        Entry<EquipmentSlot, ItemStack> randomItemWith = EnchantmentHelper.getRandomItemWith(Enchantments.MENDING, player, ItemStack::isDamaged);
+-        if (randomItemWith != null) {
+-            ItemStack itemStack = randomItemWith.getValue();
+-            int min = Math.min(this.xpToDurability(repairAmount), itemStack.getDamageValue());
+-            itemStack.setDamageValue(itemStack.getDamageValue() - min);
+-            int i = repairAmount - this.durabilityToXp(min);
+-            return i > 0 ? this.repairPlayerItems(player, i) : 0;
++        Entry<EquipmentSlot, ItemStack> entry = EnchantmentHelper.getRandomItemWith(Enchantments.MENDING, player, ItemStack::isDamaged);
++
++        if (entry != null) {
++            ItemStack itemstack = (ItemStack) entry.getValue();
++            int j = Math.min(this.xpToDurability(repairAmount), itemstack.getDamageValue());
++            // CraftBukkit start
++            org.bukkit.event.player.PlayerItemMendEvent event = CraftEventFactory.callPlayerItemMendEvent(player, this, itemstack, entry.getKey(), j);
++            j = event.getRepairAmount();
++            if (event.isCancelled()) {
++                return repairAmount;
++            }
++            // CraftBukkit end
++
++            itemstack.setDamageValue(itemstack.getDamageValue() - j);
++            int k = repairAmount - this.durabilityToXp(j);
++            this.value = k; // CraftBukkit - update exp value of orb for PlayerItemMendEvent calls
++
++            return k > 0 ? this.repairPlayerItems(player, k) : 0;
+         } else {
+             return repairAmount;
+         }
+@@ -284,27 +307,25 @@
+     }
+ 
+     public static int getExperienceValue(int expValue) {
+-        if (expValue >= 2477) {
+-            return 2477;
+-        } else if (expValue >= 1237) {
+-            return 1237;
+-        } else if (expValue >= 617) {
+-            return 617;
+-        } else if (expValue >= 307) {
+-            return 307;
+-        } else if (expValue >= 149) {
+-            return 149;
+-        } else if (expValue >= 73) {
+-            return 73;
+-        } else if (expValue >= 37) {
+-            return 37;
+-        } else if (expValue >= 17) {
+-            return 17;
+-        } else if (expValue >= 7) {
+-            return 7;
+-        } else {
+-            return expValue >= 3 ? 3 : 1;
+-        }
++        // CraftBukkit start
++        if (expValue > 162670129) return expValue - 100000;
++        if (expValue > 81335063) return 81335063;
++        if (expValue > 40667527) return 40667527;
++        if (expValue > 20333759) return 20333759;
++        if (expValue > 10166857) return 10166857;
++        if (expValue > 5083423) return 5083423;
++        if (expValue > 2541701) return 2541701;
++        if (expValue > 1270849) return 1270849;
++        if (expValue > 635413) return 635413;
++        if (expValue > 317701) return 317701;
++        if (expValue > 158849) return 158849;
++        if (expValue > 79423) return 79423;
++        if (expValue > 39709) return 39709;
++        if (expValue > 19853) return 19853;
++        if (expValue > 9923) return 9923;
++        if (expValue > 4957) return 4957;
++        // CraftBukkit end
++        return expValue >= 2477 ? 2477 : (expValue >= 1237 ? 1237 : (expValue >= 617 ? 617 : (expValue >= 307 ? 307 : (expValue >= 149 ? 149 : (expValue >= 73 ? 73 : (expValue >= 37 ? 37 : (expValue >= 17 ? 17 : (expValue >= 7 ? 7 : (expValue >= 3 ? 3 : 1)))))))));
+     }
+ 
+     @Override

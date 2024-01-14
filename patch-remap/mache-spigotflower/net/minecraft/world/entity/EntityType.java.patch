@@ -1,0 +1,517 @@
+--- a/net/minecraft/world/entity/EntityType.java
++++ b/net/minecraft/world/entity/EntityType.java
+@@ -27,7 +27,7 @@
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.tags.TagKey;
+ import net.minecraft.util.Mth;
+-import net.minecraft.util.datafix.fixes.References;
++import net.minecraft.util.datafix.fixes.DataConverterTypes;
+ import net.minecraft.world.entity.ambient.Bat;
+ import net.minecraft.world.entity.animal.Bee;
+ import net.minecraft.world.entity.animal.Cat;
+@@ -154,12 +154,13 @@
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.block.Block;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.event.entity.CreatureSpawnEvent;
+ import org.slf4j.Logger;
+ 
+ public class EntityType<T extends Entity> implements FeatureElement, EntityTypeTest<Entity, T> {
+@@ -170,7 +171,7 @@
+     private static final float MAGIC_HORSE_WIDTH = 1.3964844F;
+     private static final int DISPLAY_TRACKING_RANGE = 10;
+     public static final EntityType<Allay> ALLAY = register("allay", EntityType.Builder.of(Allay::new, MobCategory.CREATURE).sized(0.35F, 0.6F).clientTrackingRange(8).updateInterval(2));
+-    public static final EntityType<AreaEffectCloud> AREA_EFFECT_CLOUD = register("area_effect_cloud", EntityType.Builder.of(AreaEffectCloud::new, MobCategory.MISC).fireImmune().sized(6.0F, 0.5F).clientTrackingRange(10).updateInterval(Integer.MAX_VALUE));
++    public static final EntityType<AreaEffectCloud> AREA_EFFECT_CLOUD = register("area_effect_cloud", EntityType.Builder.of(AreaEffectCloud::new, MobCategory.MISC).fireImmune().sized(6.0F, 0.5F).clientTrackingRange(10).updateInterval(10)); // CraftBukkit - SPIGOT-3729: track area effect clouds
+     public static final EntityType<ArmorStand> ARMOR_STAND = register("armor_stand", EntityType.Builder.of(ArmorStand::new, MobCategory.MISC).sized(0.5F, 1.975F).clientTrackingRange(10));
+     public static final EntityType<Arrow> ARROW = register("arrow", EntityType.Builder.of(Arrow::new, MobCategory.MISC).sized(0.5F, 0.5F).clientTrackingRange(4).updateInterval(20));
+     public static final EntityType<Axolotl> AXOLOTL = register("axolotl", EntityType.Builder.of(Axolotl::new, MobCategory.AXOLOTLS).sized(0.75F, 0.42F).clientTrackingRange(10));
+@@ -313,113 +314,136 @@
+     private final EntityDimensions dimensions;
+     private final FeatureFlagSet requiredFeatures;
+ 
+-    private static <T extends Entity> EntityType<T> register(String s, EntityType.Builder<T> entitytype_builder) {
+-        return (EntityType) Registry.register(BuiltInRegistries.ENTITY_TYPE, s, entitytype_builder.build(s));
++    private static <T extends Entity> EntityType<T> register(String key, EntityType.Builder builder) { // CraftBukkit - decompile error
++        return (EntityType) Registry.register(BuiltInRegistries.ENTITY_TYPE, key, (EntityType<T>) builder.build(key)); // CraftBukkit - decompile error
+     }
+ 
+-    public static ResourceLocation getKey(EntityType<?> entitytype) {
+-        return BuiltInRegistries.ENTITY_TYPE.getKey(entitytype);
++    public static ResourceLocation getKey(EntityType<?> entityType) {
++        return BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
+     }
+ 
+-    public static Optional<EntityType<?>> byString(String s) {
+-        return BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(s));
++    public static Optional<EntityType<?>> byString(String key) {
++        return BuiltInRegistries.ENTITY_TYPE.getOptional(ResourceLocation.tryParse(key));
+     }
+ 
+-    public EntityType(EntityType.EntityFactory<T> entitytype_entityfactory, MobCategory mobcategory, boolean flag, boolean flag1, boolean flag2, boolean flag3, ImmutableSet<Block> immutableset, EntityDimensions entitydimensions, int i, int j, FeatureFlagSet featureflagset) {
++    public EntityType(EntityType.EntityFactory<T> factory, MobCategory category, boolean serialize, boolean summon, boolean fireImmune, boolean canSpawnFarFromPlayer, ImmutableSet<Block> immuneTo, EntityDimensions dimensions, int clientTrackingRange, int updateInterval, FeatureFlagSet requiredFeatures) {
+         this.builtInRegistryHolder = BuiltInRegistries.ENTITY_TYPE.createIntrusiveHolder(this);
+-        this.factory = entitytype_entityfactory;
+-        this.category = mobcategory;
+-        this.canSpawnFarFromPlayer = flag3;
+-        this.serialize = flag;
+-        this.summon = flag1;
+-        this.fireImmune = flag2;
+-        this.immuneTo = immutableset;
+-        this.dimensions = entitydimensions;
+-        this.clientTrackingRange = i;
+-        this.updateInterval = j;
+-        this.requiredFeatures = featureflagset;
++        this.factory = factory;
++        this.category = category;
++        this.canSpawnFarFromPlayer = canSpawnFarFromPlayer;
++        this.serialize = serialize;
++        this.summon = summon;
++        this.fireImmune = fireImmune;
++        this.immuneTo = immuneTo;
++        this.dimensions = dimensions;
++        this.clientTrackingRange = clientTrackingRange;
++        this.updateInterval = updateInterval;
++        this.requiredFeatures = requiredFeatures;
+     }
+ 
+     @Nullable
+-    public T spawn(ServerLevel serverlevel, @Nullable ItemStack itemstack, @Nullable Player player, BlockPos blockpos, MobSpawnType mobspawntype, boolean flag, boolean flag1) {
+-        CompoundTag compoundtag;
+-        Consumer consumer;
++    public T spawn(ServerLevel serverLevel, @Nullable ItemStack stack, @Nullable Player player, BlockPos pos, EnumMobSpawn spawnType, boolean shouldOffsetY, boolean shouldOffsetYMore) {
++        // CraftBukkit start
++        return this.spawn(serverLevel, stack, player, pos, spawnType, shouldOffsetY, shouldOffsetYMore, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.SPAWNER_EGG);
++    }
+ 
++    @Nullable
++    public T spawn(ServerLevel worldserver, @Nullable ItemStack itemstack, @Nullable Player entityhuman, BlockPos blockposition, EnumMobSpawn enummobspawn, boolean flag, boolean flag1, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        // CraftBukkit end
++        CompoundTag nbttagcompound;
++        Consumer<T> consumer; // CraftBukkit - decompile error
++
+         if (itemstack != null) {
+-            compoundtag = itemstack.getTag();
+-            consumer = createDefaultStackConfig(serverlevel, itemstack, player);
++            nbttagcompound = itemstack.getTag();
++            consumer = createDefaultStackConfig(worldserver, itemstack, entityhuman);
+         } else {
+             consumer = (entity) -> {
+             };
+-            compoundtag = null;
++            nbttagcompound = null;
+         }
+ 
+-        return this.spawn(serverlevel, compoundtag, consumer, blockpos, mobspawntype, flag, flag1);
++        return this.spawn(worldserver, nbttagcompound, consumer, blockposition, enummobspawn, flag, flag1, spawnReason); // CraftBukkit
+     }
+ 
+-    public static <T extends Entity> Consumer<T> createDefaultStackConfig(ServerLevel serverlevel, ItemStack itemstack, @Nullable Player player) {
++    public static <T extends Entity> Consumer<T> createDefaultStackConfig(ServerLevel serverLevel, ItemStack stack, @Nullable Player player) {
+         return appendDefaultStackConfig((entity) -> {
+-        }, serverlevel, itemstack, player);
++        }, serverLevel, stack, player);
+     }
+ 
+-    public static <T extends Entity> Consumer<T> appendDefaultStackConfig(Consumer<T> consumer, ServerLevel serverlevel, ItemStack itemstack, @Nullable Player player) {
+-        return appendCustomEntityStackConfig(appendCustomNameConfig(consumer, itemstack), serverlevel, itemstack, player);
++    public static <T extends Entity> Consumer<T> appendDefaultStackConfig(Consumer<T> consumer, ServerLevel serverLevel, ItemStack stack, @Nullable Player player) {
++        return appendCustomEntityStackConfig(appendCustomNameConfig(consumer, stack), serverLevel, stack, player);
+     }
+ 
+-    public static <T extends Entity> Consumer<T> appendCustomNameConfig(Consumer<T> consumer, ItemStack itemstack) {
+-        return itemstack.hasCustomHoverName() ? consumer.andThen((entity) -> {
+-            entity.setCustomName(itemstack.getHoverName());
++    public static <T extends Entity> Consumer<T> appendCustomNameConfig(Consumer<T> consumer, ItemStack stack) {
++        return stack.hasCustomHoverName() ? consumer.andThen((entity) -> {
++            entity.setCustomName(stack.getHoverName());
+         }) : consumer;
+     }
+ 
+-    public static <T extends Entity> Consumer<T> appendCustomEntityStackConfig(Consumer<T> consumer, ServerLevel serverlevel, ItemStack itemstack, @Nullable Player player) {
+-        CompoundTag compoundtag = itemstack.getTag();
++    public static <T extends Entity> Consumer<T> appendCustomEntityStackConfig(Consumer<T> consumer, ServerLevel level, ItemStack stack, @Nullable Player player) {
++        CompoundTag nbttagcompound = stack.getTag();
+ 
+-        return compoundtag != null ? consumer.andThen((entity) -> {
+-            updateCustomEntityTag(serverlevel, player, entity, compoundtag);
++        return nbttagcompound != null ? consumer.andThen((entity) -> {
++            try { updateCustomEntityTag(level, player, entity, nbttagcompound); } catch (Throwable t) { LOGGER.warn("Error loading spawn egg NBT", t); } // CraftBukkit - SPIGOT-5665
+         }) : consumer;
+     }
+ 
+     @Nullable
+-    public T spawn(ServerLevel serverlevel, BlockPos blockpos, MobSpawnType mobspawntype) {
+-        return this.spawn(serverlevel, (CompoundTag) null, (Consumer) null, blockpos, mobspawntype, false, false);
++    public T spawn(ServerLevel level, BlockPos pos, EnumMobSpawn spawnType) {
++        // CraftBukkit start
++        return this.spawn(level, pos, spawnType, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
+     }
+ 
+     @Nullable
+-    public T spawn(ServerLevel serverlevel, @Nullable CompoundTag compoundtag, @Nullable Consumer<T> consumer, BlockPos blockpos, MobSpawnType mobspawntype, boolean flag, boolean flag1) {
+-        T t0 = this.create(serverlevel, compoundtag, consumer, blockpos, mobspawntype, flag, flag1);
++    public T spawn(ServerLevel worldserver, BlockPos blockposition, EnumMobSpawn enummobspawn, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        return this.spawn(worldserver, (CompoundTag) null, null, blockposition, enummobspawn, false, false, spawnReason); // CraftBukkit - decompile error
++        // CraftBukkit end
++    }
+ 
++    @Nullable
++    public T spawn(ServerLevel level, @Nullable CompoundTag compound, @Nullable Consumer<T> consumer, BlockPos pos, EnumMobSpawn spawnType, boolean shouldOffsetY, boolean shouldOffsetYMore) {
++        // CraftBukkit start
++        return this.spawn(level, compound, consumer, pos, spawnType, shouldOffsetY, shouldOffsetYMore, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
++    }
++
++    @Nullable
++    public T spawn(ServerLevel worldserver, @Nullable CompoundTag nbttagcompound, @Nullable Consumer<T> consumer, BlockPos blockposition, EnumMobSpawn enummobspawn, boolean flag, boolean flag1, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        // CraftBukkit end
++        T t0 = this.create(worldserver, nbttagcompound, consumer, blockposition, enummobspawn, flag, flag1);
++
+         if (t0 != null) {
+-            serverlevel.addFreshEntityWithPassengers(t0);
++            worldserver.addFreshEntityWithPassengers(t0, spawnReason);
++            return !t0.isRemoved() ? t0 : null; // Don't return an entity when CreatureSpawnEvent is canceled
++            // CraftBukkit end
+         }
+ 
+         return t0;
+     }
+ 
+     @Nullable
+-    public T create(ServerLevel serverlevel, @Nullable CompoundTag compoundtag, @Nullable Consumer<T> consumer, BlockPos blockpos, MobSpawnType mobspawntype, boolean flag, boolean flag1) {
+-        T t0 = this.create(serverlevel);
++    public T create(ServerLevel level, @Nullable CompoundTag nbt, @Nullable Consumer<T> consumer, BlockPos pos, EnumMobSpawn spawnType, boolean shouldOffsetY, boolean shouldOffsetYMore) {
++        T t0 = this.create(level);
+ 
+         if (t0 == null) {
+             return null;
+         } else {
+             double d0;
+ 
+-            if (flag) {
+-                t0.setPos((double) blockpos.getX() + 0.5D, (double) (blockpos.getY() + 1), (double) blockpos.getZ() + 0.5D);
+-                d0 = getYOffset(serverlevel, blockpos, flag1, t0.getBoundingBox());
++            if (shouldOffsetY) {
++                t0.setPos((double) pos.getX() + 0.5D, (double) (pos.getY() + 1), (double) pos.getZ() + 0.5D);
++                d0 = getYOffset(level, pos, shouldOffsetYMore, t0.getBoundingBox());
+             } else {
+                 d0 = 0.0D;
+             }
+ 
+-            t0.moveTo((double) blockpos.getX() + 0.5D, (double) blockpos.getY() + d0, (double) blockpos.getZ() + 0.5D, Mth.wrapDegrees(serverlevel.random.nextFloat() * 360.0F), 0.0F);
++            t0.moveTo((double) pos.getX() + 0.5D, (double) pos.getY() + d0, (double) pos.getZ() + 0.5D, Mth.wrapDegrees(level.random.nextFloat() * 360.0F), 0.0F);
+             if (t0 instanceof Mob) {
+-                Mob mob = (Mob) t0;
++                Mob entityinsentient = (Mob) t0;
+ 
+-                mob.yHeadRot = mob.getYRot();
+-                mob.yBodyRot = mob.getYRot();
+-                mob.finalizeSpawn(serverlevel, serverlevel.getCurrentDifficultyAt(mob.blockPosition()), mobspawntype, (SpawnGroupData) null, compoundtag);
+-                mob.playAmbientSound();
++                entityinsentient.yHeadRot = entityinsentient.getYRot();
++                entityinsentient.yBodyRot = entityinsentient.getYRot();
++                entityinsentient.finalizeSpawn(level, level.getCurrentDifficultyAt(entityinsentient.blockPosition()), spawnType, (GroupDataEntity) null, nbt);
++                entityinsentient.playAmbientSound();
+             }
+ 
+             if (consumer != null) {
+@@ -430,30 +454,30 @@
+         }
+     }
+ 
+-    protected static double getYOffset(LevelReader levelreader, BlockPos blockpos, boolean flag, AABB aabb) {
+-        AABB aabb1 = new AABB(blockpos);
++    protected static double getYOffset(LevelReader level, BlockPos pos, boolean shouldOffsetYMore, AABB box) {
++        AABB axisalignedbb1 = new AABB(pos);
+ 
+-        if (flag) {
+-            aabb1 = aabb1.expandTowards(0.0D, -1.0D, 0.0D);
++        if (shouldOffsetYMore) {
++            axisalignedbb1 = axisalignedbb1.expandTowards(0.0D, -1.0D, 0.0D);
+         }
+ 
+-        Iterable<VoxelShape> iterable = levelreader.getCollisions((Entity) null, aabb1);
++        Iterable<VoxelShape> iterable = level.getCollisions((Entity) null, axisalignedbb1);
+ 
+-        return 1.0D + Shapes.collide(Direction.Axis.Y, aabb, iterable, flag ? -2.0D : -1.0D);
++        return 1.0D + Shapes.collide(Direction.Axis.Y, box, iterable, shouldOffsetYMore ? -2.0D : -1.0D);
+     }
+ 
+-    public static void updateCustomEntityTag(Level level, @Nullable Player player, @Nullable Entity entity, @Nullable CompoundTag compoundtag) {
+-        if (compoundtag != null && compoundtag.contains("EntityTag", 10)) {
++    public static void updateCustomEntityTag(Level level, @Nullable Player player, @Nullable Entity spawnedEntity, @Nullable CompoundTag itemNBT) {
++        if (itemNBT != null && itemNBT.contains("EntityTag", 10)) {
+             MinecraftServer minecraftserver = level.getServer();
+ 
+-            if (minecraftserver != null && entity != null) {
+-                if (level.isClientSide || !entity.onlyOpCanSetNbt() || player != null && minecraftserver.getPlayerList().isOp(player.getGameProfile())) {
+-                    CompoundTag compoundtag1 = entity.saveWithoutId(new CompoundTag());
+-                    UUID uuid = entity.getUUID();
++            if (minecraftserver != null && spawnedEntity != null) {
++                if (level.isClientSide || !spawnedEntity.onlyOpCanSetNbt() || player != null && minecraftserver.getPlayerList().isOp(player.getGameProfile())) {
++                    CompoundTag nbttagcompound1 = spawnedEntity.saveWithoutId(new CompoundTag());
++                    UUID uuid = spawnedEntity.getUUID();
+ 
+-                    compoundtag1.merge(compoundtag.getCompound("EntityTag"));
+-                    entity.setUUID(uuid);
+-                    entity.load(compoundtag1);
++                    nbttagcompound1.merge(itemNBT.getCompound("EntityTag"));
++                    spawnedEntity.setUUID(uuid);
++                    spawnedEntity.load(nbttagcompound1);
+                 }
+             }
+         }
+@@ -495,7 +519,6 @@
+         return this.description;
+     }
+ 
+-    @Override
+     public String toString() {
+         return this.getDescriptionId();
+     }
+@@ -508,9 +531,9 @@
+ 
+     public ResourceLocation getDefaultLootTable() {
+         if (this.lootTable == null) {
+-            ResourceLocation resourcelocation = BuiltInRegistries.ENTITY_TYPE.getKey(this);
++            ResourceLocation minecraftkey = BuiltInRegistries.ENTITY_TYPE.getKey(this);
+ 
+-            this.lootTable = resourcelocation.withPrefix("entities/");
++            this.lootTable = minecraftkey.withPrefix("entities/");
+         }
+ 
+         return this.lootTable;
+@@ -525,7 +548,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public FeatureFlagSet requiredFeatures() {
+         return this.requiredFeatures;
+     }
+@@ -535,42 +557,42 @@
+         return !this.isEnabled(level.enabledFeatures()) ? null : this.factory.create(this, level);
+     }
+ 
+-    public static Optional<Entity> create(CompoundTag compoundtag, Level level) {
+-        return Util.ifElse(by(compoundtag).map((entitytype) -> {
+-            return entitytype.create(level);
++    public static Optional<Entity> create(CompoundTag tag, Level level) {
++        return Util.ifElse(by(tag).map((entitytypes) -> {
++            return entitytypes.create(level);
+         }), (entity) -> {
+-            entity.load(compoundtag);
++            entity.load(tag);
+         }, () -> {
+-            EntityType.LOGGER.warn("Skipping Entity with id {}", compoundtag.getString("id"));
++            EntityType.LOGGER.warn("Skipping Entity with id {}", tag.getString("id"));
+         });
+     }
+ 
+-    public AABB getAABB(double d0, double d1, double d2) {
++    public AABB getAABB(double x, double d1, double y) {
+         float f = this.getWidth() / 2.0F;
+ 
+-        return new AABB(d0 - (double) f, d1, d2 - (double) f, d0 + (double) f, d1 + (double) this.getHeight(), d2 + (double) f);
++        return new AABB(x - (double) f, d1, y - (double) f, x + (double) f, d1 + (double) this.getHeight(), y + (double) f);
+     }
+ 
+-    public boolean isBlockDangerous(BlockState blockstate) {
+-        return this.immuneTo.contains(blockstate.getBlock()) ? false : (!this.fireImmune && WalkNodeEvaluator.isBurningBlock(blockstate) ? true : blockstate.is(Blocks.WITHER_ROSE) || blockstate.is(Blocks.SWEET_BERRY_BUSH) || blockstate.is(Blocks.CACTUS) || blockstate.is(Blocks.POWDER_SNOW));
++    public boolean isBlockDangerous(IBlockData state) {
++        return this.immuneTo.contains(state.getBlock()) ? false : (!this.fireImmune && WalkNodeEvaluator.isBurningBlock(state) ? true : state.is(Blocks.WITHER_ROSE) || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.CACTUS) || state.is(Blocks.POWDER_SNOW));
+     }
+ 
+     public EntityDimensions getDimensions() {
+         return this.dimensions;
+     }
+ 
+-    public static Optional<EntityType<?>> by(CompoundTag compoundtag) {
+-        return BuiltInRegistries.ENTITY_TYPE.getOptional(new ResourceLocation(compoundtag.getString("id")));
++    public static Optional<EntityType<?>> by(CompoundTag compound) {
++        return BuiltInRegistries.ENTITY_TYPE.getOptional(new ResourceLocation(compound.getString("id")));
+     }
+ 
+     @Nullable
+-    public static Entity loadEntityRecursive(CompoundTag compoundtag, Level level, Function<Entity, Entity> function) {
+-        return (Entity) loadStaticEntity(compoundtag, level).map(function).map((entity) -> {
+-            if (compoundtag.contains("Passengers", 9)) {
+-                ListTag listtag = compoundtag.getList("Passengers", 10);
++    public static Entity loadEntityRecursive(CompoundTag compound, Level level, Function<Entity, Entity> entityFunction) {
++        return (Entity) loadStaticEntity(compound, level).map(entityFunction).map((entity) -> {
++            if (compound.contains("Passengers", 9)) {
++                ListTag nbttaglist = compound.getList("Passengers", 10);
+ 
+-                for (int i = 0; i < listtag.size(); ++i) {
+-                    Entity entity1 = loadEntityRecursive(listtag.getCompound(i), level, function);
++                for (int i = 0; i < nbttaglist.size(); ++i) {
++                    Entity entity1 = loadEntityRecursive(nbttaglist.getCompound(i), level, entityFunction);
+ 
+                     if (entity1 != null) {
+                         entity1.startRiding(entity, true);
+@@ -579,43 +601,39 @@
+             }
+ 
+             return entity;
+-        }).orElse((Object) null);
++        }).orElse(null); // CraftBukkit - decompile error
+     }
+ 
+-    public static Stream<Entity> loadEntitiesRecursive(final List<? extends Tag> list, final Level level) {
+-        final Spliterator<? extends Tag> spliterator = list.spliterator();
++    public static Stream<Entity> loadEntitiesRecursive(final List<? extends Tag> tags, final Level level) {
++        final Spliterator<? extends Tag> spliterator = tags.spliterator();
+ 
+         return StreamSupport.stream(new Spliterator<Entity>() {
+-            @Override
+             public boolean tryAdvance(Consumer<? super Entity> consumer) {
+-                return spliterator.tryAdvance((tag) -> {
+-                    EntityType.loadEntityRecursive((CompoundTag) tag, level, (entity) -> {
++                return spliterator.tryAdvance((nbtbase) -> {
++                    EntityType.loadEntityRecursive((CompoundTag) nbtbase, level, (entity) -> {
+                         consumer.accept(entity);
+                         return entity;
+                     });
+                 });
+             }
+ 
+-            @Override
+             public Spliterator<Entity> trySplit() {
+                 return null;
+             }
+ 
+-            @Override
+             public long estimateSize() {
+-                return (long) list.size();
++                return (long) tags.size();
+             }
+ 
+-            @Override
+             public int characteristics() {
+                 return 1297;
+             }
+         }, false);
+     }
+ 
+-    private static Optional<Entity> loadStaticEntity(CompoundTag compoundtag, Level level) {
++    private static Optional<Entity> loadStaticEntity(CompoundTag compound, Level level) {
+         try {
+-            return create(compoundtag, level);
++            return create(compound, level);
+         } catch (RuntimeException runtimeexception) {
+             EntityType.LOGGER.warn("Exception loading entity: ", runtimeexception);
+             return Optional.empty();
+@@ -634,8 +652,8 @@
+         return this != EntityType.PLAYER && this != EntityType.LLAMA_SPIT && this != EntityType.WITHER && this != EntityType.BAT && this != EntityType.ITEM_FRAME && this != EntityType.GLOW_ITEM_FRAME && this != EntityType.LEASH_KNOT && this != EntityType.PAINTING && this != EntityType.END_CRYSTAL && this != EntityType.EVOKER_FANGS;
+     }
+ 
+-    public boolean is(TagKey<EntityType<?>> tagkey) {
+-        return this.builtInRegistryHolder.is(tagkey);
++    public boolean is(TagKey<EntityType<?>> tag) {
++        return this.builtInRegistryHolder.is(tag);
+     }
+ 
+     public boolean is(HolderSet<EntityType<?>> holderset) {
+@@ -643,13 +661,11 @@
+     }
+ 
+     @Nullable
+-    @Override
+     public T tryCast(Entity entity) {
+-        return entity.getType() == this ? entity : null;
++        return entity.getType() == this ? (T) entity : null; // CraftBukkit - decompile error
+     }
+ 
+     @Override
+-    @Override
+     public Class<? extends Entity> getBaseClass() {
+         return Entity.class;
+     }
+@@ -674,25 +690,25 @@
+         private EntityDimensions dimensions = EntityDimensions.scalable(0.6F, 1.8F);
+         private FeatureFlagSet requiredFeatures;
+ 
+-        private Builder(EntityType.EntityFactory<T> entitytype_entityfactory, MobCategory mobcategory) {
++        private Builder(EntityType.EntityFactory<T> factory, MobCategory category) {
+             this.requiredFeatures = FeatureFlags.VANILLA_SET;
+-            this.factory = entitytype_entityfactory;
+-            this.category = mobcategory;
+-            this.canSpawnFarFromPlayer = mobcategory == MobCategory.CREATURE || mobcategory == MobCategory.MISC;
++            this.factory = factory;
++            this.category = category;
++            this.canSpawnFarFromPlayer = category == MobCategory.CREATURE || category == MobCategory.MISC;
+         }
+ 
+-        public static <T extends Entity> EntityType.Builder<T> of(EntityType.EntityFactory<T> entitytype_entityfactory, MobCategory mobcategory) {
+-            return new EntityType.Builder<>(entitytype_entityfactory, mobcategory);
++        public static <T extends Entity> EntityType.Builder<T> of(EntityType.EntityFactory factory, MobCategory category) { // CraftBukkit - decompile error
++            return new EntityType.Builder<>(factory, category);
+         }
+ 
+-        public static <T extends Entity> EntityType.Builder<T> createNothing(MobCategory mobcategory) {
+-            return new EntityType.Builder<>((entitytype, level) -> {
++        public static <T extends Entity> EntityType.Builder<T> createNothing(MobCategory category) {
++            return new EntityType.Builder<>((entitytypes, world) -> {
+                 return null;
+-            }, mobcategory);
++            }, category);
+         }
+ 
+-        public EntityType.Builder<T> sized(float f, float f1) {
+-            this.dimensions = EntityDimensions.scalable(f, f1);
++        public EntityType.Builder<T> sized(float width, float height) {
++            this.dimensions = EntityDimensions.scalable(width, height);
+             return this;
+         }
+ 
+@@ -711,8 +727,8 @@
+             return this;
+         }
+ 
+-        public EntityType.Builder<T> immuneTo(Block... ablock) {
+-            this.immuneTo = ImmutableSet.copyOf(ablock);
++        public EntityType.Builder<T> immuneTo(Block... blocks) {
++            this.immuneTo = ImmutableSet.copyOf(blocks);
+             return this;
+         }
+ 
+@@ -721,24 +737,24 @@
+             return this;
+         }
+ 
+-        public EntityType.Builder<T> clientTrackingRange(int i) {
+-            this.clientTrackingRange = i;
++        public EntityType.Builder<T> clientTrackingRange(int clientTrackingRange) {
++            this.clientTrackingRange = clientTrackingRange;
+             return this;
+         }
+ 
+-        public EntityType.Builder<T> updateInterval(int i) {
+-            this.updateInterval = i;
++        public EntityType.Builder<T> updateInterval(int updateInterval) {
++            this.updateInterval = updateInterval;
+             return this;
+         }
+ 
+-        public EntityType.Builder<T> requiredFeatures(FeatureFlag... afeatureflag) {
+-            this.requiredFeatures = FeatureFlags.REGISTRY.subset(afeatureflag);
++        public EntityType.Builder<T> requiredFeatures(FeatureFlag... requiredFeatures) {
++            this.requiredFeatures = FeatureFlags.REGISTRY.subset(requiredFeatures);
+             return this;
+         }
+ 
+-        public EntityType<T> build(String s) {
++        public EntityType<T> build(String key) {
+             if (this.serialize) {
+-                Util.fetchChoiceType(References.ENTITY_TREE, s);
++                Util.fetchChoiceType(DataConverterTypes.ENTITY_TREE, key);
+             }
+ 
+             return new EntityType<>(this.factory, this.category, this.serialize, this.summon, this.fireImmune, this.canSpawnFarFromPlayer, this.immuneTo, this.dimensions, this.clientTrackingRange, this.updateInterval, this.requiredFeatures);

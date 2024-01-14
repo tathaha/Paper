@@ -1,0 +1,198 @@
+--- a/net/minecraft/world/entity/item/PrimedTnt.java
++++ b/net/minecraft/world/entity/item/PrimedTnt.java
+@@ -10,70 +10,73 @@
+ import net.minecraft.network.syncher.SynchedEntityData;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.LivingEntity;
+-import net.minecraft.world.entity.MoverType;
+-import net.minecraft.world.entity.Pose;
+ import net.minecraft.world.entity.TraceableEntity;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ 
++// CraftBukkit start;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.ExplosionPrimeEvent;
++// CraftBukkit end
++
+ public class PrimedTnt extends Entity implements TraceableEntity {
+ 
+     private static final EntityDataAccessor<Integer> DATA_FUSE_ID = SynchedEntityData.defineId(PrimedTnt.class, EntityDataSerializers.INT);
+-    private static final EntityDataAccessor<BlockState> DATA_BLOCK_STATE_ID = SynchedEntityData.defineId(PrimedTnt.class, EntityDataSerializers.BLOCK_STATE);
++    private static final EntityDataAccessor<IBlockData> DATA_BLOCK_STATE_ID = SynchedEntityData.defineId(PrimedTnt.class, EntityDataSerializers.BLOCK_STATE);
+     private static final int DEFAULT_FUSE_TIME = 80;
+     private static final String TAG_BLOCK_STATE = "block_state";
+     public static final String TAG_FUSE = "fuse";
+     @Nullable
+-    private LivingEntity owner;
++    public LivingEntity owner;
++    public float yield = 4; // CraftBukkit - add field
++    public boolean isIncendiary = false; // CraftBukkit - add field
+ 
+-    public PrimedTnt(EntityType<? extends PrimedTnt> entitytype, Level level) {
+-        super(entitytype, level);
++    public PrimedTnt(EntityType<? extends PrimedTnt> entityType, Level level) {
++        super(entityType, level);
+         this.blocksBuilding = true;
+     }
+ 
+-    public PrimedTnt(Level level, double d0, double d1, double d2, @Nullable LivingEntity livingentity) {
++    public PrimedTnt(Level level, double x, double d1, double y, @Nullable LivingEntity entityliving) {
+         this(EntityType.TNT, level);
+-        this.setPos(d0, d1, d2);
++        this.setPos(x, d1, y);
+         double d3 = level.random.nextDouble() * 6.2831854820251465D;
+ 
+         this.setDeltaMovement(-Math.sin(d3) * 0.02D, 0.20000000298023224D, -Math.cos(d3) * 0.02D);
+         this.setFuse(80);
+-        this.xo = d0;
++        this.xo = x;
+         this.yo = d1;
+-        this.zo = d2;
+-        this.owner = livingentity;
++        this.zo = y;
++        this.owner = entityliving;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.entityData.define(PrimedTnt.DATA_FUSE_ID, 80);
+         this.entityData.define(PrimedTnt.DATA_BLOCK_STATE_ID, Blocks.TNT.defaultBlockState());
+     }
+ 
+     @Override
+-    @Override
+     protected Entity.MovementEmission getMovementEmission() {
+         return Entity.MovementEmission.NONE;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return !this.isRemoved();
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         if (!this.isNoGravity()) {
+             this.setDeltaMovement(this.getDeltaMovement().add(0.0D, -0.04D, 0.0D));
+         }
+ 
+-        this.move(MoverType.SELF, this.getDeltaMovement());
++        this.move(EnumMoveType.SELF, this.getDeltaMovement());
+         this.setDeltaMovement(this.getDeltaMovement().scale(0.98D));
+         if (this.onGround()) {
+             this.setDeltaMovement(this.getDeltaMovement().multiply(0.7D, -0.5D, 0.7D));
+@@ -83,10 +86,13 @@
+ 
+         this.setFuse(i);
+         if (i <= 0) {
+-            this.discard();
++            // CraftBukkit start - Need to reverse the order of the explosion and the entity death so we have a location for the event
++            // this.discard();
+             if (!this.level().isClientSide) {
+                 this.explode();
+             }
++            this.discard();
++            // CraftBukkit end
+         } else {
+             this.updateInWaterStateAndDoFluidPushing();
+             if (this.level().isClientSide) {
+@@ -97,66 +103,66 @@
+     }
+ 
+     private void explode() {
+-        float f = 4.0F;
++        // CraftBukkit start
++        // float f = 4.0F;
++        ExplosionPrimeEvent event = CraftEventFactory.callExplosionPrimeEvent((org.bukkit.entity.Explosive)this.getBukkitEntity());
+ 
+-        this.level().explode(this, this.getX(), this.getY(0.0625D), this.getZ(), 4.0F, Level.ExplosionInteraction.TNT);
++        if (!event.isCancelled()) {
++            this.level().explode(this, this.getX(), this.getY(0.0625D), this.getZ(), event.getRadius(), event.getFire(), Level.a.TNT);
++        }
++        // CraftBukkit end
+     }
+ 
+     @Override
+-    @Override
+-    protected void addAdditionalSaveData(CompoundTag compoundtag) {
+-        compoundtag.putShort("fuse", (short) this.getFuse());
+-        compoundtag.put("block_state", NbtUtils.writeBlockState(this.getBlockState()));
++    protected void addAdditionalSaveData(CompoundTag compound) {
++        compound.putShort("fuse", (short) this.getFuse());
++        compound.put("block_state", NbtUtils.writeBlockState(this.getBlockState()));
+     }
+ 
+     @Override
+-    @Override
+-    protected void readAdditionalSaveData(CompoundTag compoundtag) {
+-        this.setFuse(compoundtag.getShort("fuse"));
+-        if (compoundtag.contains("block_state", 10)) {
+-            this.setBlockState(NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compoundtag.getCompound("block_state")));
++    protected void readAdditionalSaveData(CompoundTag compound) {
++        this.setFuse(compound.getShort("fuse"));
++        if (compound.contains("block_state", 10)) {
++            this.setBlockState(NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compound.getCompound("block_state")));
+         }
+ 
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public LivingEntity getOwner() {
+         return this.owner;
+     }
+ 
+     @Override
+-    @Override
+     public void restoreFrom(Entity entity) {
+         super.restoreFrom(entity);
+         if (entity instanceof PrimedTnt) {
+-            PrimedTnt primedtnt = (PrimedTnt) entity;
++            PrimedTnt entitytntprimed = (PrimedTnt) entity;
+ 
+-            this.owner = primedtnt.owner;
++            this.owner = entitytntprimed.owner;
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    protected float getEyeHeight(Pose pose, EntityDimensions entitydimensions) {
++    protected float getEyeHeight(EntityPose pose, EntityDimensions size) {
+         return 0.15F;
+     }
+ 
+-    public void setFuse(int i) {
+-        this.entityData.set(PrimedTnt.DATA_FUSE_ID, i);
++    public void setFuse(int life) {
++        this.entityData.set(PrimedTnt.DATA_FUSE_ID, life);
+     }
+ 
+     public int getFuse() {
+         return (Integer) this.entityData.get(PrimedTnt.DATA_FUSE_ID);
+     }
+ 
+-    public void setBlockState(BlockState blockstate) {
+-        this.entityData.set(PrimedTnt.DATA_BLOCK_STATE_ID, blockstate);
++    public void setBlockState(IBlockData iblockdata) {
++        this.entityData.set(PrimedTnt.DATA_BLOCK_STATE_ID, iblockdata);
+     }
+ 
+-    public BlockState getBlockState() {
+-        return (BlockState) this.entityData.get(PrimedTnt.DATA_BLOCK_STATE_ID);
++    public IBlockData getBlockState() {
++        return (IBlockData) this.entityData.get(PrimedTnt.DATA_BLOCK_STATE_ID);
+     }
+ }

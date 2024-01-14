@@ -1,0 +1,161 @@
+--- a/net/minecraft/world/level/block/MushroomBlock.java
++++ b/net/minecraft/world/level/block/MushroomBlock.java
+@@ -15,16 +15,19 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.TreeType;
++// CraftBukkit end
+ 
+ public class MushroomBlock extends BushBlock implements BonemealableBlock {
+ 
+     public static final MapCodec<MushroomBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
+-        return instance.group(ResourceKey.codec(Registries.CONFIGURED_FEATURE).fieldOf("feature").forGetter((mushroomblock) -> {
+-            return mushroomblock.feature;
++        return instance.group(ResourceKey.codec(Registries.CONFIGURED_FEATURE).fieldOf("feature").forGetter((blockmushroom) -> {
++            return blockmushroom.feature;
+         }), propertiesCodec()).apply(instance, MushroomBlock::new);
+     });
+     protected static final float AABB_OFFSET = 3.0F;
+@@ -32,34 +35,31 @@
+     private final ResourceKey<ConfiguredFeature<?, ?>> feature;
+ 
+     @Override
+-    @Override
+     public MapCodec<MushroomBlock> codec() {
+         return MushroomBlock.CODEC;
+     }
+ 
+-    public MushroomBlock(ResourceKey<ConfiguredFeature<?, ?>> resourcekey, BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
++    public MushroomBlock(ResourceKey<ConfiguredFeature<?, ?>> resourcekey, BlockBehaviour.Properties blockbase_info) {
++        super(blockbase_info);
+         this.feature = resourcekey;
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return MushroomBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public void randomTick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        if (randomsource.nextInt(25) == 0) {
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if (random.nextInt(25) == 0) {
+             int i = 5;
+             boolean flag = true;
+-            Iterator iterator = BlockPos.betweenClosed(blockpos.offset(-4, -1, -4), blockpos.offset(4, 1, 4)).iterator();
++            Iterator iterator = BlockPos.betweenClosed(pos.offset(-4, -1, -4), pos.offset(4, 1, 4)).iterator();
+ 
+             while (iterator.hasNext()) {
+-                BlockPos blockpos1 = (BlockPos) iterator.next();
++                BlockPos blockposition1 = (BlockPos) iterator.next();
+ 
+-                if (serverlevel.getBlockState(blockpos1).is((Block) this)) {
++                if (level.getBlockState(blockposition1).is((Block) this)) {
+                     --i;
+                     if (i <= 0) {
+                         return;
+@@ -67,69 +67,65 @@
+                 }
+             }
+ 
+-            BlockPos blockpos2 = blockpos.offset(randomsource.nextInt(3) - 1, randomsource.nextInt(2) - randomsource.nextInt(2), randomsource.nextInt(3) - 1);
++            BlockPos blockposition2 = pos.offset(random.nextInt(3) - 1, random.nextInt(2) - random.nextInt(2), random.nextInt(3) - 1);
+ 
+             for (int j = 0; j < 4; ++j) {
+-                if (serverlevel.isEmptyBlock(blockpos2) && blockstate.canSurvive(serverlevel, blockpos2)) {
+-                    blockpos = blockpos2;
++                if (level.isEmptyBlock(blockposition2) && state.canSurvive(level, blockposition2)) {
++                    pos = blockposition2;
+                 }
+ 
+-                blockpos2 = blockpos.offset(randomsource.nextInt(3) - 1, randomsource.nextInt(2) - randomsource.nextInt(2), randomsource.nextInt(3) - 1);
++                blockposition2 = pos.offset(random.nextInt(3) - 1, random.nextInt(2) - random.nextInt(2), random.nextInt(3) - 1);
+             }
+ 
+-            if (serverlevel.isEmptyBlock(blockpos2) && blockstate.canSurvive(serverlevel, blockpos2)) {
+-                serverlevel.setBlock(blockpos2, blockstate, 2);
++            if (level.isEmptyBlock(blockposition2) && state.canSurvive(level, blockposition2)) {
++                org.bukkit.craftbukkit.event.CraftEventFactory.handleBlockSpreadEvent(level, pos, blockposition2, state, 2); // CraftBukkit
+             }
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    protected boolean mayPlaceOn(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos) {
+-        return blockstate.isSolidRender(blockgetter, blockpos);
++    protected boolean mayPlaceOn(IBlockData state, BlockGetter level, BlockPos pos) {
++        return state.isSolidRender(level, pos);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canSurvive(BlockState blockstate, LevelReader levelreader, BlockPos blockpos) {
+-        BlockPos blockpos1 = blockpos.below();
+-        BlockState blockstate1 = levelreader.getBlockState(blockpos1);
++    public boolean canSurvive(IBlockData state, LevelReader level, BlockPos pos) {
++        BlockPos blockposition1 = pos.below();
++        IBlockData iblockdata1 = level.getBlockState(blockposition1);
+ 
+-        return blockstate1.is(BlockTags.MUSHROOM_GROW_BLOCK) ? true : levelreader.getRawBrightness(blockpos, 0) < 13 && this.mayPlaceOn(blockstate1, levelreader, blockpos1);
++        return iblockdata1.is(BlockTags.MUSHROOM_GROW_BLOCK) ? true : level.getRawBrightness(pos, 0) < 13 && this.mayPlaceOn(iblockdata1, level, blockposition1);
+     }
+ 
+-    public boolean growMushroom(ServerLevel serverlevel, BlockPos blockpos, BlockState blockstate, RandomSource randomsource) {
+-        Optional<? extends Holder<ConfiguredFeature<?, ?>>> optional = serverlevel.registryAccess().registryOrThrow(Registries.CONFIGURED_FEATURE).getHolder(this.feature);
++    public boolean growMushroom(ServerLevel level, BlockPos pos, IBlockData state, RandomSource random) {
++        Optional<? extends Holder<ConfiguredFeature<?, ?>>> optional = level.registryAccess().registryOrThrow(Registries.CONFIGURED_FEATURE).getHolder(this.feature);
+ 
+         if (optional.isEmpty()) {
+             return false;
+         } else {
+-            serverlevel.removeBlock(blockpos, false);
+-            if (((ConfiguredFeature) ((Holder) optional.get()).value()).place(serverlevel, serverlevel.getChunkSource().getGenerator(), randomsource, blockpos)) {
++            level.removeBlock(pos, false);
++            SaplingBlock.treeType = (this == Blocks.BROWN_MUSHROOM) ? TreeType.BROWN_MUSHROOM : TreeType.BROWN_MUSHROOM; // CraftBukkit
++            if (((ConfiguredFeature) ((Holder) optional.get()).value()).place(level, level.getChunkSource().getGenerator(), random, pos)) {
+                 return true;
+             } else {
+-                serverlevel.setBlock(blockpos, blockstate, 3);
++                level.setBlock(pos, state, 3);
+                 return false;
+             }
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isValidBonemealTarget(LevelReader levelreader, BlockPos blockpos, BlockState blockstate) {
++    public boolean isValidBonemealTarget(LevelReader iworldreader, BlockPos blockposition, IBlockData iblockdata) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isBonemealSuccess(Level level, RandomSource randomsource, BlockPos blockpos, BlockState blockstate) {
+-        return (double) randomsource.nextFloat() < 0.4D;
++    public boolean isBonemealSuccess(Level level, RandomSource random, BlockPos pos, IBlockData state) {
++        return (double) random.nextFloat() < 0.4D;
+     }
+ 
+     @Override
+-    @Override
+-    public void performBonemeal(ServerLevel serverlevel, RandomSource randomsource, BlockPos blockpos, BlockState blockstate) {
+-        this.growMushroom(serverlevel, blockpos, blockstate, randomsource);
++    public void performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, IBlockData state) {
++        this.growMushroom(level, pos, state, random);
+     }
+ }

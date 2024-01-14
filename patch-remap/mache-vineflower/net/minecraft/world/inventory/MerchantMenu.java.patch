@@ -1,0 +1,253 @@
+--- a/net/minecraft/world/inventory/MerchantMenu.java
++++ b/net/minecraft/world/inventory/MerchantMenu.java
+@@ -9,9 +9,12 @@
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.trading.Merchant;
++import net.minecraft.world.item.trading.MerchantOffer;
+ import net.minecraft.world.item.trading.MerchantOffers;
++import org.bukkit.craftbukkit.inventory.CraftInventoryView; // CraftBukkit
+ 
+ public class MerchantMenu extends AbstractContainerMenu {
++
+     protected static final int PAYMENT1_SLOT = 0;
+     protected static final int PAYMENT2_SLOT = 1;
+     protected static final int RESULT_SLOT = 2;
+@@ -29,6 +32,19 @@
+     private boolean showProgressBar;
+     private boolean canRestock;
+ 
++    // CraftBukkit start
++    private CraftInventoryView bukkitEntity = null;
++    private Inventory player;
++
++    @Override
++    public CraftInventoryView getBukkitView() {
++        if (bukkitEntity == null) {
++            bukkitEntity = new CraftInventoryView(this.player.player.getBukkitEntity(), new org.bukkit.craftbukkit.inventory.CraftInventoryMerchant(trader, tradeContainer), this);
++        }
++        return bukkitEntity;
++    }
++    // CraftBukkit end
++
+     public MerchantMenu(int containerId, Inventory playerInventory) {
+         this(containerId, playerInventory, new ClientSideMerchant(playerInventory.player));
+     }
+@@ -40,16 +56,20 @@
+         this.addSlot(new Slot(this.tradeContainer, 0, 136, 37));
+         this.addSlot(new Slot(this.tradeContainer, 1, 162, 37));
+         this.addSlot(new MerchantResultSlot(playerInventory.player, trader, this.tradeContainer, 2, 220, 37));
++        this.player = playerInventory; // CraftBukkit - save player
+ 
+-        for (int i = 0; i < 3; i++) {
+-            for (int i1 = 0; i1 < 9; i1++) {
+-                this.addSlot(new Slot(playerInventory, i1 + i * 9 + 9, 108 + i1 * 18, 84 + i * 18));
++        int j;
++
++        for (j = 0; j < 3; ++j) {
++            for (int k = 0; k < 9; ++k) {
++                this.addSlot(new Slot(playerInventory, k + j * 9 + 9, 108 + k * 18, 84 + j * 18));
+             }
+         }
+ 
+-        for (int i = 0; i < 9; i++) {
+-            this.addSlot(new Slot(playerInventory, i, 108 + i * 18, 142));
++        for (j = 0; j < 9; ++j) {
++            this.addSlot(new Slot(playerInventory, j, 108 + j * 18, 142));
+         }
++
+     }
+ 
+     public void setShowProgressBar(boolean showProgressBar) {
+@@ -106,124 +126,139 @@
+ 
+     @Override
+     public ItemStack quickMoveStack(Player player, int index) {
+-        ItemStack itemStack = ItemStack.EMPTY;
+-        Slot slot = this.slots.get(index);
++        ItemStack itemstack = ItemStack.EMPTY;
++        Slot slot = (Slot) this.slots.get(index);
++
+         if (slot != null && slot.hasItem()) {
+-            ItemStack item = slot.getItem();
+-            itemStack = item.copy();
++            ItemStack itemstack1 = slot.getItem();
++
++            itemstack = itemstack1.copy();
+             if (index == 2) {
+-                if (!this.moveItemStackTo(item, 3, 39, true)) {
++                if (!this.moveItemStackTo(itemstack1, 3, 39, true)) {
+                     return ItemStack.EMPTY;
+                 }
+ 
+-                slot.onQuickCraft(item, itemStack);
++                slot.onQuickCraft(itemstack1, itemstack);
+                 this.playTradeSound();
+             } else if (index != 0 && index != 1) {
+                 if (index >= 3 && index < 30) {
+-                    if (!this.moveItemStackTo(item, 30, 39, false)) {
++                    if (!this.moveItemStackTo(itemstack1, 30, 39, false)) {
+                         return ItemStack.EMPTY;
+                     }
+-                } else if (index >= 30 && index < 39 && !this.moveItemStackTo(item, 3, 30, false)) {
++                } else if (index >= 30 && index < 39 && !this.moveItemStackTo(itemstack1, 3, 30, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (!this.moveItemStackTo(item, 3, 39, false)) {
++            } else if (!this.moveItemStackTo(itemstack1, 3, 39, false)) {
+                 return ItemStack.EMPTY;
+             }
+ 
+-            if (item.isEmpty()) {
++            if (itemstack1.isEmpty()) {
+                 slot.setByPlayer(ItemStack.EMPTY);
+             } else {
+                 slot.setChanged();
+             }
+ 
+-            if (item.getCount() == itemStack.getCount()) {
++            if (itemstack1.getCount() == itemstack.getCount()) {
+                 return ItemStack.EMPTY;
+             }
+ 
+-            slot.onTake(player, item);
++            slot.onTake(player, itemstack1);
+         }
+ 
+-        return itemStack;
++        return itemstack;
+     }
+ 
+     private void playTradeSound() {
+-        if (!this.trader.isClientSide()) {
+-            Entity entity = (Entity)this.trader;
+-            entity.level()
+-                .playLocalSound(entity.getX(), entity.getY(), entity.getZ(), this.trader.getNotifyTradeSound(), SoundSource.NEUTRAL, 1.0F, 1.0F, false);
++        if (!this.trader.isClientSide() && this.trader instanceof Entity) { // CraftBukkit - SPIGOT-5035
++            Entity entity = (Entity) this.trader;
++
++            entity.level().playLocalSound(entity.getX(), entity.getY(), entity.getZ(), this.trader.getNotifyTradeSound(), SoundSource.NEUTRAL, 1.0F, 1.0F, false);
+         }
++
+     }
+ 
+     @Override
+     public void removed(Player player) {
+         super.removed(player);
+-        this.trader.setTradingPlayer(null);
++        this.trader.setTradingPlayer((Player) null);
+         if (!this.trader.isClientSide()) {
+-            if (!player.isAlive() || player instanceof ServerPlayer && ((ServerPlayer)player).hasDisconnected()) {
+-                ItemStack itemStack = this.tradeContainer.removeItemNoUpdate(0);
+-                if (!itemStack.isEmpty()) {
+-                    player.drop(itemStack, false);
++            if (player.isAlive() && (!(player instanceof ServerPlayer) || !((ServerPlayer) player).hasDisconnected())) {
++                if (player instanceof ServerPlayer) {
++                    player.getInventory().placeItemBackInInventory(this.tradeContainer.removeItemNoUpdate(0));
++                    player.getInventory().placeItemBackInInventory(this.tradeContainer.removeItemNoUpdate(1));
+                 }
++            } else {
++                ItemStack itemstack = this.tradeContainer.removeItemNoUpdate(0);
+ 
+-                itemStack = this.tradeContainer.removeItemNoUpdate(1);
+-                if (!itemStack.isEmpty()) {
+-                    player.drop(itemStack, false);
++                if (!itemstack.isEmpty()) {
++                    player.drop(itemstack, false);
+                 }
+-            } else if (player instanceof ServerPlayer) {
+-                player.getInventory().placeItemBackInInventory(this.tradeContainer.removeItemNoUpdate(0));
+-                player.getInventory().placeItemBackInInventory(this.tradeContainer.removeItemNoUpdate(1));
++
++                itemstack = this.tradeContainer.removeItemNoUpdate(1);
++                if (!itemstack.isEmpty()) {
++                    player.drop(itemstack, false);
++                }
+             }
++
+         }
+     }
+ 
+     public void tryMoveItems(int selectedMerchantRecipe) {
+         if (selectedMerchantRecipe >= 0 && this.getOffers().size() > selectedMerchantRecipe) {
+-            ItemStack item = this.tradeContainer.getItem(0);
+-            if (!item.isEmpty()) {
+-                if (!this.moveItemStackTo(item, 3, 39, true)) {
++            ItemStack itemstack = this.tradeContainer.getItem(0);
++
++            if (!itemstack.isEmpty()) {
++                if (!this.moveItemStackTo(itemstack, 3, 39, true)) {
+                     return;
+                 }
+ 
+-                this.tradeContainer.setItem(0, item);
++                this.tradeContainer.setItem(0, itemstack);
+             }
+ 
+-            ItemStack item1 = this.tradeContainer.getItem(1);
+-            if (!item1.isEmpty()) {
+-                if (!this.moveItemStackTo(item1, 3, 39, true)) {
++            ItemStack itemstack1 = this.tradeContainer.getItem(1);
++
++            if (!itemstack1.isEmpty()) {
++                if (!this.moveItemStackTo(itemstack1, 3, 39, true)) {
+                     return;
+                 }
+ 
+-                this.tradeContainer.setItem(1, item1);
++                this.tradeContainer.setItem(1, itemstack1);
+             }
+ 
+             if (this.tradeContainer.getItem(0).isEmpty() && this.tradeContainer.getItem(1).isEmpty()) {
+-                ItemStack costA = this.getOffers().get(selectedMerchantRecipe).getCostA();
+-                this.moveFromInventoryToPaymentSlot(0, costA);
+-                ItemStack costB = this.getOffers().get(selectedMerchantRecipe).getCostB();
+-                this.moveFromInventoryToPaymentSlot(1, costB);
++                ItemStack itemstack2 = ((MerchantOffer) this.getOffers().get(selectedMerchantRecipe)).getCostA();
++
++                this.moveFromInventoryToPaymentSlot(0, itemstack2);
++                ItemStack itemstack3 = ((MerchantOffer) this.getOffers().get(selectedMerchantRecipe)).getCostB();
++
++                this.moveFromInventoryToPaymentSlot(1, itemstack3);
+             }
++
+         }
+     }
+ 
+     private void moveFromInventoryToPaymentSlot(int paymentSlotIndex, ItemStack paymentSlot) {
+         if (!paymentSlot.isEmpty()) {
+-            for (int i = 3; i < 39; i++) {
+-                ItemStack item = this.slots.get(i).getItem();
+-                if (!item.isEmpty() && ItemStack.isSameItemSameTags(paymentSlot, item)) {
+-                    ItemStack item1 = this.tradeContainer.getItem(paymentSlotIndex);
+-                    int i1 = item1.isEmpty() ? 0 : item1.getCount();
+-                    int min = Math.min(paymentSlot.getMaxStackSize() - i1, item.getCount());
+-                    ItemStack itemStack = item.copy();
+-                    int i2 = i1 + min;
+-                    item.shrink(min);
+-                    itemStack.setCount(i2);
+-                    this.tradeContainer.setItem(paymentSlotIndex, itemStack);
+-                    if (i2 >= paymentSlot.getMaxStackSize()) {
++            for (int j = 3; j < 39; ++j) {
++                ItemStack itemstack1 = ((Slot) this.slots.get(j)).getItem();
++
++                if (!itemstack1.isEmpty() && ItemStack.isSameItemSameTags(paymentSlot, itemstack1)) {
++                    ItemStack itemstack2 = this.tradeContainer.getItem(paymentSlotIndex);
++                    int k = itemstack2.isEmpty() ? 0 : itemstack2.getCount();
++                    int l = Math.min(paymentSlot.getMaxStackSize() - k, itemstack1.getCount());
++                    ItemStack itemstack3 = itemstack1.copy();
++                    int i1 = k + l;
++
++                    itemstack1.shrink(l);
++                    itemstack3.setCount(i1);
++                    this.tradeContainer.setItem(paymentSlotIndex, itemstack3);
++                    if (i1 >= paymentSlot.getMaxStackSize()) {
+                         break;
+                     }
+                 }
+             }
+         }
++
+     }
+ 
+     public void setOffers(MerchantOffers offers) {

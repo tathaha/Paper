@@ -1,0 +1,396 @@
+--- a/net/minecraft/world/entity/ExperienceOrb.java
++++ b/net/minecraft/world/entity/ExperienceOrb.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.entity;
+ 
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map.Entry;
+ import net.minecraft.core.BlockPos;
+@@ -19,31 +20,38 @@
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
++import org.bukkit.event.entity.EntityTargetEvent;
++import org.bukkit.event.player.PlayerExpCooldownChangeEvent;
++// CraftBukkit end
+ 
+ public class ExperienceOrb extends Entity {
++
+     private static final int LIFETIME = 6000;
+     private static final int ENTITY_SCAN_PERIOD = 20;
+     private static final int MAX_FOLLOW_DIST = 8;
+     private static final int ORB_GROUPS_PER_AREA = 40;
+-    private static final double ORB_MERGE_DISTANCE = 0.5;
++    private static final double ORB_MERGE_DISTANCE = 0.5D;
+     private int age;
+-    private int health = 5;
+-    private int value;
+-    private int count = 1;
++    private int health;
++    public int value;
++    private int count;
+     private Player followingPlayer;
+ 
+-    public ExperienceOrb(Level level, double x, double y, double z, int value) {
++    public ExperienceOrb(Level level, double x, double d1, double y, int i) {
+         this(EntityType.EXPERIENCE_ORB, level);
+-        this.setPos(x, y, z);
+-        this.setYRot((float)(this.random.nextDouble() * 360.0));
+-        this.setDeltaMovement(
+-            (this.random.nextDouble() * 0.2F - 0.1F) * 2.0, this.random.nextDouble() * 0.2 * 2.0, (this.random.nextDouble() * 0.2F - 0.1F) * 2.0
+-        );
+-        this.value = value;
++        this.setPos(x, d1, y);
++        this.setYRot((float) (this.random.nextDouble() * 360.0D));
++        this.setDeltaMovement((this.random.nextDouble() * 0.20000000298023224D - 0.10000000149011612D) * 2.0D, this.random.nextDouble() * 0.2D * 2.0D, (this.random.nextDouble() * 0.20000000298023224D - 0.10000000149011612D) * 2.0D);
++        this.value = i;
+     }
+ 
+     public ExperienceOrb(EntityType<? extends ExperienceOrb> entityType, Level level) {
+         super(entityType, level);
++        this.health = 5;
++        this.count = 1;
+     }
+ 
+     @Override
+@@ -52,31 +60,27 @@
+     }
+ 
+     @Override
+-    protected void defineSynchedData() {
+-    }
++    protected void defineSynchedData() {}
+ 
+     @Override
+     public void tick() {
+         super.tick();
++        Player prevTarget = this.followingPlayer;// CraftBukkit - store old target
+         this.xo = this.getX();
+         this.yo = this.getY();
+         this.zo = this.getZ();
+         if (this.isEyeInFluid(FluidTags.WATER)) {
+             this.setUnderwaterMovement();
+         } else if (!this.isNoGravity()) {
+-            this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.03, 0.0));
++            this.setDeltaMovement(this.getDeltaMovement().add(0.0D, -0.03D, 0.0D));
+         }
+ 
+         if (this.level().getFluidState(this.blockPosition()).is(FluidTags.LAVA)) {
+-            this.setDeltaMovement(
+-                (double)((this.random.nextFloat() - this.random.nextFloat()) * 0.2F),
+-                0.2F,
+-                (double)((this.random.nextFloat() - this.random.nextFloat()) * 0.2F)
+-            );
++            this.setDeltaMovement((double) ((this.random.nextFloat() - this.random.nextFloat()) * 0.2F), 0.20000000298023224D, (double) ((this.random.nextFloat() - this.random.nextFloat()) * 0.2F));
+         }
+ 
+         if (!this.level().noCollision(this.getBoundingBox())) {
+-            this.moveTowardsClosestSpace(this.getX(), (this.getBoundingBox().minY + this.getBoundingBox().maxY) / 2.0, this.getZ());
++            this.moveTowardsClosestSpace(this.getX(), (this.getBoundingBox().minY + this.getBoundingBox().maxY) / 2.0D, this.getZ());
+         }
+ 
+         if (this.tickCount % 20 == 1) {
+@@ -87,34 +91,49 @@
+             this.followingPlayer = null;
+         }
+ 
+-        if (this.followingPlayer != null) {
+-            Vec3 vec3 = new Vec3(
+-                this.followingPlayer.getX() - this.getX(),
+-                this.followingPlayer.getY() + (double)this.followingPlayer.getEyeHeight() / 2.0 - this.getY(),
+-                this.followingPlayer.getZ() - this.getZ()
+-            );
+-            double d = vec3.lengthSqr();
+-            if (d < 64.0) {
+-                double d1 = 1.0 - Math.sqrt(d) / 8.0;
+-                this.setDeltaMovement(this.getDeltaMovement().add(vec3.normalize().scale(d1 * d1 * 0.1)));
++        // CraftBukkit start
++        boolean cancelled = false;
++        if (this.followingPlayer != prevTarget) {
++            EntityTargetLivingEntityEvent event = CraftEventFactory.callEntityTargetLivingEvent(this, followingPlayer, (followingPlayer != null) ? EntityTargetEvent.TargetReason.CLOSEST_PLAYER : EntityTargetEvent.TargetReason.FORGOT_TARGET);
++            LivingEntity target = (event.getTarget() == null) ? null : ((org.bukkit.craftbukkit.entity.CraftLivingEntity) event.getTarget()).getHandle();
++            cancelled = event.isCancelled();
++
++            if (cancelled) {
++                followingPlayer = prevTarget;
++            } else {
++                followingPlayer = (target instanceof Player) ? (Player) target : null;
+             }
+         }
+ 
+-        this.move(MoverType.SELF, this.getDeltaMovement());
++        if (this.followingPlayer != null && !cancelled) {
++            // CraftBukkit end
++            Vec3 vec3d = new Vec3(this.followingPlayer.getX() - this.getX(), this.followingPlayer.getY() + (double) this.followingPlayer.getEyeHeight() / 2.0D - this.getY(), this.followingPlayer.getZ() - this.getZ());
++            double d0 = vec3d.lengthSqr();
++
++            if (d0 < 64.0D) {
++                double d1 = 1.0D - Math.sqrt(d0) / 8.0D;
++
++                this.setDeltaMovement(this.getDeltaMovement().add(vec3d.normalize().scale(d1 * d1 * 0.1D)));
++            }
++        }
++
++        this.move(EnumMoveType.SELF, this.getDeltaMovement());
+         float f = 0.98F;
++
+         if (this.onGround()) {
+             f = this.level().getBlockState(this.getBlockPosBelowThatAffectsMyMovement()).getBlock().getFriction() * 0.98F;
+         }
+ 
+-        this.setDeltaMovement(this.getDeltaMovement().multiply((double)f, 0.98, (double)f));
++        this.setDeltaMovement(this.getDeltaMovement().multiply((double) f, 0.98D, (double) f));
+         if (this.onGround()) {
+-            this.setDeltaMovement(this.getDeltaMovement().multiply(1.0, -0.9, 1.0));
++            this.setDeltaMovement(this.getDeltaMovement().multiply(1.0D, -0.9D, 1.0D));
+         }
+ 
+-        this.age++;
++        ++this.age;
+         if (this.age >= 6000) {
+             this.discard();
+         }
++
+     }
+ 
+     @Override
+@@ -123,36 +142,47 @@
+     }
+ 
+     private void scanForEntities() {
+-        if (this.followingPlayer == null || this.followingPlayer.distanceToSqr(this) > 64.0) {
+-            this.followingPlayer = this.level().getNearestPlayer(this, 8.0);
++        if (this.followingPlayer == null || this.followingPlayer.distanceToSqr((Entity) this) > 64.0D) {
++            this.followingPlayer = this.level().getNearestPlayer(this, 8.0D);
+         }
+ 
+         if (this.level() instanceof ServerLevel) {
+-            for (ExperienceOrb experienceOrb : this.level()
+-                .getEntities(EntityTypeTest.forClass(ExperienceOrb.class), this.getBoundingBox().inflate(0.5), this::canMerge)) {
+-                this.merge(experienceOrb);
++            List<ExperienceOrb> list = this.level().getEntities(EntityTypeTest.forClass(ExperienceOrb.class), this.getBoundingBox().inflate(0.5D), this::canMerge);
++            Iterator iterator = list.iterator();
++
++            while (iterator.hasNext()) {
++                ExperienceOrb entityexperienceorb = (ExperienceOrb) iterator.next();
++
++                this.merge(entityexperienceorb);
+             }
+         }
++
+     }
+ 
+     public static void award(ServerLevel level, Vec3 pos, int amount) {
+         while (amount > 0) {
+-            int experienceValue = getExperienceValue(amount);
+-            amount -= experienceValue;
+-            if (!tryMergeToExisting(level, pos, experienceValue)) {
+-                level.addFreshEntity(new ExperienceOrb(level, pos.x(), pos.y(), pos.z(), experienceValue));
++            int j = getExperienceValue(amount);
++
++            amount -= j;
++            if (!tryMergeToExisting(level, pos, j)) {
++                level.addFreshEntity(new ExperienceOrb(level, pos.x(), pos.y(), pos.z(), j));
+             }
+         }
++
+     }
+ 
+     private static boolean tryMergeToExisting(ServerLevel level, Vec3 pos, int amount) {
+-        AABB aABB = AABB.ofSize(pos, 1.0, 1.0, 1.0);
+-        int randomInt = level.getRandom().nextInt(40);
+-        List<ExperienceOrb> entities = level.getEntities(EntityTypeTest.forClass(ExperienceOrb.class), aABB, orb -> canMerge(orb, randomInt, amount));
+-        if (!entities.isEmpty()) {
+-            ExperienceOrb experienceOrb = entities.get(0);
+-            experienceOrb.count++;
+-            experienceOrb.age = 0;
++        AABB axisalignedbb = AABB.ofSize(pos, 1.0D, 1.0D, 1.0D);
++        int j = level.getRandom().nextInt(40);
++        List<ExperienceOrb> list = level.getEntities(EntityTypeTest.forClass(ExperienceOrb.class), axisalignedbb, (entityexperienceorb) -> {
++            return canMerge(entityexperienceorb, j, amount);
++        });
++
++        if (!list.isEmpty()) {
++            ExperienceOrb entityexperienceorb = (ExperienceOrb) list.get(0);
++
++            ++entityexperienceorb.count;
++            entityexperienceorb.age = 0;
+             return true;
+         } else {
+             return false;
+@@ -168,19 +198,19 @@
+     }
+ 
+     private void merge(ExperienceOrb orb) {
+-        this.count = this.count + orb.count;
++        this.count += orb.count;
+         this.age = Math.min(this.age, orb.age);
+         orb.discard();
+     }
+ 
+     private void setUnderwaterMovement() {
+-        Vec3 deltaMovement = this.getDeltaMovement();
+-        this.setDeltaMovement(deltaMovement.x * 0.99F, Math.min(deltaMovement.y + 5.0E-4F, 0.06F), deltaMovement.z * 0.99F);
++        Vec3 vec3d = this.getDeltaMovement();
++
++        this.setDeltaMovement(vec3d.x * 0.9900000095367432D, Math.min(vec3d.y + 5.000000237487257E-4D, 0.05999999865889549D), vec3d.z * 0.9900000095367432D);
+     }
+ 
+     @Override
+-    protected void doWaterSplashEffect() {
+-    }
++    protected void doWaterSplashEffect() {}
+ 
+     @Override
+     public boolean hurt(DamageSource source, float amount) {
+@@ -190,7 +220,7 @@
+             return true;
+         } else {
+             this.markHurt();
+-            this.health = (int)((float)this.health - amount);
++            this.health = (int) ((float) this.health - amount);
+             if (this.health <= 0) {
+                 this.discard();
+             }
+@@ -201,9 +231,9 @@
+ 
+     @Override
+     public void addAdditionalSaveData(CompoundTag compound) {
+-        compound.putShort("Health", (short)this.health);
+-        compound.putShort("Age", (short)this.age);
+-        compound.putShort("Value", (short)this.value);
++        compound.putShort("Health", (short) this.health);
++        compound.putShort("Age", (short) this.age);
++        compound.putShort("Value", (short) this.value);
+         compound.putInt("Count", this.count);
+     }
+ 
+@@ -219,29 +249,42 @@
+     public void playerTouch(Player entity) {
+         if (!this.level().isClientSide) {
+             if (entity.takeXpDelay == 0) {
+-                entity.takeXpDelay = 2;
++                entity.takeXpDelay = CraftEventFactory.callPlayerXpCooldownEvent(entity, 2, PlayerExpCooldownChangeEvent.ChangeReason.PICKUP_ORB).getNewCooldown(); // CraftBukkit - entityhuman.takeXpDelay = 2;
+                 entity.take(this, 1);
+                 int i = this.repairPlayerItems(entity, this.value);
++
+                 if (i > 0) {
+-                    entity.giveExperiencePoints(i);
++                    entity.giveExperiencePoints(CraftEventFactory.callPlayerExpChangeEvent(entity, i).getAmount()); // CraftBukkit - this.value -> event.getAmount()
+                 }
+ 
+-                this.count--;
++                --this.count;
+                 if (this.count == 0) {
+                     this.discard();
+                 }
+             }
++
+         }
+     }
+ 
+     private int repairPlayerItems(Player player, int repairAmount) {
+-        Entry<EquipmentSlot, ItemStack> randomItemWith = EnchantmentHelper.getRandomItemWith(Enchantments.MENDING, player, ItemStack::isDamaged);
+-        if (randomItemWith != null) {
+-            ItemStack itemStack = randomItemWith.getValue();
+-            int min = Math.min(this.xpToDurability(repairAmount), itemStack.getDamageValue());
+-            itemStack.setDamageValue(itemStack.getDamageValue() - min);
+-            int i = repairAmount - this.durabilityToXp(min);
+-            return i > 0 ? this.repairPlayerItems(player, i) : 0;
++        Entry<EquipmentSlot, ItemStack> entry = EnchantmentHelper.getRandomItemWith(Enchantments.MENDING, player, ItemStack::isDamaged);
++
++        if (entry != null) {
++            ItemStack itemstack = (ItemStack) entry.getValue();
++            int j = Math.min(this.xpToDurability(repairAmount), itemstack.getDamageValue());
++            // CraftBukkit start
++            org.bukkit.event.player.PlayerItemMendEvent event = CraftEventFactory.callPlayerItemMendEvent(player, this, itemstack, entry.getKey(), j);
++            j = event.getRepairAmount();
++            if (event.isCancelled()) {
++                return repairAmount;
++            }
++            // CraftBukkit end
++
++            itemstack.setDamageValue(itemstack.getDamageValue() - j);
++            int k = repairAmount - this.durabilityToXp(j);
++            this.value = k; // CraftBukkit - update exp value of orb for PlayerItemMendEvent calls
++
++            return k > 0 ? this.repairPlayerItems(player, k) : 0;
+         } else {
+             return repairAmount;
+         }
+@@ -260,51 +303,29 @@
+     }
+ 
+     public int getIcon() {
+-        if (this.value >= 2477) {
+-            return 10;
+-        } else if (this.value >= 1237) {
+-            return 9;
+-        } else if (this.value >= 617) {
+-            return 8;
+-        } else if (this.value >= 307) {
+-            return 7;
+-        } else if (this.value >= 149) {
+-            return 6;
+-        } else if (this.value >= 73) {
+-            return 5;
+-        } else if (this.value >= 37) {
+-            return 4;
+-        } else if (this.value >= 17) {
+-            return 3;
+-        } else if (this.value >= 7) {
+-            return 2;
+-        } else {
+-            return this.value >= 3 ? 1 : 0;
+-        }
++        return this.value >= 2477 ? 10 : (this.value >= 1237 ? 9 : (this.value >= 617 ? 8 : (this.value >= 307 ? 7 : (this.value >= 149 ? 6 : (this.value >= 73 ? 5 : (this.value >= 37 ? 4 : (this.value >= 17 ? 3 : (this.value >= 7 ? 2 : (this.value >= 3 ? 1 : 0)))))))));
+     }
+ 
+     public static int getExperienceValue(int expValue) {
+-        if (expValue >= 2477) {
+-            return 2477;
+-        } else if (expValue >= 1237) {
+-            return 1237;
+-        } else if (expValue >= 617) {
+-            return 617;
+-        } else if (expValue >= 307) {
+-            return 307;
+-        } else if (expValue >= 149) {
+-            return 149;
+-        } else if (expValue >= 73) {
+-            return 73;
+-        } else if (expValue >= 37) {
+-            return 37;
+-        } else if (expValue >= 17) {
+-            return 17;
+-        } else if (expValue >= 7) {
+-            return 7;
+-        } else {
+-            return expValue >= 3 ? 3 : 1;
+-        }
++        // CraftBukkit start
++        if (expValue > 162670129) return expValue - 100000;
++        if (expValue > 81335063) return 81335063;
++        if (expValue > 40667527) return 40667527;
++        if (expValue > 20333759) return 20333759;
++        if (expValue > 10166857) return 10166857;
++        if (expValue > 5083423) return 5083423;
++        if (expValue > 2541701) return 2541701;
++        if (expValue > 1270849) return 1270849;
++        if (expValue > 635413) return 635413;
++        if (expValue > 317701) return 317701;
++        if (expValue > 158849) return 158849;
++        if (expValue > 79423) return 79423;
++        if (expValue > 39709) return 39709;
++        if (expValue > 19853) return 19853;
++        if (expValue > 9923) return 9923;
++        if (expValue > 4957) return 4957;
++        // CraftBukkit end
++        return expValue >= 2477 ? 2477 : (expValue >= 1237 ? 1237 : (expValue >= 617 ? 617 : (expValue >= 307 ? 307 : (expValue >= 149 ? 149 : (expValue >= 73 ? 73 : (expValue >= 37 ? 37 : (expValue >= 17 ? 17 : (expValue >= 7 ? 7 : (expValue >= 3 ? 3 : 1)))))))));
+     }
+ 
+     @Override

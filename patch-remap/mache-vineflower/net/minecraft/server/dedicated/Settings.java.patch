@@ -1,0 +1,361 @@
+--- a/net/minecraft/server/dedicated/Settings.java
++++ b/net/minecraft/server/dedicated/Settings.java
+@@ -2,11 +2,11 @@
+ 
+ import com.google.common.base.MoreObjects;
+ import com.mojang.logging.LogUtils;
++import java.io.BufferedReader;
++import java.io.BufferedWriter;
+ import java.io.IOException;
+ import java.io.InputStream;
+ import java.io.InputStreamReader;
+-import java.io.Reader;
+-import java.io.Writer;
+ import java.nio.charset.CharacterCodingException;
+ import java.nio.charset.CharsetDecoder;
+ import java.nio.charset.CodingErrorAction;
+@@ -20,112 +20,201 @@
+ import java.util.function.Supplier;
+ import java.util.function.UnaryOperator;
+ import javax.annotation.Nullable;
+-import net.minecraft.core.RegistryAccess;
+ import org.slf4j.Logger;
+ 
++import joptsimple.OptionSet; // CraftBukkit
++import net.minecraft.core.RegistryAccess;
++
+ public abstract class Settings<T extends Settings<T>> {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    protected final Properties properties;
++    public final Properties properties;
++    // CraftBukkit start
++    private OptionSet options = null;
+ 
+-    public Settings(Properties properties) {
++    public Settings(Properties properties, final OptionSet options) {
+         this.properties = properties;
++
++        this.options = options;
+     }
+ 
++    private String getOverride(String name, String value) {
++        if ((this.options != null) && (this.options.has(name))) {
++            return String.valueOf(this.options.valueOf(name));
++        }
++
++        return value;
++        // CraftBukkit end
++    }
++
+     public static Properties loadFromFile(Path path) {
+         try {
++            // CraftBukkit start - SPIGOT-7465, MC-264979: Don't load if file doesn't exist
++            if (!path.toFile().exists()) {
++                return new Properties();
++            }
++            // CraftBukkit end
++            Properties properties;
++            Properties properties1;
++
+             try {
+-                Properties var13;
+-                try (InputStream inputStream = Files.newInputStream(path)) {
+-                    CharsetDecoder charsetDecoder = StandardCharsets.UTF_8
+-                        .newDecoder()
+-                        .onMalformedInput(CodingErrorAction.REPORT)
+-                        .onUnmappableCharacter(CodingErrorAction.REPORT);
+-                    Properties map = new Properties();
+-                    map.load(new InputStreamReader(inputStream, charsetDecoder));
+-                    var13 = map;
++                InputStream inputstream = Files.newInputStream(path);
++
++                try {
++                    CharsetDecoder charsetdecoder = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT);
++
++                    properties = new Properties();
++                    properties.load(new InputStreamReader(inputstream, charsetdecoder));
++                    properties1 = properties;
++                } catch (Throwable throwable) {
++                    if (inputstream != null) {
++                        try {
++                            inputstream.close();
++                        } catch (Throwable throwable1) {
++                            throwable.addSuppressed(throwable1);
++                        }
++                    }
++
++                    throw throwable;
+                 }
+ 
+-                return var13;
+-            } catch (CharacterCodingException var9) {
+-                LOGGER.info("Failed to load properties as UTF-8 from file {}, trying ISO_8859_1", path);
++                if (inputstream != null) {
++                    inputstream.close();
++                }
+ 
+-                Properties var4;
+-                try (Reader bufferedReader = Files.newBufferedReader(path, StandardCharsets.ISO_8859_1)) {
+-                    Properties map = new Properties();
+-                    map.load(bufferedReader);
+-                    var4 = map;
++                return properties1;
++            } catch (CharacterCodingException charactercodingexception) {
++                Settings.LOGGER.info("Failed to load properties as UTF-8 from file {}, trying ISO_8859_1", path);
++                BufferedReader bufferedreader = Files.newBufferedReader(path, StandardCharsets.ISO_8859_1);
++
++                try {
++                    properties = new Properties();
++                    properties.load(bufferedreader);
++                    properties1 = properties;
++                } catch (Throwable throwable2) {
++                    if (bufferedreader != null) {
++                        try {
++                            bufferedreader.close();
++                        } catch (Throwable throwable3) {
++                            throwable2.addSuppressed(throwable3);
++                        }
++                    }
++
++                    throw throwable2;
+                 }
+ 
+-                return var4;
++                if (bufferedreader != null) {
++                    bufferedreader.close();
++                }
++
++                return properties1;
+             }
+-        } catch (IOException var10) {
+-            LOGGER.error("Failed to load properties from file: {}", path, var10);
++        } catch (IOException ioexception) {
++            Settings.LOGGER.error("Failed to load properties from file: {}", path, ioexception);
+             return new Properties();
+         }
+     }
+ 
+     public void store(Path path) {
+-        try (Writer bufferedWriter = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+-            this.properties.store(bufferedWriter, "Minecraft server properties");
+-        } catch (IOException var7) {
+-            LOGGER.error("Failed to store properties to file: {}", path);
++        try {
++            // CraftBukkit start - Don't attempt writing to file if it's read only
++            if (path.toFile().exists() && !path.toFile().canWrite()) {
++                return;
++            }
++            // CraftBukkit end
++            BufferedWriter bufferedwriter = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
++
++            try {
++                this.properties.store(bufferedwriter, "Minecraft server properties");
++            } catch (Throwable throwable) {
++                if (bufferedwriter != null) {
++                    try {
++                        bufferedwriter.close();
++                    } catch (Throwable throwable1) {
++                        throwable.addSuppressed(throwable1);
++                    }
++                }
++
++                throw throwable;
++            }
++
++            if (bufferedwriter != null) {
++                bufferedwriter.close();
++            }
++        } catch (IOException ioexception) {
++            Settings.LOGGER.error("Failed to store properties to file: {}", path);
+         }
++
+     }
+ 
+     private static <V extends Number> Function<String, V> wrapNumberDeserializer(Function<String, V> parseFunc) {
+-        return string -> {
++        return (s) -> {
+             try {
+-                return parseFunc.apply(string);
+-            } catch (NumberFormatException var3) {
++                return (V) parseFunc.apply(s); // CraftBukkit - decompile error
++            } catch (NumberFormatException numberformatexception) {
+                 return null;
+             }
+         };
+     }
+ 
+     protected static <V> Function<String, V> dispatchNumberOrString(IntFunction<V> byId, Function<String, V> byName) {
+-        return string -> {
++        return (s) -> {
+             try {
+-                return byId.apply(Integer.parseInt(string));
+-            } catch (NumberFormatException var4) {
+-                return byName.apply(string);
++                return byId.apply(Integer.parseInt(s));
++            } catch (NumberFormatException numberformatexception) {
++                return byName.apply(s);
+             }
+         };
+     }
+ 
+     @Nullable
+     private String getStringRaw(String key) {
+-        return (String)this.properties.get(key);
++        return (String) getOverride(key, this.properties.getProperty(key)); // CraftBukkit
+     }
+ 
+     @Nullable
+     protected <V> V getLegacy(String key, Function<String, V> mapper) {
+-        String stringRaw = this.getStringRaw(key);
+-        if (stringRaw == null) {
++        String s1 = this.getStringRaw(key);
++
++        if (s1 == null) {
+             return null;
+         } else {
+             this.properties.remove(key);
+-            return mapper.apply(stringRaw);
++            return mapper.apply(s1);
+         }
+     }
+ 
+     protected <V> V get(String key, Function<String, V> mapper, Function<V, String> toString, V value) {
+-        String stringRaw = this.getStringRaw(key);
+-        V object = MoreObjects.firstNonNull(stringRaw != null ? mapper.apply(stringRaw) : null, value);
+-        this.properties.put(key, toString.apply(object));
+-        return object;
++        // CraftBukkit start
++        try {
++            return get0(key, mapper, toString, value);
++        } catch (Exception ex) {
++            throw new RuntimeException("Could not load invalidly configured property '" + key + "'", ex);
++        }
+     }
+ 
++    private <V> V get0(String s, Function<String, V> function, Function<V, String> function1, V v0) {
++        // CraftBukkit end
++        String s1 = this.getStringRaw(s);
++        V v1 = MoreObjects.firstNonNull(s1 != null ? function.apply(s1) : null, v0);
++
++        this.properties.put(s, function1.apply(v1));
++        return v1;
++    }
++
+     protected <V> Settings<T>.MutableValue<V> getMutable(String key, Function<String, V> mapper, Function<V, String> toString, V value) {
+-        String stringRaw = this.getStringRaw(key);
+-        V object = MoreObjects.firstNonNull(stringRaw != null ? mapper.apply(stringRaw) : null, value);
+-        this.properties.put(key, toString.apply(object));
+-        return new Settings<T>.MutableValue<>(key, object, toString);
++        String s1 = this.getStringRaw(key);
++        V v1 = MoreObjects.firstNonNull(s1 != null ? mapper.apply(s1) : null, value);
++
++        this.properties.put(key, toString.apply(v1));
++        return new Settings.MutableValue(key, v1, toString); // CraftBukkit - decompile error
+     }
+ 
+-    protected <V> V get(String key, Function<String, V> mapper, UnaryOperator<V> unaryOperator, Function<V, String> toString, V value) {
+-        return this.get(key, string -> {
+-            V object = mapper.apply(string);
+-            return object != null ? unaryOperator.apply(object) : null;
++    protected <V> V get(String key, Function<String, V> mapper, UnaryOperator<V> unaryoperator, Function<V, String> toString, V value) {
++        return this.get(key, (s1) -> {
++            V v1 = mapper.apply(s1);
++
++            return v1 != null ? unaryoperator.apply(v1) : null;
+         }, toString, value);
+     }
+ 
+@@ -138,32 +227,32 @@
+     }
+ 
+     protected String get(String key, String value) {
+-        return this.get(key, Function.identity(), Function.identity(), value);
++        return (String) this.get(key, Function.identity(), Function.identity(), value);
+     }
+ 
+     @Nullable
+     protected String getLegacyString(String key) {
+-        return this.getLegacy(key, Function.identity());
++        return (String) this.getLegacy(key, Function.identity());
+     }
+ 
+     protected int get(String key, int value) {
+-        return this.get(key, wrapNumberDeserializer(Integer::parseInt), Integer.valueOf(value));
++        return (Integer) this.get(key, wrapNumberDeserializer(Integer::parseInt), value);
+     }
+ 
+     protected Settings<T>.MutableValue<Integer> getMutable(String key, int value) {
+         return this.getMutable(key, wrapNumberDeserializer(Integer::parseInt), value);
+     }
+ 
+-    protected int get(String key, UnaryOperator<Integer> unaryOperator, int value) {
+-        return this.get(key, wrapNumberDeserializer(Integer::parseInt), unaryOperator, Objects::toString, value);
++    protected int get(String key, UnaryOperator<Integer> unaryoperator, int value) {
++        return (Integer) this.get(key, wrapNumberDeserializer(Integer::parseInt), unaryoperator, Objects::toString, value);
+     }
+ 
+     protected long get(String key, long value) {
+-        return this.get(key, wrapNumberDeserializer(Long::parseLong), value);
++        return (Long) this.get(key, wrapNumberDeserializer(Long::parseLong), value);
+     }
+ 
+     protected boolean get(String key, boolean value) {
+-        return this.get(key, Boolean::valueOf, value);
++        return (Boolean) this.get(key, Boolean::valueOf, value);
+     }
+ 
+     protected Settings<T>.MutableValue<Boolean> getMutable(String key, boolean value) {
+@@ -172,37 +261,39 @@
+ 
+     @Nullable
+     protected Boolean getLegacyBoolean(String key) {
+-        return this.getLegacy(key, Boolean::valueOf);
++        return (Boolean) this.getLegacy(key, Boolean::valueOf);
+     }
+ 
+     protected Properties cloneProperties() {
+-        Properties map = new Properties();
+-        map.putAll(this.properties);
+-        return map;
++        Properties properties = new Properties();
++
++        properties.putAll(this.properties);
++        return properties;
+     }
+ 
+-    protected abstract T reload(RegistryAccess registryAccess, Properties properties);
++    protected abstract T reload(RegistryAccess iregistrycustom, Properties properties, OptionSet optionset); // CraftBukkit
+ 
+     public class MutableValue<V> implements Supplier<V> {
++
+         private final String key;
+         private final V value;
+         private final Function<V, String> serializer;
+ 
+-        MutableValue(String key, V value, Function<V, String> serializer) {
+-            this.key = key;
+-            this.value = value;
+-            this.serializer = serializer;
++        MutableValue(String s, V object, Function function) { // CraftBukkit - decompile error
++            this.key = s;
++            this.value = object;
++            this.serializer = function;
+         }
+ 
+-        @Override
+         public V get() {
+             return this.value;
+         }
+ 
+         public T update(RegistryAccess registryAccess, V newValue) {
+-            Properties map = Settings.this.cloneProperties();
+-            map.put(this.key, this.serializer.apply(newValue));
+-            return Settings.this.reload(registryAccess, map);
++            Properties properties = Settings.this.cloneProperties();
++
++            properties.put(this.key, this.serializer.apply(newValue));
++            return Settings.this.reload(registryAccess, properties, Settings.this.options); // CraftBukkit
+         }
+     }
+ }

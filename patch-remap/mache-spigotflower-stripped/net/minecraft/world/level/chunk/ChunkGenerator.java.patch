@@ -1,0 +1,74 @@
+--- a/net/minecraft/world/level/chunk/ChunkGenerator.java
++++ b/net/minecraft/world/level/chunk/ChunkGenerator.java
+@@ -307,8 +306,8 @@
+         }
+     }
+ 
+-    public void applyBiomeDecoration(WorldGenLevel worldgenlevel, ChunkAccess chunkaccess, StructureManager structuremanager) {
+-        ChunkPos chunkpos = chunkaccess.getPos();
++    public void addVanillaDecorations(WorldGenLevel generatoraccessseed, ChunkAccess ichunkaccess, StructureManager structuremanager) { // CraftBukkit
++        ChunkPos chunkcoordintpair = ichunkaccess.getPos();
+ 
+         if (!SharedConstants.debugVoidTerrain(chunkpos)) {
+             SectionPos sectionpos = SectionPos.of(chunkpos, worldgenlevel.getMinSection());
+@@ -440,11 +439,38 @@
+         }
+     }
+ 
+-    private static BoundingBox getWritableArea(ChunkAccess chunkaccess) {
+-        ChunkPos chunkpos = chunkaccess.getPos();
+-        int i = chunkpos.getMinBlockX();
+-        int j = chunkpos.getMinBlockZ();
+-        LevelHeightAccessor levelheightaccessor = chunkaccess.getHeightAccessorForGeneration();
++   // CraftBukkit start
++    public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
++        applyBiomeDecoration(level, chunk, structureManager, true);
++    }
++
++    public void applyBiomeDecoration(WorldGenLevel generatoraccessseed, ChunkAccess ichunkaccess, StructureManager structuremanager, boolean vanilla) {
++        if (vanilla) {
++            addVanillaDecorations(generatoraccessseed, ichunkaccess, structuremanager);
++        }
++
++        org.bukkit.World world = generatoraccessseed.getMinecraftWorld().getWorld();
++        // only call when a populator is present (prevents unnecessary entity conversion)
++        if (!world.getPopulators().isEmpty()) {
++            org.bukkit.craftbukkit.generator.CraftLimitedRegion limitedRegion = new org.bukkit.craftbukkit.generator.CraftLimitedRegion(generatoraccessseed, ichunkaccess.getPos());
++            int x = ichunkaccess.getPos().x;
++            int z = ichunkaccess.getPos().z;
++            for (org.bukkit.generator.BlockPopulator populator : world.getPopulators()) {
++                WorldgenRandom seededrandom = new WorldgenRandom(new net.minecraft.world.level.levelgen.LegacyRandomSource(generatoraccessseed.getSeed()));
++                seededrandom.setDecorationSeed(generatoraccessseed.getSeed(), x, z);
++                populator.populate(world, new org.bukkit.craftbukkit.util.RandomSourceWrapper.RandomWrapper(seededrandom), x, z, limitedRegion);
++            }
++            limitedRegion.saveEntities();
++            limitedRegion.breakLink();
++        }
++    }
++    // CraftBukkit end
++
++    private static BoundingBox getWritableArea(ChunkAccess chunk) {
++        ChunkPos chunkcoordintpair = chunk.getPos();
++        int i = chunkcoordintpair.getMinBlockX();
++        int j = chunkcoordintpair.getMinBlockZ();
++        LevelHeightAccessor levelheightaccessor = chunk.getHeightAccessorForGeneration();
+         int k = levelheightaccessor.getMinBuildHeight() + 1;
+         int l = levelheightaccessor.getMaxBuildHeight() - 1;
+ 
+@@ -577,7 +603,15 @@
+         StructureStart structurestart = structure.generate(registryaccess, this, this.biomeSource, randomstate, structuretemplatemanager, i, chunkpos, j, chunkaccess, predicate);
+ 
+         if (structurestart.isValid()) {
+-            structuremanager.setStartForStructure(sectionpos, structure, structurestart, chunkaccess);
++            // CraftBukkit start
++            BoundingBox box = structurestart.getBoundingBox();
++            org.bukkit.event.world.AsyncStructureSpawnEvent event = new org.bukkit.event.world.AsyncStructureSpawnEvent(structureManager.level.getMinecraftWorld().getWorld(), org.bukkit.craftbukkit.generator.structure.CraftStructure.minecraftToBukkit(structure, registryAccess), new org.bukkit.util.BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()), chunk.x, chunk.z);
++            org.bukkit.Bukkit.getPluginManager().callEvent(event);
++            if (event.isCancelled()) {
++                return true;
++            }
++            // CraftBukkit end
++            structureManager.setStartForStructure(chunkPos, structure, structurestart, ichunkaccess);
+             return true;
+         } else {
+             return false;

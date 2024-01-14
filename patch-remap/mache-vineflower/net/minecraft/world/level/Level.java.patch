@@ -1,0 +1,1360 @@
+--- a/net/minecraft/world/level/Level.java
++++ b/net/minecraft/world/level/Level.java
+@@ -5,6 +5,7 @@
+ import java.io.IOException;
+ import java.util.Iterator;
+ import java.util.List;
++import java.util.Objects;
+ import java.util.function.Consumer;
+ import java.util.function.Predicate;
+ import java.util.function.Supplier;
+@@ -27,6 +28,7 @@
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.FullChunkStatus;
++import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.sounds.SoundEvent;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+@@ -41,6 +43,7 @@
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.boss.EnderDragonPart;
+ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
++import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.crafting.RecipeManager;
+@@ -51,12 +54,15 @@
+ import net.minecraft.world.level.block.Blocks;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.TickingBlockEntity;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
++import net.minecraft.world.level.border.BorderChangeListener;
+ import net.minecraft.world.level.border.WorldBorder;
+ import net.minecraft.world.level.chunk.ChunkAccess;
++import net.minecraft.world.level.chunk.ChunkSource;
+ import net.minecraft.world.level.chunk.ChunkStatus;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.dimension.DimensionType;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.level.entity.LevelEntityGetter;
+ import net.minecraft.world.level.gameevent.GameEvent;
+@@ -73,7 +79,29 @@
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.scores.Scoreboard;
+ 
++// CraftBukkit start
++import java.util.HashMap;
++import java.util.Map;
++import net.minecraft.network.protocol.game.ClientboundSetBorderCenterPacket;
++import net.minecraft.network.protocol.game.ClientboundSetBorderLerpSizePacket;
++import net.minecraft.network.protocol.game.ClientboundSetBorderSizePacket;
++import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDelayPacket;
++import net.minecraft.network.protocol.game.ClientboundSetBorderWarningDistancePacket;
++import org.bukkit.Bukkit;
++import org.bukkit.Location;
++import org.bukkit.craftbukkit.CraftServer;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.block.CapturedBlockState;
++import org.bukkit.craftbukkit.block.data.CraftBlockData;
++import org.bukkit.craftbukkit.util.CraftSpawnCategory;
++import org.bukkit.craftbukkit.util.CraftNamespacedKey;
++import org.bukkit.entity.SpawnCategory;
++import org.bukkit.event.block.BlockPhysicsEvent;
++import org.bukkit.event.world.GenericGameEvent;
++// CraftBukkit end
++
+ public abstract class Level implements LevelAccessor, AutoCloseable {
++
+     public static final Codec<ResourceKey<Level>> RESOURCE_KEY_CODEC = ResourceKey.codec(Registries.DIMENSION);
+     public static final ResourceKey<Level> OVERWORLD = ResourceKey.create(Registries.DIMENSION, new ResourceLocation("overworld"));
+     public static final ResourceKey<Level> NETHER = ResourceKey.create(Registries.DIMENSION, new ResourceLocation("the_nether"));
+@@ -89,21 +117,22 @@
+     protected final NeighborUpdater neighborUpdater;
+     private final List<TickingBlockEntity> pendingBlockEntityTickers = Lists.newArrayList();
+     private boolean tickingBlockEntities;
+-    private final Thread thread;
++    public final Thread thread;
+     private final boolean isDebug;
+     private int skyDarken;
+     protected int randValue = RandomSource.create().nextInt();
+     protected final int addend = 1013904223;
+     protected float oRainLevel;
+-    protected float rainLevel;
++    public float rainLevel;
+     protected float oThunderLevel;
+-    protected float thunderLevel;
++    public float thunderLevel;
+     public final RandomSource random = RandomSource.create();
++    /** @deprecated */
+     @Deprecated
+     private final RandomSource threadSafeRandom = RandomSource.createThreadSafe();
+     private final ResourceKey<DimensionType> dimensionTypeId;
+     private final Holder<DimensionType> dimensionTypeRegistration;
+-    protected final WritableLevelData levelData;
++    public final WritableLevelData levelData;
+     private final Supplier<ProfilerFiller> profiler;
+     public final boolean isClientSide;
+     private final WorldBorder worldBorder;
+@@ -113,35 +142,63 @@
+     private final DamageSources damageSources;
+     private long subTickCount;
+ 
+-    protected Level(
+-        WritableLevelData levelData,
+-        ResourceKey<Level> dimension,
+-        RegistryAccess registryAccess,
+-        Holder<DimensionType> dimensionTypeRegistration,
+-        Supplier<ProfilerFiller> profiler,
+-        boolean isClientSide,
+-        boolean isDebug,
+-        long biomeZoomSeed,
+-        int maxChainedNeighborUpdates
+-    ) {
+-        this.profiler = profiler;
+-        this.levelData = levelData;
+-        this.dimensionTypeRegistration = dimensionTypeRegistration;
+-        this.dimensionTypeId = dimensionTypeRegistration.unwrapKey()
+-            .orElseThrow(() -> new IllegalArgumentException("Dimension must be registered, got " + dimensionTypeRegistration));
+-        final DimensionType dimensionType = dimensionTypeRegistration.value();
+-        this.dimension = dimension;
+-        this.isClientSide = isClientSide;
+-        if (dimensionType.coordinateScale() != 1.0) {
++    // CraftBukkit start Added the following
++    private final CraftWorld world;
++    public boolean pvpMode;
++    public boolean keepSpawnInMemory = true;
++    public org.bukkit.generator.ChunkGenerator generator;
++
++    public boolean preventPoiUpdated = false; // CraftBukkit - SPIGOT-5710
++    public boolean captureBlockStates = false;
++    public boolean captureTreeGeneration = false;
++    public Map<BlockPos, CapturedBlockState> capturedBlockStates = new java.util.LinkedHashMap<>();
++    public Map<BlockPos, BlockEntity> capturedTileEntities = new HashMap<>();
++    public List<ItemEntity> captureDrops;
++    public final it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<SpawnCategory> ticksPerSpawnCategory = new it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap<>();
++    public boolean populating;
++
++    public CraftWorld getWorld() {
++        return this.world;
++    }
++
++    public CraftServer getCraftServer() {
++        return (CraftServer) Bukkit.getServer();
++    }
++
++    public abstract ResourceKey<LevelStem> getTypeKey();
++
++    protected Level(WritableLevelData worlddatamutable, ResourceKey<Level> resourcekey, RegistryAccess iregistrycustom, Holder<DimensionType> holder, Supplier<ProfilerFiller> supplier, boolean flag, boolean flag1, long i, int j, org.bukkit.generator.ChunkGenerator gen, org.bukkit.generator.BiomeProvider biomeProvider, org.bukkit.World.Environment env) {
++        this.generator = gen;
++        this.world = new CraftWorld((ServerLevel) this, gen, biomeProvider, env);
++
++        // CraftBukkit Ticks things
++        for (SpawnCategory spawnCategory : SpawnCategory.values()) {
++            if (CraftSpawnCategory.isValidForLimits(spawnCategory)) {
++                this.ticksPerSpawnCategory.put(spawnCategory, (long) this.getCraftServer().getTicksPerSpawns(spawnCategory));
++            }
++        }
++
++        // CraftBukkit end
++        this.profiler = supplier;
++        this.levelData = worlddatamutable;
++        this.dimensionTypeRegistration = holder;
++        this.dimensionTypeId = (ResourceKey) holder.unwrapKey().orElseThrow(() -> {
++            return new IllegalArgumentException("Dimension must be registered, got " + holder);
++        });
++        final DimensionType dimensionmanager = (DimensionType) holder.value();
++
++        this.dimension = resourcekey;
++        this.isClientSide = flag;
++        if (dimensionmanager.coordinateScale() != 1.0D) {
+             this.worldBorder = new WorldBorder() {
+                 @Override
+                 public double getCenterX() {
+-                    return super.getCenterX() / dimensionType.coordinateScale();
++                    return super.getCenterX(); // CraftBukkit
+                 }
+ 
+                 @Override
+                 public double getCenterZ() {
+-                    return super.getCenterZ() / dimensionType.coordinateScale();
++                    return super.getCenterZ(); // CraftBukkit
+                 }
+             };
+         } else {
+@@ -149,11 +206,47 @@
+         }
+ 
+         this.thread = Thread.currentThread();
+-        this.biomeManager = new BiomeManager(this, biomeZoomSeed);
+-        this.isDebug = isDebug;
+-        this.neighborUpdater = new CollectingNeighborUpdater(this, maxChainedNeighborUpdates);
+-        this.registryAccess = registryAccess;
+-        this.damageSources = new DamageSources(registryAccess);
++        this.biomeManager = new BiomeManager(this, i);
++        this.isDebug = flag1;
++        this.neighborUpdater = new CollectingNeighborUpdater(this, j);
++        this.registryAccess = iregistrycustom;
++        this.damageSources = new DamageSources(iregistrycustom);
++        // CraftBukkit start
++        getWorldBorder().world = (ServerLevel) this;
++        // From PlayerList.setPlayerFileData
++        getWorldBorder().addListener(new BorderChangeListener() {
++            @Override
++            public void onBorderSizeSet(WorldBorder border, double size) {
++                getCraftServer().getHandle().broadcastAll(new ClientboundSetBorderSizePacket(border), border.world);
++            }
++
++            @Override
++            public void onBorderSizeLerping(WorldBorder border, double oldSize, double d1, long newSize) {
++                getCraftServer().getHandle().broadcastAll(new ClientboundSetBorderLerpSizePacket(border), border.world);
++            }
++
++            @Override
++            public void onBorderCenterSet(WorldBorder border, double x, double d1) {
++                getCraftServer().getHandle().broadcastAll(new ClientboundSetBorderCenterPacket(border), border.world);
++            }
++
++            @Override
++            public void onBorderSetWarningTime(WorldBorder border, int warningTime) {
++                getCraftServer().getHandle().broadcastAll(new ClientboundSetBorderWarningDelayPacket(border), border.world);
++            }
++
++            @Override
++            public void onBorderSetWarningBlocks(WorldBorder border, int warningBlocks) {
++                getCraftServer().getHandle().broadcastAll(new ClientboundSetBorderWarningDistancePacket(border), border.world);
++            }
++
++            @Override
++            public void onBorderSetDamagePerBlock(WorldBorder border, double damagePerBlock) {}
++
++            @Override
++            public void onBorderSetDamageSafeZOne(WorldBorder border, double damageSafeZone) {}
++        });
++        // CraftBukkit end
+     }
+ 
+     @Override
+@@ -189,149 +282,234 @@
+ 
+     @Override
+     public LevelChunk getChunk(int chunkX, int chunkZ) {
+-        return (LevelChunk)this.getChunk(chunkX, chunkZ, ChunkStatus.FULL);
++        return (LevelChunk) this.getChunk(chunkX, chunkZ, ChunkStatus.FULL);
+     }
+ 
+     @Nullable
+     @Override
+     public ChunkAccess getChunk(int x, int z, ChunkStatus requiredStatus, boolean nonnull) {
+-        ChunkAccess chunk = this.getChunkSource().getChunk(x, z, requiredStatus, nonnull);
+-        if (chunk == null && nonnull) {
++        ChunkAccess ichunkaccess = this.getChunkSource().getChunk(x, z, requiredStatus, nonnull);
++
++        if (ichunkaccess == null && nonnull) {
+             throw new IllegalStateException("Should always be able to create a chunk!");
+         } else {
+-            return chunk;
++            return ichunkaccess;
+         }
+     }
+ 
+     @Override
+-    public boolean setBlock(BlockPos pos, BlockState newState, int flags) {
++    public boolean setBlock(BlockPos pos, IBlockData newState, int flags) {
+         return this.setBlock(pos, newState, flags, 512);
+     }
+ 
+     @Override
+-    public boolean setBlock(BlockPos pos, BlockState state, int flags, int recursionLeft) {
++    public boolean setBlock(BlockPos pos, IBlockData state, int flags, int recursionLeft) {
++        // CraftBukkit start - tree generation
++        if (this.captureTreeGeneration) {
++            CapturedBlockState blockstate = capturedBlockStates.get(pos);
++            if (blockstate == null) {
++                blockstate = CapturedBlockState.getTreeBlockState(this, pos, flags);
++                this.capturedBlockStates.put(pos.immutable(), blockstate);
++            }
++            blockstate.setData(state);
++            return true;
++        }
++        // CraftBukkit end
+         if (this.isOutsideBuildHeight(pos)) {
+             return false;
+         } else if (!this.isClientSide && this.isDebug()) {
+             return false;
+         } else {
+-            LevelChunk chunkAt = this.getChunkAt(pos);
++            LevelChunk chunk = this.getChunkAt(pos);
+             Block block = state.getBlock();
+-            BlockState blockState = chunkAt.setBlockState(pos, state, (flags & 64) != 0);
+-            if (blockState == null) {
++
++            // CraftBukkit start - capture blockstates
++            boolean captured = false;
++            if (this.captureBlockStates && !this.capturedBlockStates.containsKey(pos)) {
++                CapturedBlockState blockstate = CapturedBlockState.getBlockState(this, pos, flags);
++                this.capturedBlockStates.put(pos.immutable(), blockstate);
++                captured = true;
++            }
++            // CraftBukkit end
++
++            IBlockData iblockdata1 = chunk.setBlockState(pos, state, (flags & 64) != 0, (flags & 1024) == 0); // CraftBukkit custom NO_PLACE flag
++
++            if (iblockdata1 == null) {
++                // CraftBukkit start - remove blockstate if failed (or the same)
++                if (this.captureBlockStates && captured) {
++                    this.capturedBlockStates.remove(pos);
++                }
++                // CraftBukkit end
+                 return false;
+             } else {
+-                BlockState blockState1 = this.getBlockState(pos);
+-                if (blockState1 == state) {
+-                    if (blockState != blockState1) {
+-                        this.setBlocksDirty(pos, blockState, blockState1);
++                IBlockData iblockdata2 = this.getBlockState(pos);
++
++                /*
++                if (iblockdata2 == iblockdata) {
++                    if (iblockdata1 != iblockdata2) {
++                        this.setBlocksDirty(blockposition, iblockdata1, iblockdata2);
+                     }
+ 
+-                    if ((flags & 2) != 0
+-                        && (!this.isClientSide || (flags & 4) == 0)
+-                        && (this.isClientSide || chunkAt.getFullStatus() != null && chunkAt.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING))) {
+-                        this.sendBlockUpdated(pos, blockState, state, flags);
++                    if ((i & 2) != 0 && (!this.isClientSide || (i & 4) == 0) && (this.isClientSide || chunk.getFullStatus() != null && chunk.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING))) {
++                        this.sendBlockUpdated(blockposition, iblockdata1, iblockdata, i);
+                     }
+ 
+-                    if ((flags & 1) != 0) {
+-                        this.blockUpdated(pos, blockState.getBlock());
+-                        if (!this.isClientSide && state.hasAnalogOutputSignal()) {
+-                            this.updateNeighbourForOutputSignal(pos, block);
++                    if ((i & 1) != 0) {
++                        this.blockUpdated(blockposition, iblockdata1.getBlock());
++                        if (!this.isClientSide && iblockdata.hasAnalogOutputSignal()) {
++                            this.updateNeighbourForOutputSignal(blockposition, block);
+                         }
+                     }
+ 
+-                    if ((flags & 16) == 0 && recursionLeft > 0) {
+-                        int i = flags & -34;
+-                        blockState.updateIndirectNeighbourShapes(this, pos, i, recursionLeft - 1);
+-                        state.updateNeighbourShapes(this, pos, i, recursionLeft - 1);
+-                        state.updateIndirectNeighbourShapes(this, pos, i, recursionLeft - 1);
++                    if ((i & 16) == 0 && j > 0) {
++                        int k = i & -34;
++
++                        iblockdata1.updateIndirectNeighbourShapes(this, blockposition, k, j - 1);
++                        iblockdata.updateNeighbourShapes(this, blockposition, k, j - 1);
++                        iblockdata.updateIndirectNeighbourShapes(this, blockposition, k, j - 1);
+                     }
+ 
+-                    this.onBlockStateChange(pos, blockState, blockState1);
++                    this.onBlockStateChange(blockposition, iblockdata1, iblockdata2);
+                 }
++                */
+ 
++                // CraftBukkit start
++                if (!this.captureBlockStates) { // Don't notify clients or update physics while capturing blockstates
++                    // Modularize client and physic updates
++                    notifyAndUpdatePhysics(pos, chunk, iblockdata1, state, iblockdata2, flags, recursionLeft);
++                }
++                // CraftBukkit end
++
+                 return true;
+             }
+         }
+     }
+ 
+-    public void onBlockStateChange(BlockPos pos, BlockState blockState, BlockState newState) {
++    // CraftBukkit start - Split off from above in order to directly send client and physic updates
++    public void notifyAndUpdatePhysics(BlockPos blockposition, LevelChunk chunk, IBlockData oldBlock, IBlockData newBlock, IBlockData actualBlock, int i, int j) {
++        IBlockData iblockdata = newBlock;
++        IBlockData iblockdata1 = oldBlock;
++        IBlockData iblockdata2 = actualBlock;
++        if (iblockdata2 == iblockdata) {
++            if (iblockdata1 != iblockdata2) {
++                this.setBlocksDirty(blockposition, iblockdata1, iblockdata2);
++            }
++
++            if ((i & 2) != 0 && (!this.isClientSide || (i & 4) == 0) && (this.isClientSide || chunk == null || (chunk.getFullStatus() != null && chunk.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING)))) { // allow chunk to be null here as chunk.isReady() is false when we send our notification during block placement
++                this.sendBlockUpdated(blockposition, iblockdata1, iblockdata, i);
++            }
++
++            if ((i & 1) != 0) {
++                this.blockUpdated(blockposition, iblockdata1.getBlock());
++                if (!this.isClientSide && iblockdata.hasAnalogOutputSignal()) {
++                    this.updateNeighbourForOutputSignal(blockposition, newBlock.getBlock());
++                }
++            }
++
++            if ((i & 16) == 0 && j > 0) {
++                int k = i & -34;
++
++                // CraftBukkit start
++                iblockdata1.updateIndirectNeighbourShapes(this, blockposition, k, j - 1); // Don't call an event for the old block to limit event spam
++                CraftWorld world = ((ServerLevel) this).getWorld();
++                if (world != null) {
++                    BlockPhysicsEvent event = new BlockPhysicsEvent(world.getBlockAt(blockposition.getX(), blockposition.getY(), blockposition.getZ()), CraftBlockData.fromData(iblockdata));
++                    this.getCraftServer().getPluginManager().callEvent(event);
++
++                    if (event.isCancelled()) {
++                        return;
++                    }
++                }
++                // CraftBukkit end
++                iblockdata.updateNeighbourShapes(this, blockposition, k, j - 1);
++                iblockdata.updateIndirectNeighbourShapes(this, blockposition, k, j - 1);
++            }
++
++            // CraftBukkit start - SPIGOT-5710
++            if (!preventPoiUpdated) {
++                this.onBlockStateChange(blockposition, iblockdata1, iblockdata2);
++            }
++            // CraftBukkit end
++        }
+     }
++    // CraftBukkit end
+ 
++    public void onBlockStateChange(BlockPos pos, IBlockData blockState, IBlockData newState) {}
++
+     @Override
+     public boolean removeBlock(BlockPos pos, boolean isMoving) {
+-        FluidState fluidState = this.getFluidState(pos);
+-        return this.setBlock(pos, fluidState.createLegacyBlock(), 3 | (isMoving ? 64 : 0));
++        FluidState fluid = this.getFluidState(pos);
++
++        return this.setBlock(pos, fluid.createLegacyBlock(), 3 | (isMoving ? 64 : 0));
+     }
+ 
+     @Override
+     public boolean destroyBlock(BlockPos pos, boolean dropBlock, @Nullable Entity entity, int recursionLeft) {
+-        BlockState blockState = this.getBlockState(pos);
+-        if (blockState.isAir()) {
++        IBlockData iblockdata = this.getBlockState(pos);
++
++        if (iblockdata.isAir()) {
+             return false;
+         } else {
+-            FluidState fluidState = this.getFluidState(pos);
+-            if (!(blockState.getBlock() instanceof BaseFireBlock)) {
+-                this.levelEvent(2001, pos, Block.getId(blockState));
++            FluidState fluid = this.getFluidState(pos);
++
++            if (!(iblockdata.getBlock() instanceof BaseFireBlock)) {
++                this.levelEvent(2001, pos, Block.getId(iblockdata));
+             }
+ 
+             if (dropBlock) {
+-                BlockEntity blockEntity = blockState.hasBlockEntity() ? this.getBlockEntity(pos) : null;
+-                Block.dropResources(blockState, this, pos, blockEntity, entity, ItemStack.EMPTY);
++                BlockEntity tileentity = iblockdata.hasBlockEntity() ? this.getBlockEntity(pos) : null;
++
++                Block.dropResources(iblockdata, this, pos, tileentity, entity, ItemStack.EMPTY);
+             }
+ 
+-            boolean flag = this.setBlock(pos, fluidState.createLegacyBlock(), 3, recursionLeft);
+-            if (flag) {
+-                this.gameEvent(GameEvent.BLOCK_DESTROY, pos, GameEvent.Context.of(entity, blockState));
++            boolean flag1 = this.setBlock(pos, fluid.createLegacyBlock(), 3, recursionLeft);
++
++            if (flag1) {
++                this.gameEvent(GameEvent.BLOCK_DESTROY, pos, GameEvent.Context.of(entity, iblockdata));
+             }
+ 
+-            return flag;
++            return flag1;
+         }
+     }
+ 
+-    public void addDestroyBlockEffect(BlockPos pos, BlockState state) {
+-    }
++    public void addDestroyBlockEffect(BlockPos pos, IBlockData state) {}
+ 
+-    public boolean setBlockAndUpdate(BlockPos pos, BlockState state) {
++    public boolean setBlockAndUpdate(BlockPos pos, IBlockData state) {
+         return this.setBlock(pos, state, 3);
+     }
+ 
+-    public abstract void sendBlockUpdated(BlockPos pos, BlockState oldState, BlockState newState, int flags);
++    public abstract void sendBlockUpdated(BlockPos pos, IBlockData oldState, IBlockData newState, int flags);
+ 
+-    public void setBlocksDirty(BlockPos blockPos, BlockState oldState, BlockState newState) {
+-    }
++    public void setBlocksDirty(BlockPos blockPos, IBlockData oldState, IBlockData newState) {}
+ 
+-    public void updateNeighborsAt(BlockPos pos, Block block) {
+-    }
++    public void updateNeighborsAt(BlockPos pos, Block block) {}
+ 
+-    public void updateNeighborsAtExceptFromFacing(BlockPos pos, Block blockType, Direction skipSide) {
+-    }
++    public void updateNeighborsAtExceptFromFacing(BlockPos pos, Block blockType, Direction skipSide) {}
+ 
+-    public void neighborChanged(BlockPos pos, Block block, BlockPos fromPos) {
+-    }
++    public void neighborChanged(BlockPos pos, Block block, BlockPos fromPos) {}
+ 
+-    public void neighborChanged(BlockState state, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
+-    }
++    public void neighborChanged(IBlockData state, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {}
+ 
+     @Override
+-    public void neighborShapeChanged(Direction direction, BlockState queried, BlockPos pos, BlockPos offsetPos, int flags, int recursionLevel) {
++    public void neighborShapeChanged(Direction direction, IBlockData queried, BlockPos pos, BlockPos offsetPos, int flags, int recursionLevel) {
+         this.neighborUpdater.shapeUpdate(direction, queried, pos, offsetPos, flags, recursionLevel);
+     }
+ 
+     @Override
+     public int getHeight(Heightmap.Types heightmapType, int x, int z) {
+-        int i;
++        int k;
++
+         if (x >= -30000000 && z >= -30000000 && x < 30000000 && z < 30000000) {
+             if (this.hasChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z))) {
+-                i = this.getChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z)).getHeight(heightmapType, x & 15, z & 15) + 1;
++                k = this.getChunk(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z)).getHeight(heightmapType, x & 15, z & 15) + 1;
+             } else {
+-                i = this.getMinBuildHeight();
++                k = this.getMinBuildHeight();
+             }
+         } else {
+-            i = this.getSeaLevel() + 1;
++            k = this.getSeaLevel() + 1;
+         }
+ 
+-        return i;
++        return k;
+     }
+ 
+     @Override
+@@ -340,11 +518,20 @@
+     }
+ 
+     @Override
+-    public BlockState getBlockState(BlockPos pos) {
++    public IBlockData getBlockState(BlockPos pos) {
++        // CraftBukkit start - tree generation
++        if (captureTreeGeneration) {
++            CapturedBlockState previous = capturedBlockStates.get(pos);
++            if (previous != null) {
++                return previous.getHandle();
++            }
++        }
++        // CraftBukkit end
+         if (this.isOutsideBuildHeight(pos)) {
+             return Blocks.VOID_AIR.defaultBlockState();
+         } else {
+             LevelChunk chunk = this.getChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
++
+             return chunk.getBlockState(pos);
+         }
+     }
+@@ -354,8 +541,9 @@
+         if (this.isOutsideBuildHeight(pos)) {
+             return Fluids.EMPTY.defaultFluidState();
+         } else {
+-            LevelChunk chunkAt = this.getChunkAt(pos);
+-            return chunkAt.getFluidState(pos);
++            LevelChunk chunk = this.getChunkAt(pos);
++
++            return chunk.getFluidState(pos);
+         }
+     }
+ 
+@@ -368,34 +556,38 @@
+     }
+ 
+     public void playSound(@Nullable Entity entity, BlockPos pos, SoundEvent sound, SoundSource category, float volume, float pitch) {
+-        this.playSound(entity instanceof Player player ? player : null, pos, sound, category, volume, pitch);
++        Player entityhuman;
++
++        if (entity instanceof Player) {
++            Player entityhuman1 = (Player) entity;
++
++            entityhuman = entityhuman1;
++        } else {
++            entityhuman = null;
++        }
++
++        this.playSound(entityhuman, pos, sound, category, volume, pitch);
+     }
+ 
+     @Override
+     public void playSound(@Nullable Player player, BlockPos pos, SoundEvent sound, SoundSource category, float volume, float pitch) {
+-        this.playSound(player, (double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, sound, category, volume, pitch);
++        this.playSound(player, (double) pos.getX() + 0.5D, (double) pos.getY() + 0.5D, (double) pos.getZ() + 0.5D, sound, category, volume, pitch);
+     }
+ 
+-    public abstract void playSeededSound(
+-        @Nullable Player player, double x, double d, double y, Holder<SoundEvent> holder, SoundSource z, float f, float sound, long source
+-    );
++    public abstract void playSeededSound(@Nullable Player player, double x, double d1, double y, Holder<SoundEvent> holder, SoundSource z, float f, float sound, long source);
+ 
+-    public void playSeededSound(
+-        @Nullable Player player, double x, double y, double z, SoundEvent sound, SoundSource source, float volume, float pitch, long seed
+-    ) {
+-        this.playSeededSound(player, x, y, z, BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), source, volume, pitch, seed);
++    public void playSeededSound(@Nullable Player player, double x, double d1, double y, SoundEvent soundeffect, SoundSource z, float f, float sound, long source) {
++        this.playSeededSound(player, x, d1, y, BuiltInRegistries.SOUND_EVENT.wrapAsHolder(soundeffect), z, f, sound, source);
+     }
+ 
+-    public abstract void playSeededSound(
+-        @Nullable Player player, Entity entity, Holder<SoundEvent> sound, SoundSource category, float volume, float pitch, long seed
+-    );
++    public abstract void playSeededSound(@Nullable Player player, Entity entity, Holder<SoundEvent> sound, SoundSource category, float volume, float pitch, long seed);
+ 
+-    public void playSound(@Nullable Player player, double d, double d1, double d2, SoundEvent soundEvent, SoundSource soundSource) {
+-        this.playSound(player, d, d1, d2, soundEvent, soundSource, 1.0F, 1.0F);
++    public void playSound(@Nullable Player entityhuman, double d0, double d1, double d2, SoundEvent soundeffect, SoundSource soundcategory) {
++        this.playSound(entityhuman, d0, d1, d2, soundeffect, soundcategory, 1.0F, 1.0F);
+     }
+ 
+-    public void playSound(@Nullable Player player, double x, double y, double z, SoundEvent sound, SoundSource category, float volume, float pitch) {
+-        this.playSeededSound(player, x, y, z, sound, category, volume, pitch, this.threadSafeRandom.nextLong());
++    public void playSound(@Nullable Player player, double x, double d1, double y, SoundEvent soundeffect, SoundSource z, float f, float sound) {
++        this.playSeededSound(player, x, d1, y, soundeffect, z, f, sound, this.threadSafeRandom.nextLong());
+     }
+ 
+     public void playSound(@Nullable Player player, Entity entity, SoundEvent event, SoundSource category, float volume, float pitch) {
+@@ -403,33 +595,26 @@
+     }
+ 
+     public void playLocalSound(BlockPos pos, SoundEvent sound, SoundSource category, float volume, float pitch, boolean distanceDelay) {
+-        this.playLocalSound((double)pos.getX() + 0.5, (double)pos.getY() + 0.5, (double)pos.getZ() + 0.5, sound, category, volume, pitch, distanceDelay);
++        this.playLocalSound((double) pos.getX() + 0.5D, (double) pos.getY() + 0.5D, (double) pos.getZ() + 0.5D, sound, category, volume, pitch, distanceDelay);
+     }
+ 
+-    public void playLocalSound(Entity entity, SoundEvent soundEvent, SoundSource soundSource, float f, float f1) {
+-    }
++    public void playLocalSound(Entity entity, SoundEvent soundeffect, SoundSource soundcategory, float f, float f1) {}
+ 
+-    public void playLocalSound(double x, double y, double z, SoundEvent sound, SoundSource category, float volume, float pitch, boolean distanceDelay) {
+-    }
++    public void playLocalSound(double x, double d1, double y, SoundEvent soundeffect, SoundSource z, float f, float sound, boolean category) {}
+ 
+     @Override
+-    public void addParticle(ParticleOptions particleData, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed) {
+-    }
++    public void addParticle(ParticleOptions particleData, double x, double d1, double y, double d3, double z, double d5) {}
+ 
+-    public void addParticle(ParticleOptions particleData, boolean forceAlwaysRender, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed) {
+-    }
++    public void addParticle(ParticleOptions particleData, boolean forceAlwaysRender, double x, double d1, double y, double d3, double z, double d5) {}
+ 
+-    public void addAlwaysVisibleParticle(ParticleOptions particleData, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed) {
+-    }
++    public void addAlwaysVisibleParticle(ParticleOptions particleData, double x, double d1, double y, double d3, double z, double d5) {}
+ 
+-    public void addAlwaysVisibleParticle(
+-        ParticleOptions particleData, boolean ignoreRange, double x, double y, double z, double xSpeed, double ySpeed, double zSpeed
+-    ) {
+-    }
++    public void addAlwaysVisibleParticle(ParticleOptions particleData, boolean ignoreRange, double x, double d1, double y, double d3, double z, double d5) {}
+ 
+     public float getSunAngle(float partialTicks) {
+-        float timeOfDay = this.getTimeOfDay(partialTicks);
+-        return timeOfDay * (float) (Math.PI * 2);
++        float f1 = this.getTimeOfDay(partialTicks);
++
++        return f1 * 6.2831855F;
+     }
+ 
+     public void addBlockEntityTicker(TickingBlockEntity ticker) {
+@@ -437,8 +622,9 @@
+     }
+ 
+     protected void tickBlockEntities() {
+-        ProfilerFiller profiler = this.getProfiler();
+-        profiler.push("blockEntities");
++        ProfilerFiller gameprofilerfiller = this.getProfiler();
++
++        gameprofilerfiller.push("blockEntities");
+         this.tickingBlockEntities = true;
+         if (!this.pendingBlockEntityTickers.isEmpty()) {
+             this.blockEntityTickers.addAll(this.pendingBlockEntityTickers);
+@@ -449,26 +635,28 @@
+         boolean flag = this.tickRateManager().runsNormally();
+ 
+         while (iterator.hasNext()) {
+-            TickingBlockEntity tickingBlockEntity = iterator.next();
+-            if (tickingBlockEntity.isRemoved()) {
++            TickingBlockEntity tickingblockentity = (TickingBlockEntity) iterator.next();
++
++            if (tickingblockentity.isRemoved()) {
+                 iterator.remove();
+-            } else if (flag && this.shouldTickBlocksAt(tickingBlockEntity.getPos())) {
+-                tickingBlockEntity.tick();
++            } else if (flag && this.shouldTickBlocksAt(tickingblockentity.getPos())) {
++                tickingblockentity.tick();
+             }
+         }
+ 
+         this.tickingBlockEntities = false;
+-        profiler.pop();
++        gameprofilerfiller.pop();
+     }
+ 
+     public <T extends Entity> void guardEntityTick(Consumer<T> consumerEntity, T entity) {
+         try {
+             consumerEntity.accept(entity);
+-        } catch (Throwable var6) {
+-            CrashReport crashReport = CrashReport.forThrowable(var6, "Ticking entity");
+-            CrashReportCategory crashReportCategory = crashReport.addCategory("Entity being ticked");
+-            entity.fillCrashReportCategory(crashReportCategory);
+-            throw new ReportedException(crashReport);
++        } catch (Throwable throwable) {
++            CrashReport crashreport = CrashReport.forThrowable(throwable, "Ticking entity");
++            CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Entity being ticked");
++
++            entity.fillCrashReportCategory(crashreportsystemdetails);
++            throw new ReportedException(crashreport);
+         }
+     }
+ 
+@@ -484,145 +672,59 @@
+         return this.shouldTickBlocksAt(ChunkPos.asLong(pos));
+     }
+ 
+-    public Explosion explode(@Nullable Entity source, double x, double y, double z, float radius, Level.ExplosionInteraction explosionInteraction) {
+-        return this.explode(
+-            source,
+-            Explosion.getDefaultDamageSource(this, source),
+-            null,
+-            x,
+-            y,
+-            z,
+-            radius,
+-            false,
+-            explosionInteraction,
+-            ParticleTypes.EXPLOSION,
+-            ParticleTypes.EXPLOSION_EMITTER,
+-            SoundEvents.GENERIC_EXPLODE
+-        );
++    public Explosion explode(@Nullable Entity source, double x, double d1, double y, float f, Level.a z) {
++        return this.explode(source, Explosion.getDefaultDamageSource(this, source), (ExplosionDamageCalculator) null, x, d1, y, f, false, z, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE);
+     }
+ 
+-    public Explosion explode(@Nullable Entity source, double x, double y, double z, float radius, boolean fire, Level.ExplosionInteraction explosionInteraction) {
+-        return this.explode(
+-            source,
+-            Explosion.getDefaultDamageSource(this, source),
+-            null,
+-            x,
+-            y,
+-            z,
+-            radius,
+-            fire,
+-            explosionInteraction,
+-            ParticleTypes.EXPLOSION,
+-            ParticleTypes.EXPLOSION_EMITTER,
+-            SoundEvents.GENERIC_EXPLODE
+-        );
++    public Explosion explode(@Nullable Entity source, double x, double d1, double y, float f, boolean z, Level.a world_a) {
++        return this.explode(source, Explosion.getDefaultDamageSource(this, source), (ExplosionDamageCalculator) null, x, d1, y, f, z, world_a, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE);
+     }
+ 
+-    public Explosion explode(
+-        @Nullable Entity source,
+-        @Nullable DamageSource damageSource,
+-        @Nullable ExplosionDamageCalculator damageCalculator,
+-        Vec3 pos,
+-        float radius,
+-        boolean fire,
+-        Level.ExplosionInteraction explosionInteraction
+-    ) {
+-        return this.explode(
+-            source,
+-            damageSource,
+-            damageCalculator,
+-            pos.x(),
+-            pos.y(),
+-            pos.z(),
+-            radius,
+-            fire,
+-            explosionInteraction,
+-            ParticleTypes.EXPLOSION,
+-            ParticleTypes.EXPLOSION_EMITTER,
+-            SoundEvents.GENERIC_EXPLODE
+-        );
++    public Explosion explode(@Nullable Entity source, @Nullable DamageSource damageSource, @Nullable ExplosionDamageCalculator damageCalculator, Vec3 pos, float radius, boolean fire, Level.a explosionInteraction) {
++        return this.explode(source, damageSource, damageCalculator, pos.x(), pos.y(), pos.z(), radius, fire, explosionInteraction, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE);
+     }
+ 
+-    public Explosion explode(
+-        @Nullable Entity source,
+-        @Nullable DamageSource damageSource,
+-        @Nullable ExplosionDamageCalculator damageCalculator,
+-        double x,
+-        double y,
+-        double z,
+-        float radius,
+-        boolean fire,
+-        Level.ExplosionInteraction explosionInteraction
+-    ) {
+-        return this.explode(
+-            source,
+-            damageSource,
+-            damageCalculator,
+-            x,
+-            y,
+-            z,
+-            radius,
+-            fire,
+-            explosionInteraction,
+-            ParticleTypes.EXPLOSION,
+-            ParticleTypes.EXPLOSION_EMITTER,
+-            SoundEvents.GENERIC_EXPLODE
+-        );
++    public Explosion explode(@Nullable Entity source, @Nullable DamageSource damageSource, @Nullable ExplosionDamageCalculator damageCalculator, double x, double d1, double y, float f, boolean z, Level.a world_a) {
++        return this.explode(source, damageSource, damageCalculator, x, d1, y, f, z, world_a, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE);
+     }
+ 
+-    public Explosion explode(
+-        @Nullable Entity entity,
+-        @Nullable DamageSource damageSource,
+-        @Nullable ExplosionDamageCalculator explosionDamageCalculator,
+-        double d,
+-        double d1,
+-        double d2,
+-        float f,
+-        boolean flag,
+-        Level.ExplosionInteraction explosionInteraction,
+-        ParticleOptions particleOptions,
+-        ParticleOptions particleOptions1,
+-        SoundEvent soundEvent
+-    ) {
+-        return this.explode(
+-            entity, damageSource, explosionDamageCalculator, d, d1, d2, f, flag, explosionInteraction, true, particleOptions, particleOptions1, soundEvent
+-        );
++    public Explosion explode(@Nullable Entity entity, @Nullable DamageSource damagesource, @Nullable ExplosionDamageCalculator explosiondamagecalculator, double d0, double d1, double d2, float f, boolean flag, Level.a world_a, ParticleOptions particleparam, ParticleOptions particleparam1, SoundEvent soundeffect) {
++        return this.explode(entity, damagesource, explosiondamagecalculator, d0, d1, d2, f, flag, world_a, true, particleparam, particleparam1, soundeffect);
+     }
+ 
+-    public Explosion explode(
+-        @Nullable Entity entity,
+-        @Nullable DamageSource damageSource,
+-        @Nullable ExplosionDamageCalculator explosionDamageCalculator,
+-        double d,
+-        double d1,
+-        double d2,
+-        float f,
+-        boolean flag,
+-        Level.ExplosionInteraction explosionInteraction,
+-        boolean flag1,
+-        ParticleOptions particleOptions,
+-        ParticleOptions particleOptions1,
+-        SoundEvent soundEvent
+-    ) {
+-        Explosion.BlockInteraction blockInteraction = switch (explosionInteraction) {
+-            case NONE -> Explosion.BlockInteraction.KEEP;
+-            case BLOCK -> this.getDestroyType(GameRules.RULE_BLOCK_EXPLOSION_DROP_DECAY);
+-            case MOB -> this.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING)
+-            ? this.getDestroyType(GameRules.RULE_MOB_EXPLOSION_DROP_DECAY)
+-            : Explosion.BlockInteraction.KEEP;
+-            case TNT -> this.getDestroyType(GameRules.RULE_TNT_EXPLOSION_DROP_DECAY);
+-            case BLOW -> Explosion.BlockInteraction.TRIGGER_BLOCK;
+-        };
+-        Explosion explosion = new Explosion(
+-            this, entity, damageSource, explosionDamageCalculator, d, d1, d2, f, flag, blockInteraction, particleOptions, particleOptions1, soundEvent
+-        );
++    public Explosion explode(@Nullable Entity entity, @Nullable DamageSource damagesource, @Nullable ExplosionDamageCalculator explosiondamagecalculator, double d0, double d1, double d2, float f, boolean flag, Level.a world_a, boolean flag1, ParticleOptions particleparam, ParticleOptions particleparam1, SoundEvent soundeffect) {
++        Explosion.Effect explosion_effect;
++
++        switch (world_a) {
++            case NONE:
++                explosion_effect = Explosion.Effect.KEEP;
++                break;
++            case BLOCK:
++                explosion_effect = this.getDestroyType(GameRules.RULE_BLOCK_EXPLOSION_DROP_DECAY);
++                break;
++            case MOB:
++                explosion_effect = this.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING) ? this.getDestroyType(GameRules.RULE_MOB_EXPLOSION_DROP_DECAY) : Explosion.Effect.KEEP;
++                break;
++            case TNT:
++                explosion_effect = this.getDestroyType(GameRules.RULE_TNT_EXPLOSION_DROP_DECAY);
++                break;
++            case BLOW:
++                explosion_effect = Explosion.Effect.TRIGGER_BLOCK;
++                break;
++            default:
++                throw new IncompatibleClassChangeError();
++        }
++
++        Explosion.Effect explosion_effect1 = explosion_effect;
++        Explosion explosion = new Explosion(this, entity, damagesource, explosiondamagecalculator, d0, d1, d2, f, flag, explosion_effect1, particleparam, particleparam1, soundeffect);
++
+         explosion.explode();
+         explosion.finalizeExplosion(flag1);
+         return explosion;
+     }
+ 
+-    private Explosion.BlockInteraction getDestroyType(GameRules.Key<GameRules.BooleanValue> gameRule) {
+-        return this.getGameRules().getBoolean(gameRule) ? Explosion.BlockInteraction.DESTROY_WITH_DECAY : Explosion.BlockInteraction.DESTROY;
++    private Explosion.Effect getDestroyType(GameRules.Key<GameRules.BooleanValue> gameRule) {
++        return this.getGameRules().getBoolean(gameRule) ? Explosion.Effect.DESTROY_WITH_DECAY : Explosion.Effect.DESTROY;
+     }
+ 
+     public abstract String gatherChunkSourceStats();
+@@ -630,19 +732,30 @@
+     @Nullable
+     @Override
+     public BlockEntity getBlockEntity(BlockPos pos) {
+-        if (this.isOutsideBuildHeight(pos)) {
+-            return null;
+-        } else {
+-            return !this.isClientSide && Thread.currentThread() != this.thread
+-                ? null
+-                : this.getChunkAt(pos).getBlockEntity(pos, LevelChunk.EntityCreationType.IMMEDIATE);
++        // CraftBukkit start
++        return getBlockEntity(pos, true);
++    }
++
++    @Nullable
++    public BlockEntity getBlockEntity(BlockPos blockposition, boolean validate) {
++        if (capturedTileEntities.containsKey(blockposition)) {
++            return capturedTileEntities.get(blockposition);
+         }
++        // CraftBukkit end
++        return this.isOutsideBuildHeight(blockposition) ? null : (!this.isClientSide && Thread.currentThread() != this.thread ? null : this.getChunkAt(blockposition).getBlockEntity(blockposition, LevelChunk.EnumTileEntityState.IMMEDIATE));
+     }
+ 
+     public void setBlockEntity(BlockEntity blockEntity) {
+-        BlockPos blockPos = blockEntity.getBlockPos();
+-        if (!this.isOutsideBuildHeight(blockPos)) {
+-            this.getChunkAt(blockPos).addAndRegisterBlockEntity(blockEntity);
++        BlockPos blockposition = blockEntity.getBlockPos();
++
++        if (!this.isOutsideBuildHeight(blockposition)) {
++            // CraftBukkit start
++            if (captureBlockStates) {
++                capturedTileEntities.put(blockposition.immutable(), blockEntity);
++                return;
++            }
++            // CraftBukkit end
++            this.getChunkAt(blockposition).addAndRegisterBlockEntity(blockEntity);
+         }
+     }
+ 
+@@ -653,16 +766,16 @@
+     }
+ 
+     public boolean isLoaded(BlockPos pos) {
+-        return !this.isOutsideBuildHeight(pos)
+-            && this.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
++        return this.isOutsideBuildHeight(pos) ? false : this.getChunkSource().hasChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()));
+     }
+ 
+     public boolean loadedAndEntityCanStandOnFace(BlockPos pos, Entity entity, Direction direction) {
+         if (this.isOutsideBuildHeight(pos)) {
+             return false;
+         } else {
+-            ChunkAccess chunk = this.getChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()), ChunkStatus.FULL, false);
+-            return chunk != null && chunk.getBlockState(pos).entityCanStandOnFace(this, pos, entity, direction);
++            ChunkAccess ichunkaccess = this.getChunk(SectionPos.blockToSectionCoord(pos.getX()), SectionPos.blockToSectionCoord(pos.getZ()), ChunkStatus.FULL, false);
++
++            return ichunkaccess == null ? false : ichunkaccess.getBlockState(pos).entityCanStandOnFace(this, pos, entity, direction);
+         }
+     }
+ 
+@@ -671,10 +784,11 @@
+     }
+ 
+     public void updateSkyBrightness() {
+-        double d = 1.0 - (double)(this.getRainLevel(1.0F) * 5.0F) / 16.0;
+-        double d1 = 1.0 - (double)(this.getThunderLevel(1.0F) * 5.0F) / 16.0;
+-        double d2 = 0.5 + 2.0 * Mth.clamp((double)Mth.cos(this.getTimeOfDay(1.0F) * (float) (Math.PI * 2)), -0.25, 0.25);
+-        this.skyDarken = (int)((1.0 - d2 * d * d1) * 11.0);
++        double d0 = 1.0D - (double) (this.getRainLevel(1.0F) * 5.0F) / 16.0D;
++        double d1 = 1.0D - (double) (this.getThunderLevel(1.0F) * 5.0F) / 16.0D;
++        double d2 = 0.5D + 2.0D * Mth.clamp((double) Mth.cos(this.getTimeOfDay(1.0F) * 6.2831855F), -0.25D, 0.25D);
++
++        this.skyDarken = (int) ((1.0D - d2 * d0 * d1) * 11.0D);
+     }
+ 
+     public void setSpawnSettings(boolean hostile, boolean peaceful) {
+@@ -682,14 +796,13 @@
+     }
+ 
+     public BlockPos getSharedSpawnPos() {
+-        BlockPos blockPos = new BlockPos(this.levelData.getXSpawn(), this.levelData.getYSpawn(), this.levelData.getZSpawn());
+-        if (!this.getWorldBorder().isWithinBounds(blockPos)) {
+-            blockPos = this.getHeightmapPos(
+-                Heightmap.Types.MOTION_BLOCKING, BlockPos.containing(this.getWorldBorder().getCenterX(), 0.0, this.getWorldBorder().getCenterZ())
+-            );
++        BlockPos blockposition = new BlockPos(this.levelData.getXSpawn(), this.levelData.getYSpawn(), this.levelData.getZSpawn());
++
++        if (!this.getWorldBorder().isWithinBounds(blockposition)) {
++            blockposition = this.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, BlockPos.containing(this.getWorldBorder().getCenterX(), 0.0D, this.getWorldBorder().getCenterZ()));
+         }
+ 
+-        return blockPos;
++        return blockposition;
+     }
+ 
+     public float getSharedSpawnAngle() {
+@@ -703,9 +816,9 @@
+                 this.thunderLevel = 1.0F;
+             }
+         }
++
+     }
+ 
+-    @Override
+     public void close() throws IOException {
+         this.getChunkSource().close();
+     }
+@@ -720,18 +833,25 @@
+     public List<Entity> getEntities(@Nullable Entity entity, AABB boundingBox, Predicate<? super Entity> predicate) {
+         this.getProfiler().incrementCounter("getEntities");
+         List<Entity> list = Lists.newArrayList();
+-        this.getEntities().get(boundingBox, entity1 -> {
++
++        this.getEntities().get(boundingBox, (entity1) -> {
+             if (entity1 != entity && predicate.test(entity1)) {
+                 list.add(entity1);
+             }
+ 
+             if (entity1 instanceof EnderDragon) {
+-                for (EnderDragonPart enderDragonPart : ((EnderDragon)entity1).getSubEntities()) {
+-                    if (entity1 != entity && predicate.test(enderDragonPart)) {
+-                        list.add(enderDragonPart);
++                EnderDragonPart[] aentitycomplexpart = ((EnderDragon) entity1).getSubEntities();
++                int i = aentitycomplexpart.length;
++
++                for (int j = 0; j < i; ++j) {
++                    EnderDragonPart entitycomplexpart = aentitycomplexpart[j];
++
++                    if (entity1 != entity && predicate.test(entitycomplexpart)) {
++                        list.add(entitycomplexpart);
+                     }
+                 }
+             }
++
+         });
+         return list;
+     }
+@@ -739,6 +859,7 @@
+     @Override
+     public <T extends Entity> List<T> getEntities(EntityTypeTest<Entity, T> entityTypeTest, AABB bounds, Predicate<? super T> predicate) {
+         List<T> list = Lists.newArrayList();
++
+         this.getEntities(entityTypeTest, bounds, predicate, list);
+         return list;
+     }
+@@ -747,31 +868,35 @@
+         this.getEntities(entityTypeTest, bounds, predicate, output, Integer.MAX_VALUE);
+     }
+ 
+-    public <T extends Entity> void getEntities(
+-        EntityTypeTest<Entity, T> entityTypeTest, AABB bounds, Predicate<? super T> predicate, List<? super T> output, int maxResults
+-    ) {
++    public <T extends Entity> void getEntities(EntityTypeTest<Entity, T> entityTypeTest, AABB bounds, Predicate<? super T> predicate, List<? super T> output, int maxResults) {
+         this.getProfiler().incrementCounter("getEntities");
+-        this.getEntities().get(entityTypeTest, bounds, entity -> {
++        this.getEntities().get(entityTypeTest, bounds, (entity) -> {
+             if (predicate.test(entity)) {
+                 output.add(entity);
+                 if (output.size() >= maxResults) {
+-                    return AbortableIterationConsumer.Continuation.ABORT;
++                    return AbortableIterationConsumer.a.ABORT;
+                 }
+             }
+ 
+-            if (entity instanceof EnderDragon enderDragon) {
+-                for (EnderDragonPart enderDragonPart : enderDragon.getSubEntities()) {
+-                    T entity1 = entityTypeTest.tryCast(enderDragonPart);
+-                    if (entity1 != null && predicate.test(entity1)) {
+-                        output.add(entity1);
++            if (entity instanceof EnderDragon) {
++                EnderDragon entityenderdragon = (EnderDragon) entity;
++                EnderDragonPart[] aentitycomplexpart = entityenderdragon.getSubEntities();
++                int j = aentitycomplexpart.length;
++
++                for (int k = 0; k < j; ++k) {
++                    EnderDragonPart entitycomplexpart = aentitycomplexpart[k];
++                    T t0 = entityTypeTest.tryCast(entitycomplexpart); // CraftBukkit - decompile error
++
++                    if (t0 != null && predicate.test(t0)) {
++                        output.add(t0);
+                         if (output.size() >= maxResults) {
+-                            return AbortableIterationConsumer.Continuation.ABORT;
++                            return AbortableIterationConsumer.a.ABORT;
+                         }
+                     }
+                 }
+             }
+ 
+-            return AbortableIterationConsumer.Continuation.CONTINUE;
++            return AbortableIterationConsumer.a.CONTINUE;
+         });
+     }
+ 
+@@ -782,6 +907,7 @@
+         if (this.hasChunkAt(pos)) {
+             this.getChunkAt(pos).setUnsaved(true);
+         }
++
+     }
+ 
+     @Override
+@@ -789,8 +915,7 @@
+         return 63;
+     }
+ 
+-    public void disconnect() {
+-    }
++    public void disconnect() {}
+ 
+     public long getGameTime() {
+         return this.levelData.getGameTime();
+@@ -804,11 +929,9 @@
+         return true;
+     }
+ 
+-    public void broadcastEntityEvent(Entity entity, byte state) {
+-    }
++    public void broadcastEntityEvent(Entity entity, byte state) {}
+ 
+-    public void broadcastDamageEvent(Entity entity, DamageSource damageSource) {
+-    }
++    public void broadcastDamageEvent(Entity entity, DamageSource damageSource) {}
+ 
+     public void blockEvent(BlockPos pos, Block block, int eventID, int eventParam) {
+         this.getBlockState(pos).triggerEvent(this, pos, eventID, eventParam);
+@@ -830,9 +953,10 @@
+     }
+ 
+     public void setThunderLevel(float strength) {
+-        float f = Mth.clamp(strength, 0.0F, 1.0F);
+-        this.oThunderLevel = f;
+-        this.thunderLevel = f;
++        float f1 = Mth.clamp(strength, 0.0F, 1.0F);
++
++        this.oThunderLevel = f1;
++        this.thunderLevel = f1;
+     }
+ 
+     public float getRainLevel(float delta) {
+@@ -840,17 +964,18 @@
+     }
+ 
+     public void setRainLevel(float strength) {
+-        float f = Mth.clamp(strength, 0.0F, 1.0F);
+-        this.oRainLevel = f;
+-        this.rainLevel = f;
++        float f1 = Mth.clamp(strength, 0.0F, 1.0F);
++
++        this.oRainLevel = f1;
++        this.rainLevel = f1;
+     }
+ 
+     public boolean isThundering() {
+-        return this.dimensionType().hasSkyLight() && !this.dimensionType().hasCeiling() && (double)this.getThunderLevel(1.0F) > 0.9;
++        return this.dimensionType().hasSkyLight() && !this.dimensionType().hasCeiling() ? (double) this.getThunderLevel(1.0F) > 0.9D : false;
+     }
+ 
+     public boolean isRaining() {
+-        return (double)this.getRainLevel(1.0F) > 0.2;
++        return (double) this.getRainLevel(1.0F) > 0.2D;
+     }
+ 
+     public boolean isRainingAt(BlockPos pos) {
+@@ -861,8 +986,9 @@
+         } else if (this.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos).getY() > pos.getY()) {
+             return false;
+         } else {
+-            Biome biome = this.getBiome(pos).value();
+-            return biome.getPrecipitationAt(pos) == Biome.Precipitation.RAIN;
++            Biome biomebase = (Biome) this.getBiome(pos).value();
++
++            return biomebase.getPrecipitationAt(pos) == Biome.Precipitation.RAIN;
+         }
+     }
+ 
+@@ -873,59 +999,74 @@
+ 
+     public abstract int getFreeMapId();
+ 
+-    public void globalLevelEvent(int id, BlockPos pos, int data) {
+-    }
++    public void globalLevelEvent(int id, BlockPos pos, int data) {}
+ 
+     public CrashReportCategory fillReportDetails(CrashReport report) {
+-        CrashReportCategory crashReportCategory = report.addCategory("Affected level", 1);
+-        crashReportCategory.setDetail("All players", () -> this.players().size() + " total; " + this.players());
+-        crashReportCategory.setDetail("Chunk stats", this.getChunkSource()::gatherStats);
+-        crashReportCategory.setDetail("Level dimension", () -> this.dimension().location().toString());
++        CrashReportCategory crashreportsystemdetails = report.addCategory("Affected level", 1);
+ 
++        crashreportsystemdetails.setDetail("All players", () -> {
++            int i = this.players().size();
++
++            return i + " total; " + this.players();
++        });
++        ChunkSource ichunkprovider = this.getChunkSource();
++
++        Objects.requireNonNull(ichunkprovider);
++        crashreportsystemdetails.setDetail("Chunk stats", ichunkprovider::gatherStats);
++        crashreportsystemdetails.setDetail("Level dimension", () -> {
++            return this.dimension().location().toString();
++        });
++
+         try {
+-            this.levelData.fillCrashReportCategory(crashReportCategory, this);
+-        } catch (Throwable var4) {
+-            crashReportCategory.setDetailError("Level Data Unobtainable", var4);
++            this.levelData.fillCrashReportCategory(crashreportsystemdetails, this);
++        } catch (Throwable throwable) {
++            crashreportsystemdetails.setDetailError("Level Data Unobtainable", throwable);
+         }
+ 
+-        return crashReportCategory;
++        return crashreportsystemdetails;
+     }
+ 
+     public abstract void destroyBlockProgress(int breakerId, BlockPos pos, int progress);
+ 
+-    public void createFireworks(double x, double y, double z, double motionX, double motionY, double motionZ, @Nullable CompoundTag compound) {
+-    }
++    public void createFireworks(double x, double d1, double y, double d3, double z, double d5, @Nullable CompoundTag motionX) {}
+ 
+     public abstract Scoreboard getScoreboard();
+ 
+     public void updateNeighbourForOutputSignal(BlockPos pos, Block block) {
+-        for (Direction direction : Direction.Plane.HORIZONTAL) {
+-            BlockPos blockPos = pos.relative(direction);
+-            if (this.hasChunkAt(blockPos)) {
+-                BlockState blockState = this.getBlockState(blockPos);
+-                if (blockState.is(Blocks.COMPARATOR)) {
+-                    this.neighborChanged(blockState, blockPos, block, pos, false);
+-                } else if (blockState.isRedstoneConductor(this, blockPos)) {
+-                    BlockPos var7 = blockPos.relative(direction);
+-                    blockState = this.getBlockState(var7);
+-                    if (blockState.is(Blocks.COMPARATOR)) {
+-                        this.neighborChanged(blockState, var7, block, pos, false);
++        Iterator iterator = Direction.Plane.HORIZONTAL.iterator();
++
++        while (iterator.hasNext()) {
++            Direction enumdirection = (Direction) iterator.next();
++            BlockPos blockposition1 = pos.relative(enumdirection);
++
++            if (this.hasChunkAt(blockposition1)) {
++                IBlockData iblockdata = this.getBlockState(blockposition1);
++
++                if (iblockdata.is(Blocks.COMPARATOR)) {
++                    this.neighborChanged(iblockdata, blockposition1, block, pos, false);
++                } else if (iblockdata.isRedstoneConductor(this, blockposition1)) {
++                    blockposition1 = blockposition1.relative(enumdirection);
++                    iblockdata = this.getBlockState(blockposition1);
++                    if (iblockdata.is(Blocks.COMPARATOR)) {
++                        this.neighborChanged(iblockdata, blockposition1, block, pos, false);
+                     }
+                 }
+             }
+         }
++
+     }
+ 
+     @Override
+     public DifficultyInstance getCurrentDifficultyAt(BlockPos pos) {
+-        long l = 0L;
++        long i = 0L;
+         float f = 0.0F;
++
+         if (this.hasChunkAt(pos)) {
+             f = this.getMoonBrightness();
+-            l = this.getChunkAt(pos).getInhabitedTime();
++            i = this.getChunkAt(pos).getInhabitedTime();
+         }
+ 
+-        return new DifficultyInstance(this.getDifficulty(), this.getDayTime(), l, f);
++        return new DifficultyInstance(this.getDifficulty(), this.getDayTime(), i, f);
+     }
+ 
+     @Override
+@@ -933,8 +1074,7 @@
+         return this.skyDarken;
+     }
+ 
+-    public void setSkyFlashTime(int timeFlash) {
+-    }
++    public void setSkyFlashTime(int timeFlash) {}
+ 
+     @Override
+     public WorldBorder getWorldBorder() {
+@@ -947,7 +1087,7 @@
+ 
+     @Override
+     public DimensionType dimensionType() {
+-        return this.dimensionTypeRegistration.value();
++        return (DimensionType) this.dimensionTypeRegistration.value();
+     }
+ 
+     public ResourceKey<DimensionType> dimensionTypeId() {
+@@ -968,7 +1108,7 @@
+     }
+ 
+     @Override
+-    public boolean isStateAtPosition(BlockPos pos, Predicate<BlockState> state) {
++    public boolean isStateAtPosition(BlockPos pos, Predicate<IBlockData> state) {
+         return state.test(this.getBlockState(pos));
+     }
+ 
+@@ -981,8 +1121,9 @@
+ 
+     public BlockPos getBlockRandomPos(int x, int y, int z, int yMask) {
+         this.randValue = this.randValue * 3 + 1013904223;
+-        int i = this.randValue >> 2;
+-        return new BlockPos(x + (i & 15), y + (i >> 16 & yMask), z + (i >> 8 & 15));
++        int i1 = this.randValue >> 2;
++
++        return new BlockPos(x + (i1 & 15), y + (i1 >> 16 & yMask), z + (i1 >> 8 & 15));
+     }
+ 
+     public boolean noSave() {
+@@ -990,7 +1131,7 @@
+     }
+ 
+     public ProfilerFiller getProfiler() {
+-        return this.profiler.get();
++        return (ProfilerFiller) this.profiler.get();
+     }
+ 
+     public Supplier<ProfilerFiller> getProfilerSupplier() {
+@@ -1006,11 +1147,11 @@
+         return this.isDebug;
+     }
+ 
+-    protected abstract LevelEntityGetter<Entity> getEntities();
++    public abstract LevelEntityGetter<Entity> getEntities();
+ 
+     @Override
+     public long nextSubTickCount() {
+-        return this.subTickCount++;
++        return (long) (this.subTickCount++);
+     }
+ 
+     @Override
+@@ -1022,11 +1163,10 @@
+         return this.damageSources;
+     }
+ 
+-    public static enum ExplosionInteraction {
+-        NONE,
+-        BLOCK,
+-        MOB,
+-        TNT,
+-        BLOW;
++    public static enum a {
++
++        NONE, BLOCK, MOB, TNT, BLOW;
++
++        private a() {}
+     }
+ }

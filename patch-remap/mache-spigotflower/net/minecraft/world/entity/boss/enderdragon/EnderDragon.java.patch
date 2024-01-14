@@ -1,0 +1,1042 @@
+--- a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+@@ -25,10 +25,10 @@
+ import net.minecraft.world.entity.EntityDimensions;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.ExperienceOrb;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MoverType;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+ import net.minecraft.world.entity.ai.attributes.Attributes;
+ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+@@ -36,11 +36,11 @@
+ import net.minecraft.world.entity.boss.enderdragon.phases.DragonPhaseInstance;
+ import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhase;
+ import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhaseManager;
+-import net.minecraft.world.entity.monster.Enemy;
++import net.minecraft.world.entity.monster.IMonster;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -48,13 +48,25 @@
+ import net.minecraft.world.level.pathfinder.BinaryHeap;
+ import net.minecraft.world.level.pathfinder.Node;
+ import net.minecraft.world.level.pathfinder.Path;
+-import net.minecraft.world.phys.AABB;
+-import net.minecraft.world.phys.Vec3;
+ import org.joml.Vector3f;
+ import org.slf4j.Logger;
+ 
+-public class EnderDragon extends Mob implements Enemy {
++// CraftBukkit start
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.Explosion;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.storage.loot.LootParams;
++import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
++import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.Vec3;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.entity.EntityExplodeEvent;
++import org.bukkit.event.entity.EntityRegainHealthEvent;
++// CraftBukkit end
+ 
++public class EnderDragon extends Mob implements IMonster {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+     public static final EntityDataAccessor<Integer> DATA_PHASE = SynchedEntityData.defineId(EnderDragon.class, EntityDataSerializers.INT);
+     private static final TargetingConditions CRYSTAL_DESTROY_TARGETING = TargetingConditions.forCombat().range(64.0D);
+@@ -65,7 +77,7 @@
+     private static final String DRAGON_PHASE_KEY = "DragonPhase";
+     public final double[][] positions = new double[64][3];
+     public int posPointer = -1;
+-    private final EnderDragonPart[] subEntities;
++    public final EnderDragonPart[] subEntities;
+     public final EnderDragonPart head;
+     private final EnderDragonPart neck;
+     private final EnderDragonPart body;
+@@ -90,8 +102,9 @@
+     private final Node[] nodes;
+     private final int[] nodeAdjacency;
+     private final BinaryHeap openSet;
++    private final Explosion explosionSource; // CraftBukkit - reusable source for CraftTNTPrimed.getSource()
+ 
+-    public EnderDragon(EntityType<? extends EnderDragon> entitytype, Level level) {
++    public EnderDragon(EntityType<? extends EnderDragon> entityType, Level level) {
+         super(EntityType.ENDER_DRAGON, level);
+         this.fightOrigin = BlockPos.ZERO;
+         this.growlTime = 100;
+@@ -111,14 +124,15 @@
+         this.noPhysics = true;
+         this.noCulling = true;
+         this.phaseManager = new EnderDragonPhaseManager(this);
++        this.explosionSource = new Explosion(level, this, null, null, Double.NaN, Double.NaN, Double.NaN, Float.NaN, true, Explosion.Effect.DESTROY, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE); // CraftBukkit
+     }
+ 
+-    public void setDragonFight(EndDragonFight enddragonfight) {
+-        this.dragonFight = enddragonfight;
++    public void setDragonFight(EndDragonFight dragonFight) {
++        this.dragonFight = dragonFight;
+     }
+ 
+-    public void setFightOrigin(BlockPos blockpos) {
+-        this.fightOrigin = blockpos;
++    public void setFightOrigin(BlockPos fightOrigin) {
++        this.fightOrigin = fightOrigin;
+     }
+ 
+     public BlockPos getFightOrigin() {
+@@ -130,7 +144,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean isFlapping() {
+         float f = Mth.cos(this.flapTime * 6.2831855F);
+         float f1 = Mth.cos(this.oFlapTime * 6.2831855F);
+@@ -139,7 +152,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void onFlap() {
+         if (this.level().isClientSide && !this.isSilent()) {
+             this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ENDER_DRAGON_FLAP, this.getSoundSource(), 5.0F, 0.8F + this.random.nextFloat() * 0.3F, false);
+@@ -148,34 +160,32 @@
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.getEntityData().define(EnderDragon.DATA_PHASE, EnderDragonPhase.HOVERING.getId());
+     }
+ 
+-    public double[] getLatencyPos(int i, float f) {
++    public double[] getLatencyPos(int bufferIndexOffset, float partialTicks) {
+         if (this.isDeadOrDying()) {
+-            f = 0.0F;
++            partialTicks = 0.0F;
+         }
+ 
+-        f = 1.0F - f;
+-        int j = this.posPointer - i & 63;
+-        int k = this.posPointer - i - 1 & 63;
++        partialTicks = 1.0F - partialTicks;
++        int j = this.posPointer - bufferIndexOffset & 63;
++        int k = this.posPointer - bufferIndexOffset - 1 & 63;
+         double[] adouble = new double[3];
+         double d0 = this.positions[j][0];
+         double d1 = Mth.wrapDegrees(this.positions[k][0] - d0);
+ 
+-        adouble[0] = d0 + d1 * (double) f;
++        adouble[0] = d0 + d1 * (double) partialTicks;
+         d0 = this.positions[j][1];
+         d1 = this.positions[k][1] - d0;
+-        adouble[1] = d0 + d1 * (double) f;
+-        adouble[2] = Mth.lerp((double) f, this.positions[j][2], this.positions[k][2]);
++        adouble[1] = d0 + d1 * (double) partialTicks;
++        adouble[2] = Mth.lerp((double) partialTicks, this.positions[j][2], this.positions[k][2]);
+         return adouble;
+     }
+ 
+     @Override
+-    @Override
+     public void aiStep() {
+         this.processFlappingMovement();
+         if (this.level().isClientSide) {
+@@ -187,14 +197,14 @@
+         }
+ 
+         if (this.dragonFight == null) {
+-            Level level = this.level();
++            Level world = this.level();
+ 
+-            if (level instanceof ServerLevel) {
+-                ServerLevel serverlevel = (ServerLevel) level;
+-                EndDragonFight enddragonfight = serverlevel.getDragonFight();
++            if (world instanceof ServerLevel) {
++                ServerLevel worldserver = (ServerLevel) world;
++                EndDragonFight enderdragonbattle = worldserver.getDragonFight();
+ 
+-                if (enddragonfight != null && this.getUUID().equals(enddragonfight.getDragonUUID())) {
+-                    this.dragonFight = enddragonfight;
++                if (enderdragonbattle != null && this.getUUID().equals(enderdragonbattle.getDragonUUID())) {
++                    this.dragonFight = enderdragonbattle;
+                 }
+             }
+         }
+@@ -211,10 +221,10 @@
+             this.level().addParticle(ParticleTypes.EXPLOSION, this.getX() + (double) f1, this.getY() + 2.0D + (double) f, this.getZ() + (double) f2, 0.0D, 0.0D, 0.0D);
+         } else {
+             this.checkCrystals();
+-            Vec3 vec3 = this.getDeltaMovement();
++            Vec3 vec3d = this.getDeltaMovement();
+ 
+-            f = 0.2F / ((float) vec3.horizontalDistance() * 10.0F + 1.0F);
+-            f *= (float) Math.pow(2.0D, vec3.y);
++            f = 0.2F / ((float) vec3d.horizontalDistance() * 10.0F + 1.0F);
++            f *= (float) Math.pow(2.0D, vec3d.y);
+             if (this.phaseManager.getCurrentPhase().isSitting()) {
+                 this.flapTime += 0.1F;
+             } else if (this.inWall) {
+@@ -252,22 +262,22 @@
+ 
+                     this.phaseManager.getCurrentPhase().doClientTick();
+                 } else {
+-                    DragonPhaseInstance dragonphaseinstance = this.phaseManager.getCurrentPhase();
++                    DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
+ 
+-                    dragonphaseinstance.doServerTick();
+-                    if (this.phaseManager.getCurrentPhase() != dragonphaseinstance) {
+-                        dragonphaseinstance = this.phaseManager.getCurrentPhase();
+-                        dragonphaseinstance.doServerTick();
++                    idragoncontroller.doServerTick();
++                    if (this.phaseManager.getCurrentPhase() != idragoncontroller) {
++                        idragoncontroller = this.phaseManager.getCurrentPhase();
++                        idragoncontroller.doServerTick();
+                     }
+ 
+-                    Vec3 vec31 = dragonphaseinstance.getFlyTargetLocation();
++                    Vec3 vec3d1 = idragoncontroller.getFlyTargetLocation();
+ 
+-                    if (vec31 != null) {
+-                        double d0 = vec31.x - this.getX();
+-                        double d1 = vec31.y - this.getY();
+-                        double d2 = vec31.z - this.getZ();
++                    if (vec3d1 != null && idragoncontroller.getPhase() != EnderDragonPhase.HOVERING) { // CraftBukkit - Don't move when hovering
++                        double d0 = vec3d1.x - this.getX();
++                        double d1 = vec3d1.y - this.getY();
++                        double d2 = vec3d1.z - this.getZ();
+                         double d3 = d0 * d0 + d1 * d1 + d2 * d2;
+-                        float f6 = dragonphaseinstance.getFlySpeed();
++                        float f6 = idragoncontroller.getFlySpeed();
+                         double d4 = Math.sqrt(d0 * d0 + d2 * d2);
+ 
+                         if (d4 > 0.0D) {
+@@ -276,14 +286,14 @@
+ 
+                         this.setDeltaMovement(this.getDeltaMovement().add(0.0D, d1 * 0.01D, 0.0D));
+                         this.setYRot(Mth.wrapDegrees(this.getYRot()));
+-                        Vec3 vec32 = vec31.subtract(this.getX(), this.getY(), this.getZ()).normalize();
+-                        Vec3 vec33 = (new Vec3((double) Mth.sin(this.getYRot() * 0.017453292F), this.getDeltaMovement().y, (double) (-Mth.cos(this.getYRot() * 0.017453292F)))).normalize();
++                        Vec3 vec3d2 = vec3d1.subtract(this.getX(), this.getY(), this.getZ()).normalize();
++                        Vec3 vec3d3 = (new Vec3((double) Mth.sin(this.getYRot() * 0.017453292F), this.getDeltaMovement().y, (double) (-Mth.cos(this.getYRot() * 0.017453292F)))).normalize();
+ 
+-                        f3 = Math.max(((float) vec33.dot(vec32) + 0.5F) / 1.5F, 0.0F);
++                        f3 = Math.max(((float) vec3d3.dot(vec3d2) + 0.5F) / 1.5F, 0.0F);
+                         if (Math.abs(d0) > 9.999999747378752E-6D || Math.abs(d2) > 9.999999747378752E-6D) {
+                             f4 = Mth.clamp(Mth.wrapDegrees(180.0F - (float) Mth.atan2(d0, d2) * 57.295776F - this.getYRot()), -50.0F, 50.0F);
+                             this.yRotA *= 0.8F;
+-                            this.yRotA += f4 * dragonphaseinstance.getTurnSpeed();
++                            this.yRotA += f4 * idragoncontroller.getTurnSpeed();
+                             this.setYRot(this.getYRot() + this.yRotA * 0.1F);
+                         }
+ 
+@@ -291,23 +301,23 @@
+                         f5 = 0.06F;
+                         this.moveRelative(0.06F * (f3 * f4 + (1.0F - f4)), new Vec3(0.0D, 0.0D, -1.0D));
+                         if (this.inWall) {
+-                            this.move(MoverType.SELF, this.getDeltaMovement().scale(0.800000011920929D));
++                            this.move(EnumMoveType.SELF, this.getDeltaMovement().scale(0.800000011920929D));
+                         } else {
+-                            this.move(MoverType.SELF, this.getDeltaMovement());
++                            this.move(EnumMoveType.SELF, this.getDeltaMovement());
+                         }
+ 
+-                        Vec3 vec34 = this.getDeltaMovement().normalize();
+-                        double d5 = 0.8D + 0.15D * (vec34.dot(vec33) + 1.0D) / 2.0D;
++                        Vec3 vec3d4 = this.getDeltaMovement().normalize();
++                        double d5 = 0.8D + 0.15D * (vec3d4.dot(vec3d3) + 1.0D) / 2.0D;
+ 
+                         this.setDeltaMovement(this.getDeltaMovement().multiply(d5, 0.9100000262260437D, d5));
+                     }
+                 }
+ 
+                 this.yBodyRot = this.getYRot();
+-                Vec3[] avec3 = new Vec3[this.subEntities.length];
++                Vec3[] avec3d = new Vec3[this.subEntities.length];
+ 
+                 for (int j = 0; j < this.subEntities.length; ++j) {
+-                    avec3[j] = new Vec3(this.subEntities[j].getX(), this.subEntities[j].getY(), this.subEntities[j].getZ());
++                    avec3d[j] = new Vec3(this.subEntities[j].getX(), this.subEntities[j].getY(), this.subEntities[j].getZ());
+                 }
+ 
+                 float f7 = (float) (this.getLatencyPos(5, 1.0F)[1] - this.getLatencyPos(10, 1.0F)[1]) * 10.0F * 0.017453292F;
+@@ -338,18 +348,18 @@
+                 int k;
+ 
+                 for (k = 0; k < 3; ++k) {
+-                    EnderDragonPart enderdragonpart = null;
++                    EnderDragonPart entitycomplexpart = null;
+ 
+                     if (k == 0) {
+-                        enderdragonpart = this.tail1;
++                        entitycomplexpart = this.tail1;
+                     }
+ 
+                     if (k == 1) {
+-                        enderdragonpart = this.tail2;
++                        entitycomplexpart = this.tail2;
+                     }
+ 
+                     if (k == 2) {
+-                        enderdragonpart = this.tail3;
++                        entitycomplexpart = this.tail3;
+                     }
+ 
+                     double[] adouble1 = this.getLatencyPos(12 + k * 2, 1.0F);
+@@ -360,7 +370,7 @@
+                     f5 = 1.5F;
+                     float f17 = (float) (k + 1) * 2.0F;
+ 
+-                    this.tickPart(enderdragonpart, (double) (-(f11 * 1.5F + f3 * f17) * f8), adouble1[1] - adouble[1] - (double) ((f17 + 1.5F) * f9) + 1.5D, (double) ((f12 * 1.5F + f4 * f17) * f8));
++                    this.tickPart(entitycomplexpart, (double) (-(f11 * 1.5F + f3 * f17) * f8), adouble1[1] - adouble[1] - (double) ((f17 + 1.5F) * f9) + 1.5D, (double) ((f12 * 1.5F + f4 * f17) * f8));
+                 }
+ 
+                 if (!this.level().isClientSide) {
+@@ -371,20 +381,20 @@
+                 }
+ 
+                 for (k = 0; k < this.subEntities.length; ++k) {
+-                    this.subEntities[k].xo = avec3[k].x;
+-                    this.subEntities[k].yo = avec3[k].y;
+-                    this.subEntities[k].zo = avec3[k].z;
+-                    this.subEntities[k].xOld = avec3[k].x;
+-                    this.subEntities[k].yOld = avec3[k].y;
+-                    this.subEntities[k].zOld = avec3[k].z;
++                    this.subEntities[k].xo = avec3d[k].x;
++                    this.subEntities[k].yo = avec3d[k].y;
++                    this.subEntities[k].zo = avec3d[k].z;
++                    this.subEntities[k].xOld = avec3d[k].x;
++                    this.subEntities[k].yOld = avec3d[k].y;
++                    this.subEntities[k].zOld = avec3d[k].z;
+                 }
+ 
+             }
+         }
+     }
+ 
+-    private void tickPart(EnderDragonPart enderdragonpart, double d0, double d1, double d2) {
+-        enderdragonpart.setPos(this.getX() + d0, this.getY() + d1, this.getZ() + d2);
++    private void tickPart(EnderDragonPart part, double offsetX, double d1, double offsetY) {
++        part.setPos(this.getX() + offsetX, this.getY() + d1, this.getZ() + offsetY);
+     }
+ 
+     private float getHeadYOffset() {
+@@ -403,35 +413,42 @@
+             if (this.nearestCrystal.isRemoved()) {
+                 this.nearestCrystal = null;
+             } else if (this.tickCount % 10 == 0 && this.getHealth() < this.getMaxHealth()) {
+-                this.setHealth(this.getHealth() + 1.0F);
++                // CraftBukkit start
++                EntityRegainHealthEvent event = new EntityRegainHealthEvent(this.getBukkitEntity(), 1.0F, EntityRegainHealthEvent.RegainReason.ENDER_CRYSTAL);
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (!event.isCancelled()) {
++                    this.setHealth((float) (this.getHealth() + event.getAmount()));
++                }
++                // CraftBukkit end
+             }
+         }
+ 
+         if (this.random.nextInt(10) == 0) {
+             List<EndCrystal> list = this.level().getEntitiesOfClass(EndCrystal.class, this.getBoundingBox().inflate(32.0D));
+-            EndCrystal endcrystal = null;
++            EndCrystal entityendercrystal = null;
+             double d0 = Double.MAX_VALUE;
+             Iterator iterator = list.iterator();
+ 
+             while (iterator.hasNext()) {
+-                EndCrystal endcrystal1 = (EndCrystal) iterator.next();
+-                double d1 = endcrystal1.distanceToSqr((Entity) this);
++                EndCrystal entityendercrystal1 = (EndCrystal) iterator.next();
++                double d1 = entityendercrystal1.distanceToSqr((Entity) this);
+ 
+                 if (d1 < d0) {
+                     d0 = d1;
+-                    endcrystal = endcrystal1;
++                    entityendercrystal = entityendercrystal1;
+                 }
+             }
+ 
+-            this.nearestCrystal = endcrystal;
++            this.nearestCrystal = entityendercrystal;
+         }
+ 
+     }
+ 
+-    private void knockBack(List<Entity> list) {
++    private void knockBack(List<Entity> entities) {
+         double d0 = (this.body.getBoundingBox().minX + this.body.getBoundingBox().maxX) / 2.0D;
+         double d1 = (this.body.getBoundingBox().minZ + this.body.getBoundingBox().maxZ) / 2.0D;
+-        Iterator iterator = list.iterator();
++        Iterator iterator = entities.iterator();
+ 
+         while (iterator.hasNext()) {
+             Entity entity = (Entity) iterator.next();
+@@ -451,8 +468,8 @@
+ 
+     }
+ 
+-    private void hurt(List<Entity> list) {
+-        Iterator iterator = list.iterator();
++    private void hurt(List<Entity> entities) {
++        Iterator iterator = entities.iterator();
+ 
+         while (iterator.hasNext()) {
+             Entity entity = (Entity) iterator.next();
+@@ -465,29 +482,36 @@
+ 
+     }
+ 
+-    private float rotWrap(double d0) {
+-        return (float) Mth.wrapDegrees(d0);
++    private float rotWrap(double angle) {
++        return (float) Mth.wrapDegrees(angle);
+     }
+ 
+-    private boolean checkWalls(AABB aabb) {
+-        int i = Mth.floor(aabb.minX);
+-        int j = Mth.floor(aabb.minY);
+-        int k = Mth.floor(aabb.minZ);
+-        int l = Mth.floor(aabb.maxX);
+-        int i1 = Mth.floor(aabb.maxY);
+-        int j1 = Mth.floor(aabb.maxZ);
++    private boolean checkWalls(AABB area) {
++        int i = Mth.floor(area.minX);
++        int j = Mth.floor(area.minY);
++        int k = Mth.floor(area.minZ);
++        int l = Mth.floor(area.maxX);
++        int i1 = Mth.floor(area.maxY);
++        int j1 = Mth.floor(area.maxZ);
+         boolean flag = false;
+         boolean flag1 = false;
++        // CraftBukkit start - Create a list to hold all the destroyed blocks
++        List<org.bukkit.block.Block> destroyedBlocks = new java.util.ArrayList<org.bukkit.block.Block>();
++        // CraftBukkit end
+ 
+         for (int k1 = i; k1 <= l; ++k1) {
+             for (int l1 = j; l1 <= i1; ++l1) {
+                 for (int i2 = k; i2 <= j1; ++i2) {
+-                    BlockPos blockpos = new BlockPos(k1, l1, i2);
+-                    BlockState blockstate = this.level().getBlockState(blockpos);
++                    BlockPos blockposition = new BlockPos(k1, l1, i2);
++                    IBlockData iblockdata = this.level().getBlockState(blockposition);
+ 
+-                    if (!blockstate.isAir() && !blockstate.is(BlockTags.DRAGON_TRANSPARENT)) {
+-                        if (this.level().getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING) && !blockstate.is(BlockTags.DRAGON_IMMUNE)) {
+-                            flag1 = this.level().removeBlock(blockpos, false) || flag1;
++                    if (!iblockdata.isAir() && !iblockdata.is(BlockTags.DRAGON_TRANSPARENT)) {
++                        if (this.level().getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING) && !iblockdata.is(BlockTags.DRAGON_IMMUNE)) {
++                            // CraftBukkit start - Add blocks to list rather than destroying them
++                            // flag1 = this.level().removeBlock(blockposition, false) || flag1;
++                            flag1 = true;
++                            destroyedBlocks.add(CraftBlock.at(this.level(), blockposition));
++                            // CraftBukkit end
+                         } else {
+                             flag = true;
+                         }
+@@ -496,31 +520,76 @@
+             }
+         }
+ 
++        // CraftBukkit start - Set off an EntityExplodeEvent for the dragon exploding all these blocks
++        // SPIGOT-4882: don't fire event if nothing hit
++        if (!flag1) {
++            return flag;
++        }
++
++        org.bukkit.entity.Entity bukkitEntity = this.getBukkitEntity();
++        EntityExplodeEvent event = new EntityExplodeEvent(bukkitEntity, bukkitEntity.getLocation(), destroyedBlocks, 0F);
++        bukkitEntity.getServer().getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            // This flag literally means 'Dragon hit something hard' (Obsidian, White Stone or Bedrock) and will cause the dragon to slow down.
++            // We should consider adding an event extension for it, or perhaps returning true if the event is cancelled.
++            return flag;
++        } else if (event.getYield() == 0F) {
++            // Yield zero ==> no drops
++            for (org.bukkit.block.Block block : event.blockList()) {
++                this.level().removeBlock(new BlockPos(block.getX(), block.getY(), block.getZ()), false);
++            }
++        } else {
++            for (org.bukkit.block.Block block : event.blockList()) {
++                org.bukkit.Material blockId = block.getType();
++                if (blockId.isAir()) {
++                    continue;
++                }
++
++                CraftBlock craftBlock = ((CraftBlock) block);
++                BlockPos blockposition = craftBlock.getPosition();
++
++                Block nmsBlock = craftBlock.getNMS().getBlock();
++                if (nmsBlock.dropFromExplosion(explosionSource)) {
++                    BlockEntity tileentity = craftBlock.getNMS().hasBlockEntity() ? this.level().getBlockEntity(blockposition) : null;
++                    LootParams.Builder loottableinfo_builder = (new LootParams.Builder((ServerLevel) this.level())).withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockposition)).withParameter(LootContextParams.TOOL, ItemStack.EMPTY).withParameter(LootContextParams.EXPLOSION_RADIUS, 1.0F / event.getYield()).withOptionalParameter(LootContextParams.BLOCK_ENTITY, tileentity);
++
++                    craftBlock.getNMS().getDrops(loottableinfo_builder).forEach((itemstack) -> {
++                        Block.popResource(this.level(), blockposition, itemstack);
++                    });
++                    craftBlock.getNMS().spawnAfterBreak((ServerLevel) this.level(), blockposition, ItemStack.EMPTY, false);
++                }
++                nmsBlock.wasExploded(this.level(), blockposition, explosionSource);
++
++                this.level().removeBlock(blockposition, false);
++            }
++        }
++        // CraftBukkit end
++
+         if (flag1) {
+-            BlockPos blockpos1 = new BlockPos(i + this.random.nextInt(l - i + 1), j + this.random.nextInt(i1 - j + 1), k + this.random.nextInt(j1 - k + 1));
++            BlockPos blockposition1 = new BlockPos(i + this.random.nextInt(l - i + 1), j + this.random.nextInt(i1 - j + 1), k + this.random.nextInt(j1 - k + 1));
+ 
+-            this.level().levelEvent(2008, blockpos1, 0);
++            this.level().levelEvent(2008, blockposition1, 0);
+         }
+ 
+         return flag;
+     }
+ 
+-    public boolean hurt(EnderDragonPart enderdragonpart, DamageSource damagesource, float f) {
++    public boolean hurt(EnderDragonPart part, DamageSource source, float damage) {
+         if (this.phaseManager.getCurrentPhase().getPhase() == EnderDragonPhase.DYING) {
+             return false;
+         } else {
+-            f = this.phaseManager.getCurrentPhase().onHurt(damagesource, f);
+-            if (enderdragonpart != this.head) {
+-                f = f / 4.0F + Math.min(f, 1.0F);
++            damage = this.phaseManager.getCurrentPhase().onHurt(source, damage);
++            if (part != this.head) {
++                damage = damage / 4.0F + Math.min(damage, 1.0F);
+             }
+ 
+-            if (f < 0.01F) {
++            if (damage < 0.01F) {
+                 return false;
+             } else {
+-                if (damagesource.getEntity() instanceof Player || damagesource.is(DamageTypeTags.ALWAYS_HURTS_ENDER_DRAGONS)) {
++                if (source.getEntity() instanceof Player || source.is(DamageTypeTags.ALWAYS_HURTS_ENDER_DRAGONS)) {
+                     float f1 = this.getHealth();
+ 
+-                    this.reallyHurt(damagesource, f);
++                    this.reallyHurt(source, damage);
+                     if (this.isDeadOrDying() && !this.phaseManager.getCurrentPhase().isSitting()) {
+                         this.setHealth(1.0F);
+                         this.phaseManager.setPhase(EnderDragonPhase.DYING);
+@@ -541,17 +610,15 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
+-        return !this.level().isClientSide ? this.hurt(this.body, damagesource, f) : false;
++    public boolean hurt(DamageSource source, float amount) {
++        return !this.level().isClientSide ? this.hurt(this.body, source, amount) : false;
+     }
+ 
+-    protected boolean reallyHurt(DamageSource damagesource, float f) {
+-        return super.hurt(damagesource, f);
++    protected boolean reallyHurt(DamageSource damageSource, float amount) {
++        return super.hurt(damageSource, amount);
+     }
+ 
+     @Override
+-    @Override
+     public void kill() {
+         this.remove(Entity.RemovalReason.KILLED);
+         this.gameEvent(GameEvent.ENTITY_DIE);
+@@ -562,7 +629,21 @@
+ 
+     }
+ 
++    // CraftBukkit start - SPIGOT-2420: Special case, the ender dragon drops 12000 xp for the first kill and 500 xp for every other kill and this over time.
+     @Override
++    public int getExpReward() {
++        // CraftBukkit - Moved from #tickDeath method
++        boolean flag = this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
++        short short0 = 500;
++
++        if (this.dragonFight != null && !this.dragonFight.hasPreviouslyKilledDragon()) {
++            short0 = 12000;
++        }
++
++        return flag ? short0 : 0;
++    }
++    // CraftBukkit end
++
+     @Override
+     protected void tickDeath() {
+         if (this.dragonFight != null) {
+@@ -578,15 +659,20 @@
+             this.level().addParticle(ParticleTypes.EXPLOSION_EMITTER, this.getX() + (double) f, this.getY() + 2.0D + (double) f1, this.getZ() + (double) f2, 0.0D, 0.0D, 0.0D);
+         }
+ 
++        // CraftBukkit start - SPIGOT-2420: Moved up to #getExpReward method
++        /*
+         boolean flag = this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
+         short short0 = 500;
+ 
+         if (this.dragonFight != null && !this.dragonFight.hasPreviouslyKilledDragon()) {
+             short0 = 12000;
+         }
++        */
++        int short0 = expToDrop;
++        // CraftBukkit end
+ 
+         if (this.level() instanceof ServerLevel) {
+-            if (this.dragonDeathTime > 150 && this.dragonDeathTime % 5 == 0 && flag) {
++            if (this.dragonDeathTime > 150 && this.dragonDeathTime % 5 == 0 && true) {  // CraftBukkit - SPIGOT-2420: Already checked for the game rule when calculating the xp
+                 ExperienceOrb.award((ServerLevel) this.level(), this.position(), Mth.floor((float) short0 * 0.08F));
+             }
+ 
+@@ -595,9 +681,9 @@
+             }
+         }
+ 
+-        this.move(MoverType.SELF, new Vec3(0.0D, 0.10000000149011612D, 0.0D));
++        this.move(EnumMoveType.SELF, new Vec3(0.0D, 0.10000000149011612D, 0.0D));
+         if (this.dragonDeathTime == 200 && this.level() instanceof ServerLevel) {
+-            if (flag) {
++            if (true) { // CraftBukkit - SPIGOT-2420: Already checked for the game rule when calculating the xp
+                 ExperienceOrb.award((ServerLevel) this.level(), this.position(), Mth.floor((float) short0 * 0.2F));
+             }
+ 
+@@ -670,10 +756,10 @@
+         return this.findClosestNode(this.getX(), this.getY(), this.getZ());
+     }
+ 
+-    public int findClosestNode(double d0, double d1, double d2) {
++    public int findClosestNode(double x, double d1, double y) {
+         float f = 10000.0F;
+         int i = 0;
+-        Node node = new Node(Mth.floor(d0), Mth.floor(d1), Mth.floor(d2));
++        Node pathpoint = new Node(Mth.floor(x), Mth.floor(d1), Mth.floor(y));
+         byte b0 = 0;
+ 
+         if (this.dragonFight == null || this.dragonFight.getCrystalsAlive() == 0) {
+@@ -682,7 +768,7 @@
+ 
+         for (int j = b0; j < 24; ++j) {
+             if (this.nodes[j] != null) {
+-                float f1 = this.nodes[j].distanceToSqr(node);
++                float f1 = this.nodes[j].distanceToSqr(pathpoint);
+ 
+                 if (f1 < f) {
+                     f = f1;
+@@ -695,28 +781,28 @@
+     }
+ 
+     @Nullable
+-    public Path findPath(int i, int j, @Nullable Node node) {
+-        Node node1;
++    public Path findPath(int startIndex, int finishIndex, @Nullable Node andThen) {
++        Node pathpoint1;
+ 
+         for (int k = 0; k < 24; ++k) {
+-            node1 = this.nodes[k];
+-            node1.closed = false;
+-            node1.f = 0.0F;
+-            node1.g = 0.0F;
+-            node1.h = 0.0F;
+-            node1.cameFrom = null;
+-            node1.heapIdx = -1;
++            pathpoint1 = this.nodes[k];
++            pathpoint1.closed = false;
++            pathpoint1.f = 0.0F;
++            pathpoint1.g = 0.0F;
++            pathpoint1.h = 0.0F;
++            pathpoint1.cameFrom = null;
++            pathpoint1.heapIdx = -1;
+         }
+ 
+-        Node node2 = this.nodes[i];
++        Node pathpoint2 = this.nodes[startIndex];
+ 
+-        node1 = this.nodes[j];
+-        node2.g = 0.0F;
+-        node2.h = node2.distanceTo(node1);
+-        node2.f = node2.h;
++        pathpoint1 = this.nodes[finishIndex];
++        pathpoint2.g = 0.0F;
++        pathpoint2.h = pathpoint2.distanceTo(pathpoint1);
++        pathpoint2.f = pathpoint2.h;
+         this.openSet.clear();
+-        this.openSet.insert(node2);
+-        Node node3 = node2;
++        this.openSet.insert(pathpoint2);
++        Node pathpoint3 = pathpoint2;
+         byte b0 = 0;
+ 
+         if (this.dragonFight == null || this.dragonFight.getCrystalsAlive() == 0) {
+@@ -725,28 +811,28 @@
+ 
+         label70:
+         while (!this.openSet.isEmpty()) {
+-            Node node4 = this.openSet.pop();
++            Node pathpoint4 = this.openSet.pop();
+ 
+-            if (node4.equals(node1)) {
+-                if (node != null) {
+-                    node.cameFrom = node1;
+-                    node1 = node;
++            if (pathpoint4.equals(pathpoint1)) {
++                if (andThen != null) {
++                    andThen.cameFrom = pathpoint1;
++                    pathpoint1 = andThen;
+                 }
+ 
+-                return this.reconstructPath(node2, node1);
++                return this.reconstructPath(pathpoint2, pathpoint1);
+             }
+ 
+-            if (node4.distanceTo(node1) < node3.distanceTo(node1)) {
+-                node3 = node4;
++            if (pathpoint4.distanceTo(pathpoint1) < pathpoint3.distanceTo(pathpoint1)) {
++                pathpoint3 = pathpoint4;
+             }
+ 
+-            node4.closed = true;
++            pathpoint4.closed = true;
+             int l = 0;
+             int i1 = 0;
+ 
+             while (true) {
+                 if (i1 < 24) {
+-                    if (this.nodes[i1] != node4) {
++                    if (this.nodes[i1] != pathpoint4) {
+                         ++i1;
+                         continue;
+                     }
+@@ -762,20 +848,20 @@
+                     }
+ 
+                     if ((this.nodeAdjacency[l] & 1 << i1) > 0) {
+-                        Node node5 = this.nodes[i1];
++                        Node pathpoint5 = this.nodes[i1];
+ 
+-                        if (!node5.closed) {
+-                            float f = node4.g + node4.distanceTo(node5);
++                        if (!pathpoint5.closed) {
++                            float f = pathpoint4.g + pathpoint4.distanceTo(pathpoint5);
+ 
+-                            if (!node5.inOpenSet() || f < node5.g) {
+-                                node5.cameFrom = node4;
+-                                node5.g = f;
+-                                node5.h = node5.distanceTo(node1);
+-                                if (node5.inOpenSet()) {
+-                                    this.openSet.changeCost(node5, node5.g + node5.h);
++                            if (!pathpoint5.inOpenSet() || f < pathpoint5.g) {
++                                pathpoint5.cameFrom = pathpoint4;
++                                pathpoint5.g = f;
++                                pathpoint5.h = pathpoint5.distanceTo(pathpoint1);
++                                if (pathpoint5.inOpenSet()) {
++                                    this.openSet.changeCost(pathpoint5, pathpoint5.g + pathpoint5.h);
+                                 } else {
+-                                    node5.f = node5.g + node5.h;
+-                                    this.openSet.insert(node5);
++                                    pathpoint5.f = pathpoint5.g + pathpoint5.h;
++                                    this.openSet.insert(pathpoint5);
+                                 }
+                             }
+                         }
+@@ -786,57 +872,60 @@
+             }
+         }
+ 
+-        if (node3 == node2) {
++        if (pathpoint3 == pathpoint2) {
+             return null;
+         } else {
+-            EnderDragon.LOGGER.debug("Failed to find path from {} to {}", i, j);
+-            if (node != null) {
+-                node.cameFrom = node3;
+-                node3 = node;
++            EnderDragon.LOGGER.debug("Failed to find path from {} to {}", startIndex, finishIndex);
++            if (andThen != null) {
++                andThen.cameFrom = pathpoint3;
++                pathpoint3 = andThen;
+             }
+ 
+-            return this.reconstructPath(node2, node3);
++            return this.reconstructPath(pathpoint2, pathpoint3);
+         }
+     }
+ 
+-    private Path reconstructPath(Node node, Node node1) {
++    private Path reconstructPath(Node start, Node finish) {
+         List<Node> list = Lists.newArrayList();
+-        Node node2 = node1;
++        Node pathpoint2 = finish;
+ 
+-        list.add(0, node1);
++        list.add(0, finish);
+ 
+-        while (node2.cameFrom != null) {
+-            node2 = node2.cameFrom;
+-            list.add(0, node2);
++        while (pathpoint2.cameFrom != null) {
++            pathpoint2 = pathpoint2.cameFrom;
++            list.add(0, pathpoint2);
+         }
+ 
+-        return new Path(list, new BlockPos(node1.x, node1.y, node1.z), true);
++        return new Path(list, new BlockPos(finish.x, finish.y, finish.z), true);
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putInt("DragonPhase", this.phaseManager.getCurrentPhase().getPhase().getId());
+-        compoundtag.putInt("DragonDeathTime", this.dragonDeathTime);
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putInt("DragonPhase", this.phaseManager.getCurrentPhase().getPhase().getId());
++        compound.putInt("DragonDeathTime", this.dragonDeathTime);
++        compound.putInt("Bukkit.expToDrop", expToDrop); // CraftBukkit - SPIGOT-2420: The ender dragon drops xp over time which can also happen between server starts
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        if (compoundtag.contains("DragonPhase")) {
+-            this.phaseManager.setPhase(EnderDragonPhase.getById(compoundtag.getInt("DragonPhase")));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        if (compound.contains("DragonPhase")) {
++            this.phaseManager.setPhase(EnderDragonPhase.getById(compound.getInt("DragonPhase")));
+         }
+ 
+-        if (compoundtag.contains("DragonDeathTime")) {
+-            this.dragonDeathTime = compoundtag.getInt("DragonDeathTime");
++        if (compound.contains("DragonDeathTime")) {
++            this.dragonDeathTime = compound.getInt("DragonDeathTime");
+         }
+ 
++        // CraftBukkit start - SPIGOT-2420: The ender dragon drops xp over time which can also happen between server starts
++        if (compound.contains("Bukkit.expToDrop")) {
++            this.expToDrop = compound.getInt("Bukkit.expToDrop");
++        }
++        // CraftBukkit end
+     }
+ 
+     @Override
+-    @Override
+     public void checkDespawn() {}
+ 
+     public EnderDragonPart[] getSubEntities() {
+@@ -844,115 +933,109 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     public SoundSource getSoundSource() {
+         return SoundSource.HOSTILE;
+     }
+ 
+     @Override
+-    @Override
+     protected SoundEvent getAmbientSound() {
+         return SoundEvents.ENDER_DRAGON_AMBIENT;
+     }
+ 
+     @Override
+-    @Override
+-    protected SoundEvent getHurtSound(DamageSource damagesource) {
++    protected SoundEvent getHurtSound(DamageSource damageSource) {
+         return SoundEvents.ENDER_DRAGON_HURT;
+     }
+ 
+     @Override
+-    @Override
+     protected float getSoundVolume() {
+         return 5.0F;
+     }
+ 
+-    public float getHeadPartYOffset(int i, double[] adouble, double[] adouble1) {
+-        DragonPhaseInstance dragonphaseinstance = this.phaseManager.getCurrentPhase();
+-        EnderDragonPhase<? extends DragonPhaseInstance> enderdragonphase = dragonphaseinstance.getPhase();
++    public float getHeadPartYOffset(int partIndex, double[] spineEndOffsets, double[] headPartOffsets) {
++        DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
++        EnderDragonPhase<? extends DragonPhaseInstance> dragoncontrollerphase = idragoncontroller.getPhase();
+         double d0;
+ 
+-        if (enderdragonphase != EnderDragonPhase.LANDING && enderdragonphase != EnderDragonPhase.TAKEOFF) {
+-            if (dragonphaseinstance.isSitting()) {
+-                d0 = (double) i;
+-            } else if (i == 6) {
++        if (dragoncontrollerphase != EnderDragonPhase.LANDING && dragoncontrollerphase != EnderDragonPhase.TAKEOFF) {
++            if (idragoncontroller.isSitting()) {
++                d0 = (double) partIndex;
++            } else if (partIndex == 6) {
+                 d0 = 0.0D;
+             } else {
+-                d0 = adouble1[1] - adouble[1];
++                d0 = headPartOffsets[1] - spineEndOffsets[1];
+             }
+         } else {
+-            BlockPos blockpos = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
+-            double d1 = Math.max(Math.sqrt(blockpos.distToCenterSqr(this.position())) / 4.0D, 1.0D);
++            BlockPos blockposition = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
++            double d1 = Math.max(Math.sqrt(blockposition.distToCenterSqr(this.position())) / 4.0D, 1.0D);
+ 
+-            d0 = (double) i / d1;
++            d0 = (double) partIndex / d1;
+         }
+ 
+         return (float) d0;
+     }
+ 
+-    public Vec3 getHeadLookVector(float f) {
+-        DragonPhaseInstance dragonphaseinstance = this.phaseManager.getCurrentPhase();
+-        EnderDragonPhase<? extends DragonPhaseInstance> enderdragonphase = dragonphaseinstance.getPhase();
++    public Vec3 getHeadLookVector(float partialTicks) {
++        DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
++        EnderDragonPhase<? extends DragonPhaseInstance> dragoncontrollerphase = idragoncontroller.getPhase();
+         float f1;
+-        Vec3 vec3;
++        Vec3 vec3d;
+ 
+-        if (enderdragonphase != EnderDragonPhase.LANDING && enderdragonphase != EnderDragonPhase.TAKEOFF) {
+-            if (dragonphaseinstance.isSitting()) {
++        if (dragoncontrollerphase != EnderDragonPhase.LANDING && dragoncontrollerphase != EnderDragonPhase.TAKEOFF) {
++            if (idragoncontroller.isSitting()) {
+                 float f2 = this.getXRot();
+ 
+                 f1 = 1.5F;
+                 this.setXRot(-45.0F);
+-                vec3 = this.getViewVector(f);
++                vec3d = this.getViewVector(partialTicks);
+                 this.setXRot(f2);
+             } else {
+-                vec3 = this.getViewVector(f);
++                vec3d = this.getViewVector(partialTicks);
+             }
+         } else {
+-            BlockPos blockpos = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
++            BlockPos blockposition = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
+ 
+-            f1 = Math.max((float) Math.sqrt(blockpos.distToCenterSqr(this.position())) / 4.0F, 1.0F);
++            f1 = Math.max((float) Math.sqrt(blockposition.distToCenterSqr(this.position())) / 4.0F, 1.0F);
+             float f3 = 6.0F / f1;
+             float f4 = this.getXRot();
+             float f5 = 1.5F;
+ 
+             this.setXRot(-f3 * 1.5F * 5.0F);
+-            vec3 = this.getViewVector(f);
++            vec3d = this.getViewVector(partialTicks);
+             this.setXRot(f4);
+         }
+ 
+-        return vec3;
++        return vec3d;
+     }
+ 
+-    public void onCrystalDestroyed(EndCrystal endcrystal, BlockPos blockpos, DamageSource damagesource) {
+-        Player player;
++    public void onCrystalDestroyed(EndCrystal crystal, BlockPos pos, DamageSource damageSource) {
++        Player entityhuman;
+ 
+-        if (damagesource.getEntity() instanceof Player) {
+-            player = (Player) damagesource.getEntity();
++        if (damageSource.getEntity() instanceof Player) {
++            entityhuman = (Player) damageSource.getEntity();
+         } else {
+-            player = this.level().getNearestPlayer(EnderDragon.CRYSTAL_DESTROY_TARGETING, (double) blockpos.getX(), (double) blockpos.getY(), (double) blockpos.getZ());
++            entityhuman = this.level().getNearestPlayer(EnderDragon.CRYSTAL_DESTROY_TARGETING, (double) pos.getX(), (double) pos.getY(), (double) pos.getZ());
+         }
+ 
+-        if (endcrystal == this.nearestCrystal) {
+-            this.hurt(this.head, this.damageSources().explosion(endcrystal, player), 10.0F);
++        if (crystal == this.nearestCrystal) {
++            this.hurt(this.head, this.damageSources().explosion(crystal, entityhuman), 10.0F);
+         }
+ 
+-        this.phaseManager.getCurrentPhase().onCrystalDestroyed(endcrystal, blockpos, damagesource, player);
++        this.phaseManager.getCurrentPhase().onCrystalDestroyed(crystal, pos, damageSource, entityhuman);
+     }
+ 
+     @Override
+-    @Override
+-    public void onSyncedDataUpdated(EntityDataAccessor<?> entitydataaccessor) {
+-        if (EnderDragon.DATA_PHASE.equals(entitydataaccessor) && this.level().isClientSide) {
++    public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
++        if (EnderDragon.DATA_PHASE.equals(key) && this.level().isClientSide) {
+             this.phaseManager.setPhase(EnderDragonPhase.getById((Integer) this.getEntityData().get(EnderDragon.DATA_PHASE)));
+         }
+ 
+-        super.onSyncedDataUpdated(entitydataaccessor);
++        super.onSyncedDataUpdated(key);
+     }
+ 
+     public EnderDragonPhaseManager getPhaseManager() {
+@@ -965,44 +1048,38 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean addEffect(MobEffectInstance mobeffectinstance, @Nullable Entity entity) {
++    public boolean addEffect(MobEffectInstance effectInstance, @Nullable Entity entity) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     protected boolean canRide(Entity entity) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     public boolean canChangeDimensions() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public void recreateFromPacket(ClientboundAddEntityPacket clientboundaddentitypacket) {
+-        super.recreateFromPacket(clientboundaddentitypacket);
+-        EnderDragonPart[] aenderdragonpart = this.getSubEntities();
++    public void recreateFromPacket(ClientboundAddEntityPacket packet) {
++        super.recreateFromPacket(packet);
++        EnderDragonPart[] aentitycomplexpart = this.getSubEntities();
+ 
+-        for (int i = 0; i < aenderdragonpart.length; ++i) {
+-            aenderdragonpart[i].setId(i + clientboundaddentitypacket.getId());
++        for (int i = 0; i < aentitycomplexpart.length; ++i) {
++            aentitycomplexpart[i].setId(i + packet.getId());
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canAttack(LivingEntity livingentity) {
+-        return livingentity.canBeSeenAsEnemy();
++    public boolean canAttack(LivingEntity target) {
++        return target.canBeSeenAsEnemy();
+     }
+ 
+     @Override
+-    @Override
+-    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitydimensions, float f) {
++    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitysize, float f) {
+         return new Vector3f(0.0F, this.body.getBbHeight(), 0.0F);
+     }
+ }

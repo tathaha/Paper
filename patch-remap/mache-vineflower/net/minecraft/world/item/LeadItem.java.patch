@@ -1,0 +1,127 @@
+--- a/net/minecraft/world/item/LeadItem.java
++++ b/net/minecraft/world/item/LeadItem.java
+@@ -1,65 +1,100 @@
+ package net.minecraft.world.item;
+ 
++import java.util.Iterator;
++import java.util.List;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.tags.BlockTags;
+ import net.minecraft.world.InteractionResult;
++import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.Mob;
+ import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.context.UseOnContext;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.AABB;
++// CraftBukkit start
++import org.bukkit.craftbukkit.CraftEquipmentSlot;
++import org.bukkit.event.hanging.HangingPlaceEvent;
++// CraftBukkit end
+ 
+ public class LeadItem extends Item {
++
+     public LeadItem(Item.Properties properties) {
+         super(properties);
+     }
+ 
+     @Override
+     public InteractionResult useOn(UseOnContext context) {
+-        Level level = context.getLevel();
+-        BlockPos clickedPos = context.getClickedPos();
+-        BlockState blockState = level.getBlockState(clickedPos);
+-        if (blockState.is(BlockTags.FENCES)) {
+-            Player player = context.getPlayer();
+-            if (!level.isClientSide && player != null) {
+-                bindPlayerMobs(player, level, clickedPos);
++        Level world = context.getLevel();
++        BlockPos blockposition = context.getClickedPos();
++        IBlockData iblockdata = world.getBlockState(blockposition);
++
++        if (iblockdata.is(BlockTags.FENCES)) {
++            Player entityhuman = context.getPlayer();
++
++            if (!world.isClientSide && entityhuman != null) {
++                bindPlayerMobs(entityhuman, world, blockposition, context.getHand()); // CraftBukkit - Pass hand
+             }
+ 
+-            return InteractionResult.sidedSuccess(level.isClientSide);
++            return InteractionResult.sidedSuccess(world.isClientSide);
+         } else {
+             return InteractionResult.PASS;
+         }
+     }
+ 
+-    public static InteractionResult bindPlayerMobs(Player player, Level level, BlockPos pos) {
+-        LeashFenceKnotEntity leashFenceKnotEntity = null;
++    public static InteractionResult bindPlayerMobs(Player entityhuman, Level world, BlockPos blockposition, net.minecraft.world.EnumHand enumhand) { // CraftBukkit - Add EnumHand
++        LeashFenceKnotEntity entityleash = null;
+         boolean flag = false;
+-        double d = 7.0;
+-        int x = pos.getX();
+-        int y = pos.getY();
+-        int z = pos.getZ();
++        double d0 = 7.0D;
++        int i = blockposition.getX();
++        int j = blockposition.getY();
++        int k = blockposition.getZ();
++        List<Mob> list = world.getEntitiesOfClass(Mob.class, new AABB((double) i - 7.0D, (double) j - 7.0D, (double) k - 7.0D, (double) i + 7.0D, (double) j + 7.0D, (double) k + 7.0D));
++        Iterator iterator = list.iterator();
+ 
+-        for (Mob mob : level.getEntitiesOfClass(
+-            Mob.class, new AABB((double)x - 7.0, (double)y - 7.0, (double)z - 7.0, (double)x + 7.0, (double)y + 7.0, (double)z + 7.0)
+-        )) {
+-            if (mob.getLeashHolder() == player) {
+-                if (leashFenceKnotEntity == null) {
+-                    leashFenceKnotEntity = LeashFenceKnotEntity.getOrCreateKnot(level, pos);
+-                    leashFenceKnotEntity.playPlacementSound();
++        while (iterator.hasNext()) {
++            Mob entityinsentient = (Mob) iterator.next();
++
++            if (entityinsentient.getLeashHolder() == entityhuman) {
++                if (entityleash == null) {
++                    entityleash = LeashFenceKnotEntity.getOrCreateKnot(world, blockposition);
++
++                    // CraftBukkit start - fire HangingPlaceEvent
++                    org.bukkit.inventory.EquipmentSlot hand = CraftEquipmentSlot.getHand(enumhand);
++                    HangingPlaceEvent event = new HangingPlaceEvent((org.bukkit.entity.Hanging) entityleash.getBukkitEntity(), entityhuman != null ? (org.bukkit.entity.Player) entityhuman.getBukkitEntity() : null, world.getWorld().getBlockAt(i, j, k), org.bukkit.block.BlockFace.SELF, hand);
++                    world.getCraftServer().getPluginManager().callEvent(event);
++
++                    if (event.isCancelled()) {
++                        entityleash.discard();
++                        return InteractionResult.PASS;
++                    }
++                    // CraftBukkit end
++                    entityleash.playPlacementSound();
+                 }
+ 
+-                mob.setLeashedTo(leashFenceKnotEntity, true);
++                // CraftBukkit start
++                if (org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerLeashEntityEvent(entityinsentient, entityleash, entityhuman, enumhand).isCancelled()) {
++                    continue;
++                }
++                // CraftBukkit end
++
++                entityinsentient.setLeashedTo(entityleash, true);
+                 flag = true;
+             }
+         }
+ 
+         if (flag) {
+-            level.gameEvent(GameEvent.BLOCK_ATTACH, pos, GameEvent.Context.of(player));
++            world.gameEvent(GameEvent.BLOCK_ATTACH, blockposition, GameEvent.Context.of((Entity) entityhuman));
+         }
+ 
+         return flag ? InteractionResult.SUCCESS : InteractionResult.PASS;
+     }
++
++    // CraftBukkit start
++    public static InteractionResult bindPlayerMobs(Player player, Level level, BlockPos pos) {
++        return bindPlayerMobs(player, level, pos, net.minecraft.world.EnumHand.MAIN_HAND);
++    }
++    // CraftBukkit end
+ }

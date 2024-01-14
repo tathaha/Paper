@@ -1,0 +1,324 @@
+--- a/net/minecraft/world/item/ItemStack.java
++++ b/net/minecraft/world/item/ItemStack.java
+@@ -81,6 +82,41 @@
+ import net.minecraft.world.level.block.state.pattern.BlockInWorld;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import com.mojang.serialization.Dynamic;
++import java.util.Map;
++import java.util.Objects;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.sounds.SoundEvent;
++import net.minecraft.sounds.SoundSource;
++import net.minecraft.stats.Stats;
++import net.minecraft.util.datafix.fixes.DataConverterTypes;
++import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.level.block.SaplingBlock;
++import net.minecraft.world.level.block.SignBlock;
++import net.minecraft.world.level.block.SoundType;
++import net.minecraft.world.level.block.WitherSkullBlock;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.block.entity.JukeboxBlockEntity;
++import net.minecraft.world.level.block.entity.SignBlockEntity;
++import net.minecraft.world.level.block.entity.SkullBlockEntity;
++import net.minecraft.world.level.gameevent.GameEvent;
++import org.bukkit.Location;
++import org.bukkit.TreeType;
++import org.bukkit.block.BlockState;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.block.CraftBlockState;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.craftbukkit.util.CraftLocation;
++import org.bukkit.craftbukkit.util.CraftMagicNumbers;
++import org.bukkit.entity.Player;
++import org.bukkit.event.block.BlockFertilizeEvent;
++import org.bukkit.event.player.PlayerItemDamageEvent;
++import org.bukkit.event.world.StructureGrowEvent;
++// CraftBukkit end
++
+ public final class ItemStack {
+ 
+     public static final Codec<ItemStack> CODEC = RecordCodecBuilder.create((instance) -> {
+@@ -175,11 +211,22 @@
+         this.item = null;
+     }
+ 
+-    private ItemStack(CompoundTag compoundtag) {
+-        this.item = (Item) BuiltInRegistries.ITEM.get(new ResourceLocation(compoundtag.getString("id")));
+-        this.count = compoundtag.getByte("Count");
+-        if (compoundtag.contains("tag", 10)) {
+-            this.tag = compoundtag.getCompound("tag").copy();
++    // Called to run this stack through the data converter to handle older storage methods and serialized items
++    public void convertStack(int version) {
++        if (0 < version && version < CraftMagicNumbers.INSTANCE.getDataVersion()) {
++            CompoundTag savedStack = new CompoundTag();
++            this.save(savedStack);
++            savedStack = (CompoundTag) MinecraftServer.getServer().fixerUpper.update(DataConverterTypes.ITEM_STACK, new Dynamic(NbtOps.INSTANCE, savedStack), version, CraftMagicNumbers.INSTANCE.getDataVersion()).getValue();
++            this.load(savedStack);
++        }
++    }
++
++    // CraftBukkit - break into own method
++    private void load(CompoundTag nbttagcompound) {
++        this.item = (Item) BuiltInRegistries.ITEM.get(new ResourceLocation(nbttagcompound.getString("id")));
++        this.count = nbttagcompound.getByte("Count");
++        if (nbttagcompound.contains("tag", 10)) {
++            this.tag = nbttagcompound.getCompound("tag").copy();
+             this.getItem().verifyTagAfterLoad(this.tag);
+         }
+ 
+@@ -189,7 +236,12 @@
+ 
+     }
+ 
+-    public static ItemStack of(CompoundTag compoundtag) {
++    private ItemStack(CompoundTag compoundTag) {
++        this.load(compoundTag);
++        // CraftBukkit end
++    }
++
++    public static ItemStack of(CompoundTag compoundTag) {
+         try {
+             return new ItemStack(compoundtag);
+         } catch (RuntimeException runtimeexception) {
+@@ -266,13 +318,165 @@
+             return InteractionResult.PASS;
+         } else {
+             Item item = this.getItem();
+-            InteractionResult interactionresult = item.useOn(useoncontext);
++            // CraftBukkit start - handle all block place event logic here
++            CompoundTag oldData = this.getTagClone();
++            int oldCount = this.getCount();
++            ServerLevel world = (ServerLevel) context.getLevel();
+ 
+             if (player != null && interactionresult.shouldAwardStats()) {
+                 player.awardStat(Stats.ITEM_USED.get(item));
+             }
+ 
+-            return interactionresult;
++                BlockFertilizeEvent fertilizeEvent = new BlockFertilizeEvent(CraftBlock.at(world, blockposition), (Player) entityhuman.getBukkitEntity(), (List< BlockState>) (List<? extends BlockState>) blocks);
++                fertilizeEvent.setCancelled(structureEvent != null && structureEvent.isCancelled());
++                org.bukkit.Bukkit.getPluginManager().callEvent(fertilizeEvent);
++
++                if (!fertilizeEvent.isCancelled()) {
++                    // Change the stack to its new contents if it hasn't been tampered with.
++                    if (this.getCount() == oldCount && Objects.equals(this.tag, oldData)) {
++                        this.setTag(newData);
++                        this.setCount(newCount);
++                    }
++                    for (CraftBlockState blockstate : blocks) {
++                        world.setBlock(blockstate.getPosition(),blockstate.getHandle(), blockstate.getFlag()); // SPIGOT-7248 - manual update to avoid physics where appropriate
++                    }
++                    entityhuman.awardStat(Stats.ITEM_USED.get(item)); // SPIGOT-7236 - award stat
++                }
++
++                SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
++                return enuminteractionresult;
++            }
++            world.captureTreeGeneration = false;
++
++            if (entityhuman != null && enuminteractionresult.shouldAwardStats()) {
++                EnumHand enumhand = context.getHand();
++                org.bukkit.event.block.BlockPlaceEvent placeEvent = null;
++                List<BlockState> blocks = new java.util.ArrayList<>(world.capturedBlockStates.values());
++                world.capturedBlockStates.clear();
++                if (blocks.size() > 1) {
++                    placeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockMultiPlaceEvent(world, entityhuman, enumhand, blocks, blockposition.getX(), blockposition.getY(), blockposition.getZ());
++                } else if (blocks.size() == 1) {
++                    placeEvent = org.bukkit.craftbukkit.event.CraftEventFactory.callBlockPlaceEvent(world, entityhuman, enumhand, blocks.get(0), blockposition.getX(), blockposition.getY(), blockposition.getZ());
++                }
++
++                if (placeEvent != null && (placeEvent.isCancelled() || !placeEvent.canBuild())) {
++                    enuminteractionresult = InteractionResult.FAIL; // cancel placement
++                    // PAIL: Remove this when MC-99075 fixed
++                    placeEvent.getPlayer().updateInventory();
++                    // revert back all captured blocks
++                    world.preventPoiUpdated = true; // CraftBukkit - SPIGOT-5710
++                    for (BlockState blockstate : blocks) {
++                        blockstate.update(true, false);
++                    }
++                    world.preventPoiUpdated = false;
++
++                    // Brute force all possible updates
++                    BlockPos placedPos = ((CraftBlock) placeEvent.getBlock()).getPosition();
++                    for (Direction dir : Direction.values()) {
++                        ((ServerPlayer) entityhuman).connection.send(new ClientboundBlockUpdatePacket(world, placedPos.relative(dir)));
++                    }
++                    SignItem.openSign = null; // SPIGOT-6758 - Reset on early return
++                } else {
++                    // Change the stack to its new contents if it hasn't been tampered with.
++                    if (this.getCount() == oldCount && Objects.equals(this.tag, oldData)) {
++                        this.setTag(newData);
++                        this.setCount(newCount);
++                    }
++
++                    for (Map.Entry<BlockPos, BlockEntity> e : world.capturedTileEntities.entrySet()) {
++                        world.setBlockEntity(e.getValue());
++                    }
++
++                    for (BlockState blockstate : blocks) {
++                        int updateFlag = ((CraftBlockState) blockstate).getFlag();
++                        IBlockData oldBlock = ((CraftBlockState) blockstate).getHandle();
++                        BlockPos newblockposition = ((CraftBlockState) blockstate).getPosition();
++                        IBlockData block = world.getBlockState(newblockposition);
++
++                        if (!(block.getBlock() instanceof BaseEntityBlock)) { // Containers get placed automatically
++                            block.getBlock().onPlace(block, world, newblockposition, oldBlock, true);
++                        }
++
++                        world.notifyAndUpdatePhysics(newblockposition, null, oldBlock, block, world.getBlockState(newblockposition), updateFlag, 512); // send null chunk as chunk.k() returns false by this point
++                    }
++
++                    // Special case juke boxes as they update their tile entity. Copied from ItemRecord.
++                    // PAIL: checkme on updates.
++                    if (this.item instanceof RecordItem) {
++                        BlockEntity tileentity = world.getBlockEntity(blockposition);
++
++                        if (tileentity instanceof JukeboxBlockEntity) {
++                            JukeboxBlockEntity tileentityjukebox = (JukeboxBlockEntity) tileentity;
++
++                            // There can only be one
++                            ItemStack record = this.copy();
++                            if (!record.isEmpty()) {
++                                record.setCount(1);
++                            }
++
++                            tileentityjukebox.setTheItem(record);
++                            world.gameEvent(GameEvent.BLOCK_CHANGE, blockposition, GameEvent.Context.of(entityhuman, world.getBlockState(blockposition)));
++                        }
++
++                        this.shrink(1);
++                        entityhuman.awardStat(Stats.PLAY_RECORD);
++                    }
++
++                    if (this.item == Items.WITHER_SKELETON_SKULL) { // Special case skulls to allow wither spawns to be cancelled
++                        BlockPos bp = blockposition;
++                        if (!world.getBlockState(blockposition).canBeReplaced()) {
++                            if (!world.getBlockState(blockposition).isSolid()) {
++                                bp = null;
++                            } else {
++                                bp = bp.relative(context.getClickedFace());
++                            }
++                        }
++                        if (bp != null) {
++                            BlockEntity te = world.getBlockEntity(bp);
++                            if (te instanceof SkullBlockEntity) {
++                                WitherSkullBlock.checkSpawn(world, bp, (SkullBlockEntity) te);
++                            }
++                        }
++                    }
++
++                    // SPIGOT-4678
++                    if (this.item instanceof SignItem && SignItem.openSign != null) {
++                        try {
++                            if (world.getBlockEntity(SignItem.openSign) instanceof SignBlockEntity tileentitysign) {
++                                if (world.getBlockState(SignItem.openSign).getBlock() instanceof SignBlock blocksign) {
++                                    blocksign.openTextEdit(entityhuman, tileentitysign, true, org.bukkit.event.player.PlayerSignOpenEvent.Cause.PLACE); // Craftbukkit
++                                }
++                            }
++                        } finally {
++                            SignItem.openSign = null;
++                        }
++                    }
++
++                    // SPIGOT-7315: Moved from BlockBed#setPlacedBy
++                    if (placeEvent != null && this.item instanceof BedItem) {
++                        BlockPos position = ((CraftBlock) placeEvent.getBlock()).getPosition();
++                        IBlockData blockData =  world.getBlockState(position);
++
++                        if (blockData.getBlock() instanceof BedBlock) {
++                            world.blockUpdated(position, Blocks.AIR);
++                            blockData.updateNeighbourShapes(world, position, 3);
++                        }
++                    }
++
++                    // SPIGOT-1288 - play sound stripped from ItemBlock
++                    if (this.item instanceof BlockItem) {
++                        SoundType soundeffecttype = ((BlockItem) this.item).getBlock().defaultBlockState().getSoundType(); // TODO: not strictly correct, however currently only affects decorated pots
++                        world.playSound(entityhuman, blockposition, soundeffecttype.getPlaceSound(), SoundSource.BLOCKS, (soundeffecttype.getVolume() + 1.0F) / 2.0F, soundeffecttype.getPitch() * 0.8F);
++                    }
++
++                    entityhuman.awardStat(Stats.ITEM_USED.get(item));
++                }
++            }
++            world.capturedTileEntities.clear();
++            world.capturedBlockStates.clear();
++            // CraftBukkit end
++
++            return enuminteractionresult;
+         }
+     }
+ 
+@@ -350,8 +581,23 @@
+                     }
+                 }
+ 
+-                i -= k;
+-                if (i <= 0) {
++                amount -= k;
++                // CraftBukkit start
++                if (user != null) {
++                    PlayerItemDamageEvent event = new PlayerItemDamageEvent(user.getBukkitEntity(), CraftItemStack.asCraftMirror(this), amount);
++                    event.getPlayer().getServer().getPluginManager().callEvent(event);
++
++                    if (amount != event.getDamage() || event.isCancelled()) {
++                        event.getPlayer().updateInventory();
++                    }
++                    if (event.isCancelled()) {
++                        return false;
++                    }
++
++                    amount = event.getDamage();
++                }
++                // CraftBukkit end
++                if (amount <= 0) {
+                     return false;
+                 }
+             }
+@@ -372,6 +618,11 @@
+                 if (this.hurt(i, t0.getRandom(), t0 instanceof ServerPlayer ? (ServerPlayer) t0 : null)) {
+                     consumer.accept(t0);
+                     Item item = this.getItem();
++                    // CraftBukkit start - Check for item breaking
++                    if (this.count == 1 && entity instanceof net.minecraft.world.entity.player.Player) {
++                        org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerItemBreakEvent((net.minecraft.world.entity.player.Player) entity, this);
++                    }
++                    // CraftBukkit end
+ 
+                     this.shrink(1);
+                     if (t0 instanceof Player) {
+@@ -525,6 +775,17 @@
+         return this.tag;
+     }
+ 
++    // CraftBukkit start
++    @Nullable
++    private CompoundTag getTagClone() {
++        return this.tag == null ? null : this.tag.copy();
++    }
++
++    private void setTagClone(@Nullable CompoundTag nbtttagcompound) {
++        this.setTag(nbtttagcompound == null ? null : nbtttagcompound.copy());
++    }
++    // CraftBukkit end
++
+     public CompoundTag getOrCreateTag() {
+         if (this.tag == null) {
+             this.setTag(new CompoundTag());
+@@ -949,6 +1210,13 @@
+         listtag.add(compoundtag);
+     }
+ 
++    // CraftBukkit start
++    @Deprecated
++    public void setItem(Item item) {
++        this.item = item;
++    }
++    // CraftBukkit end
++
+     public Component getDisplayName() {
+         MutableComponent mutablecomponent = Component.empty().append(this.getHoverName());
+ 

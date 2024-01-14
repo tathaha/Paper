@@ -1,0 +1,118 @@
+--- a/net/minecraft/server/gui/MinecraftServerGui.java
++++ b/net/minecraft/server/gui/MinecraftServerGui.java
+@@ -44,7 +44,7 @@
+     private final Collection<Runnable> finalizers = Lists.newArrayList();
+     final AtomicBoolean isClosing = new AtomicBoolean();
+ 
+-    public static MinecraftServerGui showFrameFor(final DedicatedServer dedicatedserver) {
++    public static MinecraftServerGui showFrameFor(final DedicatedServer server) {
+         try {
+             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+         } catch (Exception exception) {
+@@ -52,32 +52,31 @@
+         }
+ 
+         final JFrame jframe = new JFrame("Minecraft server");
+-        final MinecraftServerGui minecraftservergui = new MinecraftServerGui(dedicatedserver);
++        final MinecraftServerGui servergui = new MinecraftServerGui(server);
+ 
+         jframe.setDefaultCloseOperation(2);
+-        jframe.add(minecraftservergui);
++        jframe.add(servergui);
+         jframe.pack();
+         jframe.setLocationRelativeTo((Component) null);
+         jframe.setVisible(true);
+         jframe.addWindowListener(new WindowAdapter() {
+-            @Override
+             public void windowClosing(WindowEvent windowevent) {
+-                if (!minecraftservergui.isClosing.getAndSet(true)) {
++                if (!servergui.isClosing.getAndSet(true)) {
+                     jframe.setTitle("Minecraft server - shutting down!");
+-                    dedicatedserver.halt(true);
+-                    minecraftservergui.runFinalizers();
++                    server.halt(true);
++                    servergui.runFinalizers();
+                 }
+ 
+             }
+         });
+         Objects.requireNonNull(jframe);
+-        minecraftservergui.addFinalizer(jframe::dispose);
+-        minecraftservergui.start();
+-        return minecraftservergui;
++        servergui.addFinalizer(jframe::dispose);
++        servergui.start();
++        return servergui;
+     }
+ 
+-    private MinecraftServerGui(DedicatedServer dedicatedserver) {
+-        this.server = dedicatedserver;
++    private MinecraftServerGui(DedicatedServer server) {
++        this.server = server;
+         this.setPreferredSize(new Dimension(854, 480));
+         this.setLayout(new BorderLayout());
+ 
+@@ -90,18 +89,18 @@
+ 
+     }
+ 
+-    public void addFinalizer(Runnable runnable) {
+-        this.finalizers.add(runnable);
++    public void addFinalizer(Runnable finalizer) {
++        this.finalizers.add(finalizer);
+     }
+ 
+     private JComponent buildInfoPanel() {
+         JPanel jpanel = new JPanel(new BorderLayout());
+-        StatsComponent statscomponent = new StatsComponent(this.server);
+-        Collection collection = this.finalizers;
++        StatsComponent guistatscomponent = new StatsComponent(this.server);
++        Collection<Runnable> collection = this.finalizers; // CraftBukkit - decompile error
+ 
+-        Objects.requireNonNull(statscomponent);
+-        collection.add(statscomponent::close);
+-        jpanel.add(statscomponent, "North");
++        Objects.requireNonNull(guistatscomponent);
++        collection.add(guistatscomponent::close);
++        jpanel.add(guistatscomponent, "North");
+         jpanel.add(this.buildPlayerPanel(), "Center");
+         jpanel.setBorder(new TitledBorder(new EtchedBorder(), "Stats"));
+         return jpanel;
+@@ -134,7 +133,6 @@
+             jtextfield.setText("");
+         });
+         jtextarea.addFocusListener(new FocusAdapter() {
+-            @Override
+             public void focusGained(FocusEvent focusevent) {}
+         });
+         jpanel.add(jscrollpane, "Center");
+@@ -168,22 +166,23 @@
+         this.finalizers.forEach(Runnable::run);
+     }
+ 
+-    public void print(JTextArea jtextarea, JScrollPane jscrollpane, String s) {
++    private static final java.util.regex.Pattern ANSI = java.util.regex.Pattern.compile("\\x1B\\[([0-9]{1,2}(;[0-9]{1,2})*)?[m|K]"); // CraftBukkit
++    public void print(JTextArea textArea, JScrollPane scrollPane, String line) {
+         if (!SwingUtilities.isEventDispatchThread()) {
+             SwingUtilities.invokeLater(() -> {
+-                this.print(jtextarea, jscrollpane, s);
++                this.print(textArea, scrollPane, line);
+             });
+         } else {
+-            Document document = jtextarea.getDocument();
+-            JScrollBar jscrollbar = jscrollpane.getVerticalScrollBar();
++            Document document = textArea.getDocument();
++            JScrollBar jscrollbar = scrollPane.getVerticalScrollBar();
+             boolean flag = false;
+ 
+-            if (jscrollpane.getViewport().getView() == jtextarea) {
++            if (scrollPane.getViewport().getView() == textArea) {
+                 flag = (double) jscrollbar.getValue() + jscrollbar.getSize().getHeight() + (double) (MinecraftServerGui.MONOSPACED.getSize() * 4) > (double) jscrollbar.getMaximum();
+             }
+ 
+             try {
+-                document.insertString(document.getLength(), s, (AttributeSet) null);
++                document.insertString(document.getLength(), ANSI.matcher(line).replaceAll(""), (AttributeSet) null); // CraftBukkit
+             } catch (BadLocationException badlocationexception) {
+                 ;
+             }

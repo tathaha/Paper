@@ -1,0 +1,228 @@
+--- a/net/minecraft/world/level/block/entity/BellBlockEntity.java
++++ b/net/minecraft/world/level/block/entity/BellBlockEntity.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.level.block.entity;
+ 
++import java.util.Iterator;
+ import java.util.List;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -13,12 +14,14 @@
+ import net.minecraft.world.effect.MobEffects;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
++import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.phys.AABB;
+ import org.apache.commons.lang3.mutable.MutableInt;
+ 
+ public class BellBlockEntity extends BlockEntity {
++
+     private static final int DURATION = 50;
+     private static final int GLOW_DURATION = 60;
+     private static final int MIN_TICKS_BETWEEN_SEARCHES = 60;
+@@ -32,10 +35,10 @@
+     public boolean shaking;
+     public Direction clickDirection;
+     private List<LivingEntity> nearbyEntities;
+-    private boolean resonating;
+-    private int resonationTicks;
++    public boolean resonating;
++    public int resonationTicks;
+ 
+-    public BellBlockEntity(BlockPos pos, BlockState blockState) {
++    public BellBlockEntity(BlockPos pos, IBlockData blockState) {
+         super(BlockEntityType.BELL, pos, blockState);
+     }
+ 
+@@ -53,9 +56,9 @@
+         }
+     }
+ 
+-    private static void tick(Level level, BlockPos pos, BlockState state, BellBlockEntity blockEntity, BellBlockEntity.ResonationEndAction resonationEndAction) {
++    private static void tick(Level level, BlockPos pos, IBlockData state, BellBlockEntity blockEntity, BellBlockEntity.ResonationEndAction resonationEndAction) {
+         if (blockEntity.shaking) {
+-            blockEntity.ticks++;
++            ++blockEntity.ticks;
+         }
+ 
+         if (blockEntity.ticks >= 50) {
+@@ -65,29 +68,31 @@
+ 
+         if (blockEntity.ticks >= 5 && blockEntity.resonationTicks == 0 && areRaidersNearby(pos, blockEntity.nearbyEntities)) {
+             blockEntity.resonating = true;
+-            level.playSound(null, pos, SoundEvents.BELL_RESONATE, SoundSource.BLOCKS, 1.0F, 1.0F);
++            level.playSound((Player) null, pos, SoundEvents.BELL_RESONATE, SoundSource.BLOCKS, 1.0F, 1.0F);
+         }
+ 
+         if (blockEntity.resonating) {
+             if (blockEntity.resonationTicks < 40) {
+-                blockEntity.resonationTicks++;
++                ++blockEntity.resonationTicks;
+             } else {
+                 resonationEndAction.run(level, pos, blockEntity.nearbyEntities);
+                 blockEntity.resonating = false;
+             }
+         }
++
+     }
+ 
+-    public static void clientTick(Level level, BlockPos pos, BlockState state, BellBlockEntity blockEntity) {
++    public static void clientTick(Level level, BlockPos pos, IBlockData state, BellBlockEntity blockEntity) {
+         tick(level, pos, state, blockEntity, BellBlockEntity::showBellParticles);
+     }
+ 
+-    public static void serverTick(Level level, BlockPos pos, BlockState state, BellBlockEntity blockEntity) {
++    public static void serverTick(Level level, BlockPos pos, IBlockData state, BellBlockEntity blockEntity) {
+         tick(level, pos, state, blockEntity, BellBlockEntity::makeRaidersGlow);
+     }
+ 
+     public void onHit(Direction direction) {
+-        BlockPos blockPos = this.getBlockPos();
++        BlockPos blockposition = this.getBlockPos();
++
+         this.clickDirection = direction;
+         if (this.shaking) {
+             this.ticks = 0;
+@@ -95,72 +100,88 @@
+             this.shaking = true;
+         }
+ 
+-        this.level.blockEvent(blockPos, this.getBlockState().getBlock(), 1, direction.get3DDataValue());
++        this.level.blockEvent(blockposition, this.getBlockState().getBlock(), 1, direction.get3DDataValue());
+     }
+ 
+     private void updateEntities() {
+-        BlockPos blockPos = this.getBlockPos();
++        BlockPos blockposition = this.getBlockPos();
++
+         if (this.level.getGameTime() > this.lastRingTimestamp + 60L || this.nearbyEntities == null) {
+             this.lastRingTimestamp = this.level.getGameTime();
+-            AABB aABB = new AABB(blockPos).inflate(48.0);
+-            this.nearbyEntities = this.level.getEntitiesOfClass(LivingEntity.class, aABB);
++            AABB axisalignedbb = (new AABB(blockposition)).inflate(48.0D);
++
++            this.nearbyEntities = this.level.getEntitiesOfClass(LivingEntity.class, axisalignedbb);
+         }
+ 
+         if (!this.level.isClientSide) {
+-            for (LivingEntity livingEntity : this.nearbyEntities) {
+-                if (livingEntity.isAlive() && !livingEntity.isRemoved() && blockPos.closerToCenterThan(livingEntity.position(), 32.0)) {
+-                    livingEntity.getBrain().setMemory(MemoryModuleType.HEARD_BELL_TIME, this.level.getGameTime());
++            Iterator iterator = this.nearbyEntities.iterator();
++
++            while (iterator.hasNext()) {
++                LivingEntity entityliving = (LivingEntity) iterator.next();
++
++                if (entityliving.isAlive() && !entityliving.isRemoved() && blockposition.closerToCenterThan(entityliving.position(), 32.0D)) {
++                    entityliving.getBrain().setMemory(MemoryModuleType.HEARD_BELL_TIME, this.level.getGameTime()); // CraftBukkit - decompile error
+                 }
+             }
+         }
++
+     }
+ 
+     private static boolean areRaidersNearby(BlockPos pos, List<LivingEntity> raiders) {
+-        for (LivingEntity livingEntity : raiders) {
+-            if (livingEntity.isAlive()
+-                && !livingEntity.isRemoved()
+-                && pos.closerToCenterThan(livingEntity.position(), 32.0)
+-                && livingEntity.getType().is(EntityTypeTags.RAIDERS)) {
+-                return true;
++        Iterator iterator = raiders.iterator();
++
++        LivingEntity entityliving;
++
++        do {
++            if (!iterator.hasNext()) {
++                return false;
+             }
+-        }
+ 
+-        return false;
++            entityliving = (LivingEntity) iterator.next();
++        } while (!entityliving.isAlive() || entityliving.isRemoved() || !pos.closerToCenterThan(entityliving.position(), 32.0D) || !entityliving.getType().is(EntityTypeTags.RAIDERS));
++
++        return true;
+     }
+ 
+     private static void makeRaidersGlow(Level level, BlockPos pos, List<LivingEntity> raiders) {
+-        raiders.stream().filter(raider -> isRaiderWithinRange(pos, raider)).forEach(BellBlockEntity::glow);
++        List<org.bukkit.entity.LivingEntity> entities = // CraftBukkit
++        raiders.stream().filter((entityliving) -> {
++            return isRaiderWithinRange(pos, entityliving);
++        }).map((entity) -> (org.bukkit.entity.LivingEntity) entity.getBukkitEntity()).collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new)); // CraftBukkit
++
++        org.bukkit.craftbukkit.event.CraftEventFactory.handleBellResonateEvent(level, pos, entities).forEach(BellBlockEntity::glow);
++        // CraftBukkit end
+     }
+ 
+     private static void showBellParticles(Level level, BlockPos pos, List<LivingEntity> raiders) {
+-        MutableInt mutableInt = new MutableInt(16700985);
+-        int i = (int)raiders.stream().filter(raider -> pos.closerToCenterThan(raider.position(), 48.0)).count();
+-        raiders.stream()
+-            .filter(raider -> isRaiderWithinRange(pos, raider))
+-            .forEach(
+-                raider -> {
+-                    float f = 1.0F;
+-                    double squareRoot = Math.sqrt(
+-                        (raider.getX() - (double)pos.getX()) * (raider.getX() - (double)pos.getX())
+-                            + (raider.getZ() - (double)pos.getZ()) * (raider.getZ() - (double)pos.getZ())
+-                    );
+-                    double d = (double)((float)pos.getX() + 0.5F) + 1.0 / squareRoot * (raider.getX() - (double)pos.getX());
+-                    double d1 = (double)((float)pos.getZ() + 0.5F) + 1.0 / squareRoot * (raider.getZ() - (double)pos.getZ());
+-                    int i1 = Mth.clamp((i - 21) / -2, 3, 15);
+-        
+-                    for (int i2 = 0; i2 < i1; i2++) {
+-                        int i3 = mutableInt.addAndGet(5);
+-                        double d2 = (double)FastColor.ARGB32.red(i3) / 255.0;
+-                        double d3 = (double)FastColor.ARGB32.green(i3) / 255.0;
+-                        double d4 = (double)FastColor.ARGB32.blue(i3) / 255.0;
+-                        level.addParticle(ParticleTypes.ENTITY_EFFECT, d, (double)((float)pos.getY() + 0.5F), d1, d2, d3, d4);
+-                    }
+-                }
+-            );
++        MutableInt mutableint = new MutableInt(16700985);
++        int i = (int) raiders.stream().filter((entityliving) -> {
++            return pos.closerToCenterThan(entityliving.position(), 48.0D);
++        }).count();
++
++        raiders.stream().filter((entityliving) -> {
++            return isRaiderWithinRange(pos, entityliving);
++        }).forEach((entityliving) -> {
++            float f = 1.0F;
++            double d0 = Math.sqrt((entityliving.getX() - (double) pos.getX()) * (entityliving.getX() - (double) pos.getX()) + (entityliving.getZ() - (double) pos.getZ()) * (entityliving.getZ() - (double) pos.getZ()));
++            double d1 = (double) ((float) pos.getX() + 0.5F) + 1.0D / d0 * (entityliving.getX() - (double) pos.getX());
++            double d2 = (double) ((float) pos.getZ() + 0.5F) + 1.0D / d0 * (entityliving.getZ() - (double) pos.getZ());
++            int j = Mth.clamp((i - 21) / -2, 3, 15);
++
++            for (int k = 0; k < j; ++k) {
++                int l = mutableint.addAndGet(5);
++                double d3 = (double) FastColor.ARGB32.red(l) / 255.0D;
++                double d4 = (double) FastColor.ARGB32.green(l) / 255.0D;
++                double d5 = (double) FastColor.ARGB32.blue(l) / 255.0D;
++
++                level.addParticle(ParticleTypes.ENTITY_EFFECT, d1, (double) ((float) pos.getY() + 0.5F), d2, d3, d4, d5);
++            }
++
++        });
+     }
+ 
+     private static boolean isRaiderWithinRange(BlockPos pos, LivingEntity raider) {
+-        return raider.isAlive() && !raider.isRemoved() && pos.closerToCenterThan(raider.position(), 48.0) && raider.getType().is(EntityTypeTags.RAIDERS);
++        return raider.isAlive() && !raider.isRemoved() && pos.closerToCenterThan(raider.position(), 48.0D) && raider.getType().is(EntityTypeTags.RAIDERS);
+     }
+ 
+     private static void glow(LivingEntity entity) {
+@@ -168,7 +189,8 @@
+     }
+ 
+     @FunctionalInterface
+-    interface ResonationEndAction {
++    private interface ResonationEndAction {
++
+         void run(Level level, BlockPos pos, List<LivingEntity> raiders);
+     }
+ }

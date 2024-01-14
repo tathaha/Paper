@@ -1,0 +1,201 @@
+--- a/net/minecraft/world/entity/boss/enderdragon/EndCrystal.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EndCrystal.java
+@@ -19,6 +19,10 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.BaseFireBlock;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.ExplosionPrimeEvent;
++// CraftBukkit end
+ 
+ public class EndCrystal extends Entity {
+ 
+@@ -26,90 +30,99 @@
+     private static final EntityDataAccessor<Boolean> DATA_SHOW_BOTTOM = SynchedEntityData.defineId(EndCrystal.class, EntityDataSerializers.BOOLEAN);
+     public int time;
+ 
+-    public EndCrystal(EntityType<? extends EndCrystal> entitytype, Level level) {
+-        super(entitytype, level);
++    public EndCrystal(EntityType<? extends EndCrystal> entityType, Level level) {
++        super(entityType, level);
+         this.blocksBuilding = true;
+         this.time = this.random.nextInt(100000);
+     }
+ 
+-    public EndCrystal(Level level, double d0, double d1, double d2) {
++    public EndCrystal(Level level, double x, double d1, double y) {
+         this(EntityType.END_CRYSTAL, level);
+-        this.setPos(d0, d1, d2);
++        this.setPos(x, d1, y);
+     }
+ 
+     @Override
+-    @Override
+     protected Entity.MovementEmission getMovementEmission() {
+         return Entity.MovementEmission.NONE;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.getEntityData().define(EndCrystal.DATA_BEAM_TARGET, Optional.empty());
+         this.getEntityData().define(EndCrystal.DATA_SHOW_BOTTOM, true);
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         ++this.time;
+         if (this.level() instanceof ServerLevel) {
+-            BlockPos blockpos = this.blockPosition();
++            BlockPos blockposition = this.blockPosition();
+ 
+-            if (((ServerLevel) this.level()).getDragonFight() != null && this.level().getBlockState(blockpos).isAir()) {
+-                this.level().setBlockAndUpdate(blockpos, BaseFireBlock.getState(this.level(), blockpos));
++            if (((ServerLevel) this.level()).getDragonFight() != null && this.level().getBlockState(blockposition).isAir()) {
++                // CraftBukkit start
++                if (!CraftEventFactory.callBlockIgniteEvent(this.level(), blockposition, this).isCancelled()) {
++                    this.level().setBlockAndUpdate(blockposition, BaseFireBlock.getState(this.level(), blockposition));
++                }
++                // CraftBukkit end
+             }
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    protected void addAdditionalSaveData(CompoundTag compoundtag) {
++    protected void addAdditionalSaveData(CompoundTag compound) {
+         if (this.getBeamTarget() != null) {
+-            compoundtag.put("BeamTarget", NbtUtils.writeBlockPos(this.getBeamTarget()));
++            compound.put("BeamTarget", NbtUtils.writeBlockPos(this.getBeamTarget()));
+         }
+ 
+-        compoundtag.putBoolean("ShowBottom", this.showsBottom());
++        compound.putBoolean("ShowBottom", this.showsBottom());
+     }
+ 
+     @Override
+-    @Override
+-    protected void readAdditionalSaveData(CompoundTag compoundtag) {
+-        if (compoundtag.contains("BeamTarget", 10)) {
+-            this.setBeamTarget(NbtUtils.readBlockPos(compoundtag.getCompound("BeamTarget")));
++    protected void readAdditionalSaveData(CompoundTag compound) {
++        if (compound.contains("BeamTarget", 10)) {
++            this.setBeamTarget(NbtUtils.readBlockPos(compound.getCompound("BeamTarget")));
+         }
+ 
+-        if (compoundtag.contains("ShowBottom", 1)) {
+-            this.setShowBottom(compoundtag.getBoolean("ShowBottom"));
++        if (compound.contains("ShowBottom", 1)) {
++            this.setShowBottom(compound.getBoolean("ShowBottom"));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
+-        if (this.isInvulnerableTo(damagesource)) {
++    public boolean hurt(DamageSource source, float amount) {
++        if (this.isInvulnerableTo(source)) {
+             return false;
+-        } else if (damagesource.getEntity() instanceof EnderDragon) {
++        } else if (source.getEntity() instanceof EnderDragon) {
+             return false;
+         } else {
+             if (!this.isRemoved() && !this.level().isClientSide) {
++                // CraftBukkit start - All non-living entities need this
++                if (CraftEventFactory.handleNonLivingEntityDamageEvent(this, source, amount, false)) {
++                    return false;
++                }
++                // CraftBukkit end
+                 this.remove(Entity.RemovalReason.KILLED);
+-                if (!damagesource.is(DamageTypeTags.IS_EXPLOSION)) {
+-                    DamageSource damagesource1 = damagesource.getEntity() != null ? this.damageSources().explosion(this, damagesource.getEntity()) : null;
++                if (!source.is(DamageTypeTags.IS_EXPLOSION)) {
++                    DamageSource damagesource1 = source.getEntity() != null ? this.damageSources().explosion(this, source.getEntity()) : null;
+ 
+-                    this.level().explode(this, damagesource1, (ExplosionDamageCalculator) null, this.getX(), this.getY(), this.getZ(), 6.0F, false, Level.ExplosionInteraction.BLOCK);
++                    // CraftBukkit start
++                    ExplosionPrimeEvent event = CraftEventFactory.callExplosionPrimeEvent(this, 6.0F, false);
++                    if (event.isCancelled()) {
++                        this.unsetRemoved();
++                        return false;
++                    }
++                    this.level().explode(this, damagesource1, (ExplosionDamageCalculator) null, this.getX(), this.getY(), this.getZ(), event.getRadius(), event.getFire(), Level.a.BLOCK);
++                    // CraftBukkit end
+                 }
+ 
+-                this.onDestroyedBy(damagesource);
++                this.onDestroyedBy(source);
+             }
+ 
+             return true;
+@@ -117,25 +130,24 @@
+     }
+ 
+     @Override
+-    @Override
+     public void kill() {
+         this.onDestroyedBy(this.damageSources().generic());
+         super.kill();
+     }
+ 
+-    private void onDestroyedBy(DamageSource damagesource) {
++    private void onDestroyedBy(DamageSource source) {
+         if (this.level() instanceof ServerLevel) {
+-            EndDragonFight enddragonfight = ((ServerLevel) this.level()).getDragonFight();
++            EndDragonFight enderdragonbattle = ((ServerLevel) this.level()).getDragonFight();
+ 
+-            if (enddragonfight != null) {
+-                enddragonfight.onCrystalDestroyed(this, damagesource);
++            if (enderdragonbattle != null) {
++                enderdragonbattle.onCrystalDestroyed(this, source);
+             }
+         }
+ 
+     }
+ 
+-    public void setBeamTarget(@Nullable BlockPos blockpos) {
+-        this.getEntityData().set(EndCrystal.DATA_BEAM_TARGET, Optional.ofNullable(blockpos));
++    public void setBeamTarget(@Nullable BlockPos beamTarget) {
++        this.getEntityData().set(EndCrystal.DATA_BEAM_TARGET, Optional.ofNullable(beamTarget));
+     }
+ 
+     @Nullable
+@@ -143,8 +155,8 @@
+         return (BlockPos) ((Optional) this.getEntityData().get(EndCrystal.DATA_BEAM_TARGET)).orElse((Object) null);
+     }
+ 
+-    public void setShowBottom(boolean flag) {
+-        this.getEntityData().set(EndCrystal.DATA_SHOW_BOTTOM, flag);
++    public void setShowBottom(boolean showBottom) {
++        this.getEntityData().set(EndCrystal.DATA_SHOW_BOTTOM, showBottom);
+     }
+ 
+     public boolean showsBottom() {
+@@ -152,13 +164,11 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean shouldRenderAtSqrDistance(double d0) {
+-        return super.shouldRenderAtSqrDistance(d0) || this.getBeamTarget() != null;
++    public boolean shouldRenderAtSqrDistance(double distance) {
++        return super.shouldRenderAtSqrDistance(distance) || this.getBeamTarget() != null;
+     }
+ 
+     @Override
+-    @Override
+     public ItemStack getPickResult() {
+         return new ItemStack(Items.END_CRYSTAL);
+     }

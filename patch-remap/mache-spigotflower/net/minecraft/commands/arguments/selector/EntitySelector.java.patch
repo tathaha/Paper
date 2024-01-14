@@ -1,0 +1,296 @@
+--- a/net/minecraft/commands/arguments/selector/EntitySelector.java
++++ b/net/minecraft/commands/arguments/selector/EntitySelector.java
+@@ -26,16 +26,14 @@
+ public class EntitySelector {
+ 
+     public static final int INFINITE = Integer.MAX_VALUE;
+-    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_ARBITRARY = (vec3, list) -> {
++    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_ARBITRARY = (vec3d, list) -> {
+     };
+     private static final EntityTypeTest<Entity, ?> ANY_TYPE = new EntityTypeTest<Entity, Entity>() {
+-        @Override
+         public Entity tryCast(Entity entity) {
+             return entity;
+         }
+ 
+         @Override
+-        @Override
+         public Class<? extends Entity> getBaseClass() {
+             return Entity.class;
+         }
+@@ -57,20 +55,20 @@
+     private final EntityTypeTest<Entity, ?> type;
+     private final boolean usesSelector;
+ 
+-    public EntitySelector(int i, boolean flag, boolean flag1, Predicate<Entity> predicate, MinMaxBounds.Doubles minmaxbounds_doubles, Function<Vec3, Vec3> function, @Nullable AABB aabb, BiConsumer<Vec3, List<? extends Entity>> biconsumer, boolean flag2, @Nullable String s, @Nullable UUID uuid, @Nullable EntityType<?> entitytype, boolean flag3) {
+-        this.maxResults = i;
+-        this.includesEntities = flag;
+-        this.worldLimited = flag1;
++    public EntitySelector(int maxResults, boolean includeEntities, boolean worldLimited, Predicate<Entity> predicate, MinMaxBounds.Doubles range, Function<Vec3, Vec3> positions, @Nullable AABB aabb, BiConsumer<Vec3, List<? extends Entity>> order, boolean currentEntity, @Nullable String playerName, @Nullable UUID entityUUID, @Nullable EntityType<?> type, boolean usesSelector) {
++        this.maxResults = maxResults;
++        this.includesEntities = includeEntities;
++        this.worldLimited = worldLimited;
+         this.predicate = predicate;
+-        this.range = minmaxbounds_doubles;
+-        this.position = function;
++        this.range = range;
++        this.position = positions;
+         this.aabb = aabb;
+-        this.order = biconsumer;
+-        this.currentEntity = flag2;
+-        this.playerName = s;
+-        this.entityUUID = uuid;
+-        this.type = (EntityTypeTest) (entitytype == null ? EntitySelector.ANY_TYPE : entitytype);
+-        this.usesSelector = flag3;
++        this.order = order;
++        this.currentEntity = currentEntity;
++        this.playerName = playerName;
++        this.entityUUID = entityUUID;
++        this.type = (EntityTypeTest) (type == null ? EntitySelector.ANY_TYPE : type);
++        this.usesSelector = usesSelector;
+     }
+ 
+     public int getMaxResults() {
+@@ -93,15 +91,15 @@
+         return this.usesSelector;
+     }
+ 
+-    private void checkPermissions(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        if (this.usesSelector && !commandsourcestack.hasPermission(2)) {
++    private void checkPermissions(CommandSourceStack source) throws CommandSyntaxException {
++        if (this.usesSelector && !source.hasPermission(2, "minecraft.command.selector")) { // CraftBukkit
+             throw EntityArgument.ERROR_SELECTORS_NOT_ALLOWED.create();
+         }
+     }
+ 
+-    public Entity findSingleEntity(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        this.checkPermissions(commandsourcestack);
+-        List<? extends Entity> list = this.findEntities(commandsourcestack);
++    public Entity findSingleEntity(CommandSourceStack source) throws CommandSyntaxException {
++        this.checkPermissions(source);
++        List<? extends Entity> list = this.findEntities(source);
+ 
+         if (list.isEmpty()) {
+             throw EntityArgument.NO_ENTITIES_FOUND.create();
+@@ -112,22 +110,22 @@
+         }
+     }
+ 
+-    public List<? extends Entity> findEntities(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        return this.findEntitiesRaw(commandsourcestack).stream().filter((entity) -> {
+-            return entity.getType().isEnabled(commandsourcestack.enabledFeatures());
++    public List<? extends Entity> findEntities(CommandSourceStack source) throws CommandSyntaxException {
++        return this.findEntitiesRaw(source).stream().filter((entity) -> {
++            return entity.getType().isEnabled(source.enabledFeatures());
+         }).toList();
+     }
+ 
+-    private List<? extends Entity> findEntitiesRaw(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        this.checkPermissions(commandsourcestack);
++    private List<? extends Entity> findEntitiesRaw(CommandSourceStack source) throws CommandSyntaxException {
++        this.checkPermissions(source);
+         if (!this.includesEntities) {
+-            return this.findPlayers(commandsourcestack);
++            return this.findPlayers(source);
+         } else if (this.playerName != null) {
+-            ServerPlayer serverplayer = commandsourcestack.getServer().getPlayerList().getPlayerByName(this.playerName);
++            ServerPlayer entityplayer = source.getServer().getPlayerList().getPlayerByName(this.playerName);
+ 
+-            return (List) (serverplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{serverplayer}));
++            return (List) (entityplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{entityplayer}));
+         } else if (this.entityUUID != null) {
+-            Iterator iterator = commandsourcestack.getServer().getAllLevels().iterator();
++            Iterator iterator = source.getServer().getAllLevels().iterator();
+ 
+             Entity entity;
+ 
+@@ -136,46 +134,46 @@
+                     return Collections.emptyList();
+                 }
+ 
+-                ServerLevel serverlevel = (ServerLevel) iterator.next();
++                ServerLevel worldserver = (ServerLevel) iterator.next();
+ 
+-                entity = serverlevel.getEntity(this.entityUUID);
++                entity = worldserver.getEntity(this.entityUUID);
+             } while (entity == null);
+ 
+             return Lists.newArrayList(new Entity[]{entity});
+         } else {
+-            Vec3 vec3 = (Vec3) this.position.apply(commandsourcestack.getPosition());
+-            Predicate<Entity> predicate = this.getPredicate(vec3);
++            Vec3 vec3d = (Vec3) this.position.apply(source.getPosition());
++            Predicate<Entity> predicate = this.getPredicate(vec3d);
+ 
+             if (this.currentEntity) {
+-                return (List) (commandsourcestack.getEntity() != null && predicate.test(commandsourcestack.getEntity()) ? Lists.newArrayList(new Entity[]{commandsourcestack.getEntity()}) : Collections.emptyList());
++                return (List) (source.getEntity() != null && predicate.test(source.getEntity()) ? Lists.newArrayList(new Entity[]{source.getEntity()}) : Collections.emptyList());
+             } else {
+                 List<Entity> list = Lists.newArrayList();
+ 
+                 if (this.isWorldLimited()) {
+-                    this.addEntities(list, commandsourcestack.getLevel(), vec3, predicate);
++                    this.addEntities(list, source.getLevel(), vec3d, predicate);
+                 } else {
+-                    Iterator iterator1 = commandsourcestack.getServer().getAllLevels().iterator();
++                    Iterator iterator1 = source.getServer().getAllLevels().iterator();
+ 
+                     while (iterator1.hasNext()) {
+-                        ServerLevel serverlevel1 = (ServerLevel) iterator1.next();
++                        ServerLevel worldserver1 = (ServerLevel) iterator1.next();
+ 
+-                        this.addEntities(list, serverlevel1, vec3, predicate);
++                        this.addEntities(list, worldserver1, vec3d, predicate);
+                     }
+                 }
+ 
+-                return this.sortAndLimit(vec3, list);
++                return this.sortAndLimit(vec3d, list);
+             }
+         }
+     }
+ 
+-    private void addEntities(List<Entity> list, ServerLevel serverlevel, Vec3 vec3, Predicate<Entity> predicate) {
++    private void addEntities(List<Entity> result, ServerLevel level, Vec3 pos, Predicate<Entity> predicate) {
+         int i = this.getResultLimit();
+ 
+-        if (list.size() < i) {
++        if (result.size() < i) {
+             if (this.aabb != null) {
+-                serverlevel.getEntities(this.type, this.aabb.move(vec3), predicate, list, i);
++                level.getEntities(this.type, this.aabb.move(pos), predicate, result, i);
+             } else {
+-                serverlevel.getEntities(this.type, predicate, list, i);
++                level.getEntities(this.type, predicate, result, i);
+             }
+ 
+         }
+@@ -185,9 +183,9 @@
+         return this.order == EntitySelector.ORDER_ARBITRARY ? this.maxResults : Integer.MAX_VALUE;
+     }
+ 
+-    public ServerPlayer findSinglePlayer(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        this.checkPermissions(commandsourcestack);
+-        List<ServerPlayer> list = this.findPlayers(commandsourcestack);
++    public ServerPlayer findSinglePlayer(CommandSourceStack source) throws CommandSyntaxException {
++        this.checkPermissions(source);
++        List<ServerPlayer> list = this.findPlayers(source);
+ 
+         if (list.size() != 1) {
+             throw EntityArgument.NO_PLAYERS_FOUND.create();
+@@ -196,28 +194,28 @@
+         }
+     }
+ 
+-    public List<ServerPlayer> findPlayers(CommandSourceStack commandsourcestack) throws CommandSyntaxException {
+-        this.checkPermissions(commandsourcestack);
+-        ServerPlayer serverplayer;
++    public List<ServerPlayer> findPlayers(CommandSourceStack source) throws CommandSyntaxException {
++        this.checkPermissions(source);
++        ServerPlayer entityplayer;
+ 
+         if (this.playerName != null) {
+-            serverplayer = commandsourcestack.getServer().getPlayerList().getPlayerByName(this.playerName);
+-            return (List) (serverplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{serverplayer}));
++            entityplayer = source.getServer().getPlayerList().getPlayerByName(this.playerName);
++            return (List) (entityplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{entityplayer}));
+         } else if (this.entityUUID != null) {
+-            serverplayer = commandsourcestack.getServer().getPlayerList().getPlayer(this.entityUUID);
+-            return (List) (serverplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{serverplayer}));
++            entityplayer = source.getServer().getPlayerList().getPlayer(this.entityUUID);
++            return (List) (entityplayer == null ? Collections.emptyList() : Lists.newArrayList(new ServerPlayer[]{entityplayer}));
+         } else {
+-            Vec3 vec3 = (Vec3) this.position.apply(commandsourcestack.getPosition());
+-            Predicate<Entity> predicate = this.getPredicate(vec3);
++            Vec3 vec3d = (Vec3) this.position.apply(source.getPosition());
++            Predicate<Entity> predicate = this.getPredicate(vec3d);
+ 
+             if (this.currentEntity) {
+-                Entity entity = commandsourcestack.getEntity();
++                Entity entity = source.getEntity();
+ 
+                 if (entity instanceof ServerPlayer) {
+-                    ServerPlayer serverplayer1 = (ServerPlayer) entity;
++                    ServerPlayer entityplayer1 = (ServerPlayer) entity;
+ 
+-                    if (predicate.test(serverplayer1)) {
+-                        return Lists.newArrayList(new ServerPlayer[]{serverplayer1});
++                    if (predicate.test(entityplayer1)) {
++                        return Lists.newArrayList(new ServerPlayer[]{entityplayer1});
+                     }
+                 }
+ 
+@@ -227,16 +225,16 @@
+                 Object object;
+ 
+                 if (this.isWorldLimited()) {
+-                    object = commandsourcestack.getLevel().getPlayers(predicate, i);
++                    object = source.getLevel().getPlayers(predicate, i);
+                 } else {
+                     object = Lists.newArrayList();
+-                    Iterator iterator = commandsourcestack.getServer().getPlayerList().getPlayers().iterator();
++                    Iterator iterator = source.getServer().getPlayerList().getPlayers().iterator();
+ 
+                     while (iterator.hasNext()) {
+-                        ServerPlayer serverplayer2 = (ServerPlayer) iterator.next();
++                        ServerPlayer entityplayer2 = (ServerPlayer) iterator.next();
+ 
+-                        if (predicate.test(serverplayer2)) {
+-                            ((List) object).add(serverplayer2);
++                        if (predicate.test(entityplayer2)) {
++                            ((List) object).add(entityplayer2);
+                             if (((List) object).size() >= i) {
+                                 return (List) object;
+                             }
+@@ -244,40 +242,40 @@
+                     }
+                 }
+ 
+-                return this.sortAndLimit(vec3, (List) object);
++                return this.sortAndLimit(vec3d, (List) object);
+             }
+         }
+     }
+ 
+-    private Predicate<Entity> getPredicate(Vec3 vec3) {
++    private Predicate<Entity> getPredicate(Vec3 pos) {
+         Predicate<Entity> predicate = this.predicate;
+ 
+         if (this.aabb != null) {
+-            AABB aabb = this.aabb.move(vec3);
++            AABB axisalignedbb = this.aabb.move(pos);
+ 
+             predicate = predicate.and((entity) -> {
+-                return aabb.intersects(entity.getBoundingBox());
++                return axisalignedbb.intersects(entity.getBoundingBox());
+             });
+         }
+ 
+         if (!this.range.isAny()) {
+             predicate = predicate.and((entity) -> {
+-                return this.range.matchesSqr(entity.distanceToSqr(vec3));
++                return this.range.matchesSqr(entity.distanceToSqr(pos));
+             });
+         }
+ 
+         return predicate;
+     }
+ 
+-    private <T extends Entity> List<T> sortAndLimit(Vec3 vec3, List<T> list) {
+-        if (list.size() > 1) {
+-            this.order.accept(vec3, list);
++    private <T extends Entity> List<T> sortAndLimit(Vec3 pos, List<T> entities) {
++        if (entities.size() > 1) {
++            this.order.accept(pos, entities);
+         }
+ 
+-        return list.subList(0, Math.min(this.maxResults, list.size()));
++        return entities.subList(0, Math.min(this.maxResults, entities.size()));
+     }
+ 
+-    public static Component joinNames(List<? extends Entity> list) {
+-        return ComponentUtils.formatList(list, Entity::getDisplayName);
++    public static Component joinNames(List<? extends Entity> names) {
++        return ComponentUtils.formatList(names, Entity::getDisplayName);
+     }
+ }

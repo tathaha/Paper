@@ -1,0 +1,106 @@
+--- a/net/minecraft/world/entity/npc/Villager.java
++++ b/net/minecraft/world/entity/npc/Villager.java
+@@ -91,6 +92,13 @@
+ import net.minecraft.world.phys.AABB;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityTransformEvent;
++import org.bukkit.event.entity.VillagerReplenishTradeEvent;
++// CraftBukkit end
++
+ public class Villager extends AbstractVillager implements ReputationEventHandler, VillagerDataHolder {
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final EntityDataAccessor<VillagerData> DATA_VILLAGER_DATA = SynchedEntityData.defineId(Villager.class, EntityDataSerializers.VILLAGER_DATA);
+@@ -286,7 +240,7 @@
+                     this.increaseProfessionLevelOnUpdate = false;
+                 }
+ 
+-                this.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 200, 0));
++                this.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 200, 0), org.bukkit.event.entity.EntityPotionEffectEvent.Cause.VILLAGER_TRADE); // CraftBukkit
+             }
+         }
+ 
+@@ -397,8 +365,16 @@
+     public void restock() {
+         this.updateDemand();
+ 
+-        for (MerchantOffer merchantOffer : this.getOffers()) {
+-            merchantOffer.resetUses();
++        while (iterator.hasNext()) {
++            MerchantOffer merchantrecipe = (MerchantOffer) iterator.next();
++
++            // CraftBukkit start
++            VillagerReplenishTradeEvent event = new VillagerReplenishTradeEvent((org.bukkit.entity.Villager) this.getBukkitEntity(), merchantrecipe.asBukkit());
++            Bukkit.getPluginManager().callEvent(event);
++            if (!event.isCancelled()) {
++                merchantrecipe.resetUses();
++            }
++            // CraftBukkit end
+         }
+ 
+         this.resendOffersToTradingPlayer();
+@@ -458,8 +438,18 @@
+     private void catchUpDemand() {
+         int i = 2 - this.numberOfRestocksToday;
+         if (i > 0) {
+-            for (MerchantOffer merchantOffer : this.getOffers()) {
+-                merchantOffer.resetUses();
++            Iterator iterator = this.getOffers().iterator();
++
++            while (iterator.hasNext()) {
++                MerchantOffer merchantrecipe = (MerchantOffer) iterator.next();
++
++                // CraftBukkit start
++                VillagerReplenishTradeEvent event = new VillagerReplenishTradeEvent((org.bukkit.entity.Villager) this.getBukkitEntity(), merchantrecipe.asBukkit());
++                Bukkit.getPluginManager().callEvent(event);
++                if (!event.isCancelled()) {
++                    merchantrecipe.resetUses();
++                }
++                // CraftBukkit end
+             }
+         }
+ 
+@@ -818,8 +852,13 @@
+                     witch.setCustomNameVisible(this.isCustomNameVisible());
+                 }
+ 
+-                witch.setPersistenceRequired();
+-                level.addFreshEntityWithPassengers(witch);
++                entitywitch.setPersistenceRequired();
++                // CraftBukkit start
++                if (CraftEventFactory.callEntityTransformEvent(this, entitywitch, EntityTransformEvent.TransformReason.LIGHTNING).isCancelled()) {
++                    return;
++                }
++                level.addFreshEntityWithPassengers(entitywitch, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.LIGHTNING);
++                // CraftBukkit end
+                 this.releaseAllPois();
+                 this.discard();
+             } else {
+@@ -900,15 +950,15 @@
+ 
+     public void spawnGolemIfNeeded(ServerLevel serverLevel, long gameTime, int minVillagerAmount) {
+         if (this.wantsToSpawnGolem(gameTime)) {
+-            AABB aABB = this.getBoundingBox().inflate(10.0, 10.0, 10.0);
+-            List<Villager> entitiesOfClass = serverLevel.getEntitiesOfClass(Villager.class, aABB);
+-            List<Villager> list = entitiesOfClass.stream().filter(villager -> villager.wantsToSpawnGolem(gameTime)).limit(5L).collect(Collectors.toList());
+-            if (list.size() >= minVillagerAmount) {
+-                if (!SpawnUtil.trySpawnMob(
+-                        EntityType.IRON_GOLEM, MobSpawnType.MOB_SUMMONED, serverLevel, this.blockPosition(), 10, 8, 6, SpawnUtil.Strategy.LEGACY_IRON_GOLEM
+-                    )
+-                    .isEmpty()) {
+-                    entitiesOfClass.forEach(GolemSensor::golemDetected);
++            AABB axisalignedbb = this.getBoundingBox().inflate(10.0D, 10.0D, 10.0D);
++            List<Villager> list = serverLevel.getEntitiesOfClass(Villager.class, axisalignedbb);
++            List<Villager> list1 = (List) list.stream().filter((entityvillager) -> {
++                return entityvillager.wantsToSpawnGolem(gameTime);
++            }).limit(5L).collect(Collectors.toList());
++
++            if (list1.size() >= j) {
++                if (!SpawnUtil.trySpawnMob(EntityType.IRON_GOLEM, EnumMobSpawn.MOB_SUMMONED, serverLevel, this.blockPosition(), 10, 8, 6, SpawnUtil.Strategy.LEGACY_IRON_GOLEM, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.VILLAGE_DEFENSE).isEmpty()) { // CraftBukkit
++                    list.forEach(GolemSensor::golemDetected);
+                 }
+             }
+         }

@@ -1,0 +1,117 @@
+--- a/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
++++ b/net/minecraft/world/level/chunk/storage/ChunkSerializer.java
+@@ -86,17 +93,17 @@
+             LOGGER.error("Chunk file at {} is in the wrong location; relocating. (Expected {}, got {})", pos, pos, chunkPos);
+         }
+ 
+-        UpgradeData upgradeData = tag.contains("UpgradeData", 10) ? new UpgradeData(tag.getCompound("UpgradeData"), level) : UpgradeData.EMPTY;
+-        boolean _boolean = tag.getBoolean("isLightOn");
+-        ListTag list = tag.getList("sections", 10);
+-        int sectionsCount = level.getSectionsCount();
+-        LevelChunkSection[] levelChunkSections = new LevelChunkSection[sectionsCount];
+-        boolean hasSkyLight = level.dimensionType().hasSkyLight();
+-        ChunkSource chunkSource = level.getChunkSource();
+-        LevelLightEngine lightEngine = chunkSource.getLightEngine();
+-        Registry<Biome> registry = level.registryAccess().registryOrThrow(Registries.BIOME);
+-        Codec<PalettedContainerRO<Holder<Biome>>> codec = makeBiomeCodec(registry);
+-        boolean flag = false;
++        UpgradeData chunkconverter = tag.contains("UpgradeData", 10) ? new UpgradeData(tag.getCompound("UpgradeData"), level) : UpgradeData.EMPTY;
++        boolean flag = tag.getBoolean("isLightOn");
++        ListTag nbttaglist = tag.getList("sections", 10);
++        int i = level.getSectionsCount();
++        LevelChunkSection[] achunksection = new LevelChunkSection[i];
++        boolean flag1 = level.dimensionType().hasSkyLight();
++        ServerChunkCache chunkproviderserver = level.getChunkSource();
++        LevelLightEngine levellightengine = chunkproviderserver.getLightEngine();
++        Registry<Biome> iregistry = level.registryAccess().registryOrThrow(Registries.BIOME);
++        Codec<PalettedContainer<Holder<Biome>>> codec = makeBiomeCodecRW(iregistry); // CraftBukkit - read/write
++        boolean flag2 = false;
+ 
+         for (int i = 0; i < list.size(); i++) {
+             CompoundTag compound = list.getCompound(i);
+@@ -114,21 +127,27 @@
+                     );
+                 }
+ 
+-                PalettedContainerRO<Holder<Biome>> palettedContainerRO;
+-                if (compound.contains("biomes", 10)) {
+-                    palettedContainerRO = codec.parse(NbtOps.INSTANCE, compound.getCompound("biomes"))
+-                        .promotePartial(errorMessage -> logErrors(pos, _byte, errorMessage))
+-                        .getOrThrow(false, LOGGER::error);
++                PalettedContainer object; // CraftBukkit - read/write
++
++                if (nbttagcompound1.contains("biomes", 10)) {
++                    dataresult = codec.parse(NbtOps.INSTANCE, nbttagcompound1.getCompound("biomes")).promotePartial((s) -> {
++                        logErrors(pos, b0, s);
++                    });
++                    logger = ChunkSerializer.LOGGER;
++                    Objects.requireNonNull(logger);
++                    object = ((DataResult<PalettedContainer<Holder<Biome>>>) dataresult).getOrThrow(false, logger::error); // CraftBukkit - decompile error
+                 } else {
+                     palettedContainerRO = new PalettedContainer<>(
+                         registry.asHolderIdMap(), registry.getHolderOrThrow(Biomes.PLAINS), PalettedContainer.Strategy.SECTION_BIOMES
+                     );
+                 }
+ 
+-                LevelChunkSection levelChunkSection = new LevelChunkSection(palettedContainer, palettedContainerRO);
+-                levelChunkSections[sectionIndexFromSectionY] = levelChunkSection;
+-                SectionPos sectionPos = SectionPos.of(pos, _byte);
+-                poiManager.checkConsistencyWithBlocks(sectionPos, levelChunkSection);
++                LevelChunkSection chunksection = new LevelChunkSection(datapaletteblock, (PalettedContainer) object); // CraftBukkit - read/write
++
++                achunksection[k] = chunksection;
++                SectionPos sectionposition = SectionPos.of(pos, b0);
++
++                poiManager.checkConsistencyWithBlocks(sectionposition, chunksection);
+             }
+ 
+             boolean flag1 = compound.contains("BlockLight", 7);
+@@ -196,9 +221,12 @@
+             }
+         }
+ 
+-        chunkAccess.setLightCorrect(_boolean);
+-        CompoundTag compound1 = tag.getCompound("Heightmaps");
+-        EnumSet<Heightmap.Types> set = EnumSet.noneOf(Heightmap.Types.class);
++        // CraftBukkit start - load chunk persistent data from nbt - SPIGOT-6814: Already load PDC here to account for 1.17 to 1.18 chunk upgrading.
++        net.minecraft.nbt.Tag persistentBase = tag.get("ChunkBukkitValues");
++        if (persistentBase instanceof CompoundTag) {
++            ((ChunkAccess) object1).persistentDataContainer.putAll((CompoundTag) persistentBase);
++        }
++        // CraftBukkit end
+ 
+         for (Heightmap.Types types : chunkAccess.getStatus().heightmapsAfter()) {
+             String serializationKey = types.getSerializationKey();
+@@ -268,6 +307,12 @@
+         );
+     }
+ 
++    // CraftBukkit start - read/write
++    private static Codec<PalettedContainer<Holder<Biome>>> makeBiomeCodecRW(Registry<Biome> iregistry) {
++        return PalettedContainer.codecRW(iregistry.asHolderIdMap(), iregistry.holderByNameCodec(), PalettedContainer.Strategy.SECTION_BIOMES, iregistry.getHolderOrThrow(Biomes.PLAINS));
++    }
++    // CraftBukkit end
++
+     public static CompoundTag write(ServerLevel level, ChunkAccess chunk) {
+         ChunkPos pos = chunk.getPos();
+         CompoundTag compoundTag = NbtUtils.addCurrentDataVersion(new CompoundTag());
+@@ -377,11 +452,14 @@
+             }
+         }
+ 
+-        compoundTag.put("Heightmaps", compoundTag2);
+-        compoundTag.put(
+-            "structures", packStructureData(StructurePieceSerializationContext.fromLevel(level), pos, chunk.getAllStarts(), chunk.getAllReferences())
+-        );
+-        return compoundTag;
++        nbttagcompound.put("Heightmaps", nbttagcompound3);
++        nbttagcompound.put("structures", packStructureData(StructurePieceSerializationContext.fromLevel(level), chunkcoordintpair, chunk.getAllStarts(), chunk.getAllReferences()));
++        // CraftBukkit start - store chunk persistent data in nbt
++        if (!chunk.persistentDataContainer.isEmpty()) { // SPIGOT-6814: Always save PDC to account for 1.17 to 1.18 chunk upgrading.
++            nbttagcompound.put("ChunkBukkitValues", chunk.persistentDataContainer.toTagCompound());
++        }
++        // CraftBukkit end
++        return nbttagcompound;
+     }
+ 
+     private static void saveTicks(ServerLevel level, CompoundTag tag, ChunkAccess.TicksToSave ticksToSave) {

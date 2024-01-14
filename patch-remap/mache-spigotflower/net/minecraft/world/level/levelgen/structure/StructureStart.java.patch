@@ -1,0 +1,145 @@
+--- a/net/minecraft/world/level/levelgen/structure/StructureStart.java
++++ b/net/minecraft/world/level/levelgen/structure/StructureStart.java
+@@ -31,40 +31,41 @@
+     private int references;
+     @Nullable
+     private volatile BoundingBox cachedBoundingBox;
++    public org.bukkit.event.world.AsyncStructureGenerateEvent.Cause generationEventCause = org.bukkit.event.world.AsyncStructureGenerateEvent.Cause.WORLD_GENERATION; // CraftBukkit
+ 
+-    public StructureStart(Structure structure, ChunkPos chunkpos, int i, PiecesContainer piecescontainer) {
++    public StructureStart(Structure structure, ChunkPos chunkPos, int references, PiecesContainer pieceContainer) {
+         this.structure = structure;
+-        this.chunkPos = chunkpos;
+-        this.references = i;
+-        this.pieceContainer = piecescontainer;
++        this.chunkPos = chunkPos;
++        this.references = references;
++        this.pieceContainer = pieceContainer;
+     }
+ 
+     @Nullable
+-    public static StructureStart loadStaticStart(StructurePieceSerializationContext structurepieceserializationcontext, CompoundTag compoundtag, long i) {
+-        String s = compoundtag.getString("id");
++    public static StructureStart loadStaticStart(StructurePieceSerializationContext context, CompoundTag tag, long seed) {
++        String s = tag.getString("id");
+ 
+         if ("INVALID".equals(s)) {
+             return StructureStart.INVALID_START;
+         } else {
+-            Registry<Structure> registry = structurepieceserializationcontext.registryAccess().registryOrThrow(Registries.STRUCTURE);
+-            Structure structure = (Structure) registry.get(new ResourceLocation(s));
++            Registry<Structure> iregistry = context.registryAccess().registryOrThrow(Registries.STRUCTURE);
++            Structure structure = (Structure) iregistry.get(new ResourceLocation(s));
+ 
+             if (structure == null) {
+                 StructureStart.LOGGER.error("Unknown stucture id: {}", s);
+                 return null;
+             } else {
+-                ChunkPos chunkpos = new ChunkPos(compoundtag.getInt("ChunkX"), compoundtag.getInt("ChunkZ"));
+-                int j = compoundtag.getInt("references");
+-                ListTag listtag = compoundtag.getList("Children", 10);
++                ChunkPos chunkcoordintpair = new ChunkPos(tag.getInt("ChunkX"), tag.getInt("ChunkZ"));
++                int j = tag.getInt("references");
++                ListTag nbttaglist = tag.getList("Children", 10);
+ 
+                 try {
+-                    PiecesContainer piecescontainer = PiecesContainer.load(listtag, structurepieceserializationcontext);
++                    PiecesContainer piecescontainer = PiecesContainer.load(nbttaglist, context);
+ 
+                     if (structure instanceof OceanMonumentStructure) {
+-                        piecescontainer = OceanMonumentStructure.regeneratePiecesAfterLoad(chunkpos, i, piecescontainer);
++                        piecescontainer = OceanMonumentStructure.regeneratePiecesAfterLoad(chunkcoordintpair, seed, piecescontainer);
+                     }
+ 
+-                    return new StructureStart(structure, chunkpos, j, piecescontainer);
++                    return new StructureStart(structure, chunkcoordintpair, j, piecescontainer);
+                 } catch (Exception exception) {
+                     StructureStart.LOGGER.error("Failed Start with id {}", s, exception);
+                     return null;
+@@ -74,50 +75,64 @@
+     }
+ 
+     public BoundingBox getBoundingBox() {
+-        BoundingBox boundingbox = this.cachedBoundingBox;
++        BoundingBox structureboundingbox = this.cachedBoundingBox;
+ 
+-        if (boundingbox == null) {
+-            boundingbox = this.structure.adjustBoundingBox(this.pieceContainer.calculateBoundingBox());
+-            this.cachedBoundingBox = boundingbox;
++        if (structureboundingbox == null) {
++            structureboundingbox = this.structure.adjustBoundingBox(this.pieceContainer.calculateBoundingBox());
++            this.cachedBoundingBox = structureboundingbox;
+         }
+ 
+-        return boundingbox;
++        return structureboundingbox;
+     }
+ 
+-    public void placeInChunk(WorldGenLevel worldgenlevel, StructureManager structuremanager, ChunkGenerator chunkgenerator, RandomSource randomsource, BoundingBox boundingbox, ChunkPos chunkpos) {
++    public void placeInChunk(WorldGenLevel level, StructureManager structureManager, ChunkGenerator generator, RandomSource random, BoundingBox box, ChunkPos chunkPos) {
+         List<StructurePiece> list = this.pieceContainer.pieces();
+ 
+         if (!list.isEmpty()) {
+-            BoundingBox boundingbox1 = ((StructurePiece) list.get(0)).boundingBox;
+-            BlockPos blockpos = boundingbox1.getCenter();
+-            BlockPos blockpos1 = new BlockPos(blockpos.getX(), boundingbox1.minY(), blockpos.getZ());
++            BoundingBox structureboundingbox1 = ((StructurePiece) list.get(0)).boundingBox;
++            BlockPos blockposition = structureboundingbox1.getCenter();
++            BlockPos blockposition1 = new BlockPos(blockposition.getX(), structureboundingbox1.minY(), blockposition.getZ());
++            // CraftBukkit start
++            /*
+             Iterator iterator = list.iterator();
+ 
+             while (iterator.hasNext()) {
+                 StructurePiece structurepiece = (StructurePiece) iterator.next();
+ 
+-                if (structurepiece.getBoundingBox().intersects(boundingbox)) {
+-                    structurepiece.postProcess(worldgenlevel, structuremanager, chunkgenerator, randomsource, boundingbox, chunkpos, blockpos1);
++                if (structurepiece.getBoundingBox().intersects(structureboundingbox)) {
++                    structurepiece.postProcess(generatoraccessseed, structuremanager, chunkgenerator, randomsource, structureboundingbox, chunkcoordintpair, blockposition1);
+                 }
+             }
++            */
++            List<StructurePiece> pieces = list.stream().filter(piece -> piece.getBoundingBox().intersects(box)).toList();
++            if (!pieces.isEmpty()) {
++                org.bukkit.craftbukkit.util.TransformerGeneratorAccess transformerAccess = new org.bukkit.craftbukkit.util.TransformerGeneratorAccess();
++                transformerAccess.setHandle(level);
++                transformerAccess.setStructureTransformer(new org.bukkit.craftbukkit.util.CraftStructureTransformer(generationEventCause, level, structureManager, structure, box, chunkPos));
++                for (StructurePiece piece : pieces) {
++                    piece.postProcess(transformerAccess, structureManager, generator, random, box, chunkPos, blockposition1);
++                }
++                transformerAccess.getStructureTransformer().discard();
++            }
++            // CraftBukkit end
+ 
+-            this.structure.afterPlace(worldgenlevel, structuremanager, chunkgenerator, randomsource, boundingbox, chunkpos, this.pieceContainer);
++            this.structure.afterPlace(level, structureManager, generator, random, box, chunkPos, this.pieceContainer);
+         }
+     }
+ 
+-    public CompoundTag createTag(StructurePieceSerializationContext structurepieceserializationcontext, ChunkPos chunkpos) {
+-        CompoundTag compoundtag = new CompoundTag();
++    public CompoundTag createTag(StructurePieceSerializationContext context, ChunkPos chunkPos) {
++        CompoundTag nbttagcompound = new CompoundTag();
+ 
+         if (this.isValid()) {
+-            compoundtag.putString("id", structurepieceserializationcontext.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(this.structure).toString());
+-            compoundtag.putInt("ChunkX", chunkpos.x);
+-            compoundtag.putInt("ChunkZ", chunkpos.z);
+-            compoundtag.putInt("references", this.references);
+-            compoundtag.put("Children", this.pieceContainer.save(structurepieceserializationcontext));
+-            return compoundtag;
++            nbttagcompound.putString("id", context.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(this.structure).toString());
++            nbttagcompound.putInt("ChunkX", chunkPos.x);
++            nbttagcompound.putInt("ChunkZ", chunkPos.z);
++            nbttagcompound.putInt("references", this.references);
++            nbttagcompound.put("Children", this.pieceContainer.save(context));
++            return nbttagcompound;
+         } else {
+-            compoundtag.putString("id", "INVALID");
+-            return compoundtag;
++            nbttagcompound.putString("id", "INVALID");
++            return nbttagcompound;
+         }
+     }
+ 

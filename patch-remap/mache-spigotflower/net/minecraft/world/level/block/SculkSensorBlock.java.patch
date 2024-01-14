@@ -1,0 +1,433 @@
+--- a/net/minecraft/world/level/block/SculkSensorBlock.java
++++ b/net/minecraft/world/level/block/SculkSensorBlock.java
+@@ -26,7 +26,7 @@
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+ import net.minecraft.world.level.block.entity.SculkSensorBlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+@@ -38,9 +38,13 @@
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.block.BlockRedstoneEvent;
++// CraftBukkit end
+ 
+ public class SculkSensorBlock extends BaseEntityBlock implements SimpleWaterloggedBlock {
+ 
+@@ -61,168 +65,174 @@
+     });
+ 
+     @Override
+-    @Override
+     public MapCodec<? extends SculkSensorBlock> codec() {
+         return SculkSensorBlock.CODEC;
+     }
+ 
+-    public SculkSensorBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(SculkSensorBlock.PHASE, SculkSensorPhase.INACTIVE)).setValue(SculkSensorBlock.POWER, 0)).setValue(SculkSensorBlock.WATERLOGGED, false));
++    public SculkSensorBlock(BlockBehaviour.Properties properties) {
++        super(properties);
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(SculkSensorBlock.PHASE, SculkSensorPhase.INACTIVE)).setValue(SculkSensorBlock.POWER, 0)).setValue(SculkSensorBlock.WATERLOGGED, false));
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        BlockPos blockpos = blockplacecontext.getClickedPos();
+-        FluidState fluidstate = blockplacecontext.getLevel().getFluidState(blockpos);
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        BlockPos blockposition = context.getClickedPos();
++        FluidState fluid = context.getLevel().getFluidState(blockposition);
+ 
+-        return (BlockState) this.defaultBlockState().setValue(SculkSensorBlock.WATERLOGGED, fluidstate.getType() == Fluids.WATER);
++        return (IBlockData) this.defaultBlockState().setValue(SculkSensorBlock.WATERLOGGED, fluid.getType() == Fluids.WATER);
+     }
+ 
+     @Override
+-    @Override
+-    public FluidState getFluidState(BlockState blockstate) {
+-        return (Boolean) blockstate.getValue(SculkSensorBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(blockstate);
++    public FluidState getFluidState(IBlockData state) {
++        return (Boolean) state.getValue(SculkSensorBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+     }
+ 
+     @Override
+-    @Override
+-    public void tick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        if (getPhase(blockstate) != SculkSensorPhase.ACTIVE) {
+-            if (getPhase(blockstate) == SculkSensorPhase.COOLDOWN) {
+-                serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.INACTIVE), 3);
+-                if (!(Boolean) blockstate.getValue(SculkSensorBlock.WATERLOGGED)) {
+-                    serverlevel.playSound((Player) null, blockpos, SoundEvents.SCULK_CLICKING_STOP, SoundSource.BLOCKS, 1.0F, serverlevel.random.nextFloat() * 0.2F + 0.8F);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if (getPhase(state) != SculkSensorPhase.ACTIVE) {
++            if (getPhase(state) == SculkSensorPhase.COOLDOWN) {
++                level.setBlock(pos, (IBlockData) state.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.INACTIVE), 3);
++                if (!(Boolean) state.getValue(SculkSensorBlock.WATERLOGGED)) {
++                    level.playSound((Player) null, pos, SoundEvents.SCULK_CLICKING_STOP, SoundSource.BLOCKS, 1.0F, level.random.nextFloat() * 0.2F + 0.8F);
+                 }
+             }
+ 
+         } else {
+-            deactivate(serverlevel, blockpos, blockstate);
++            deactivate(level, pos, state);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public void stepOn(Level level, BlockPos blockpos, BlockState blockstate, Entity entity) {
+-        if (!level.isClientSide() && canActivate(blockstate) && entity.getType() != EntityType.WARDEN) {
+-            BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public void stepOn(Level level, BlockPos pos, IBlockData state, Entity entity) {
++        if (!level.isClientSide() && canActivate(state) && entity.getType() != EntityType.WARDEN) {
++            // CraftBukkit start
++            org.bukkit.event.Cancellable cancellable;
++            if (entity instanceof Player) {
++                cancellable = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent((Player) entity, org.bukkit.event.block.Action.PHYSICAL, pos, null, null, null);
++            } else {
++                cancellable = new org.bukkit.event.entity.EntityInteractEvent(entity.getBukkitEntity(), level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ()));
++                level.getCraftServer().getPluginManager().callEvent((org.bukkit.event.entity.EntityInteractEvent) cancellable);
++            }
++            if (cancellable.isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++            BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-            if (blockentity instanceof SculkSensorBlockEntity) {
+-                SculkSensorBlockEntity sculksensorblockentity = (SculkSensorBlockEntity) blockentity;
++            if (tileentity instanceof SculkSensorBlockEntity) {
++                SculkSensorBlockEntity sculksensorblockentity = (SculkSensorBlockEntity) tileentity;
+ 
+                 if (level instanceof ServerLevel) {
+-                    ServerLevel serverlevel = (ServerLevel) level;
++                    ServerLevel worldserver = (ServerLevel) level;
+ 
+-                    if (sculksensorblockentity.getVibrationUser().canReceiveVibration(serverlevel, blockpos, GameEvent.STEP, GameEvent.Context.of(blockstate))) {
+-                        sculksensorblockentity.getListener().forceScheduleVibration(serverlevel, GameEvent.STEP, GameEvent.Context.of(entity), entity.position());
++                    if (sculksensorblockentity.getVibrationUser().canReceiveVibration(worldserver, pos, GameEvent.STEP, GameEvent.Context.of(state))) {
++                        sculksensorblockentity.getListener().forceScheduleVibration(worldserver, GameEvent.STEP, GameEvent.Context.of(entity), entity.position());
+                     }
+                 }
+             }
+         }
+ 
+-        super.stepOn(level, blockpos, blockstate, entity);
++        super.stepOn(level, pos, state, entity);
+     }
+ 
+     @Override
+-    @Override
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!level.isClientSide() && !blockstate.is(blockstate1.getBlock())) {
+-            if ((Integer) blockstate.getValue(SculkSensorBlock.POWER) > 0 && !level.getBlockTicks().hasScheduledTick(blockpos, this)) {
+-                level.setBlock(blockpos, (BlockState) blockstate.setValue(SculkSensorBlock.POWER, 0), 18);
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean movedByPiston) {
++        if (!level.isClientSide() && !state.is(oldState.getBlock())) {
++            if ((Integer) state.getValue(SculkSensorBlock.POWER) > 0 && !level.getBlockTicks().hasScheduledTick(pos, this)) {
++                level.setBlock(pos, (IBlockData) state.setValue(SculkSensorBlock.POWER, 0), 18);
+             }
+ 
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!blockstate.is(blockstate1.getBlock())) {
+-            if (getPhase(blockstate) == SculkSensorPhase.ACTIVE) {
+-                updateNeighbours(level, blockpos, blockstate);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean movedByPiston) {
++        if (!state.is(newState.getBlock())) {
++            if (getPhase(state) == SculkSensorPhase.ACTIVE) {
++                updateNeighbours(level, pos, state);
+             }
+ 
+-            super.onRemove(blockstate, level, blockpos, blockstate1, flag);
++            super.onRemove(state, level, pos, newState, movedByPiston);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public BlockState updateShape(BlockState blockstate, Direction direction, BlockState blockstate1, LevelAccessor levelaccessor, BlockPos blockpos, BlockPos blockpos1) {
+-        if ((Boolean) blockstate.getValue(SculkSensorBlock.WATERLOGGED)) {
+-            levelaccessor.scheduleTick(blockpos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(levelaccessor));
++    public IBlockData updateShape(IBlockData state, Direction direction, IBlockData neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
++        if ((Boolean) state.getValue(SculkSensorBlock.WATERLOGGED)) {
++            level.scheduleTick(pos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(level));
+         }
+ 
+-        return super.updateShape(blockstate, direction, blockstate1, levelaccessor, blockpos, blockpos1);
++        return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
+     }
+ 
+-    private static void updateNeighbours(Level level, BlockPos blockpos, BlockState blockstate) {
+-        Block block = blockstate.getBlock();
++    private static void updateNeighbours(Level level, BlockPos pos, IBlockData state) {
++        Block block = state.getBlock();
+ 
+-        level.updateNeighborsAt(blockpos, block);
+-        level.updateNeighborsAt(blockpos.below(), block);
++        level.updateNeighborsAt(pos, block);
++        level.updateNeighborsAt(pos.below(), block);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockEntity newBlockEntity(BlockPos blockpos, BlockState blockstate) {
+-        return new SculkSensorBlockEntity(blockpos, blockstate);
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
++        return new SculkSensorBlockEntity(pos, state);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState blockstate, BlockEntityType<T> blockentitytype) {
+-        return !level.isClientSide ? createTickerHelper(blockentitytype, BlockEntityType.SCULK_SENSOR, (level1, blockpos, blockstate1, sculksensorblockentity) -> {
+-            VibrationSystem.Ticker.tick(level1, sculksensorblockentity.getVibrationData(), sculksensorblockentity.getVibrationUser());
++    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, IBlockData state, BlockEntityType<T> blockEntityType) {
++        return !level.isClientSide ? createTickerHelper(blockEntityType, BlockEntityType.SCULK_SENSOR, (world1, blockposition, iblockdata1, sculksensorblockentity) -> {
++            VibrationSystem.Ticker.tick(world1, sculksensorblockentity.getVibrationData(), sculksensorblockentity.getVibrationUser());
+         }) : null;
+     }
+ 
+     @Override
+-    @Override
+-    public RenderShape getRenderShape(BlockState blockstate) {
+-        return RenderShape.MODEL;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.MODEL;
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return SculkSensorBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isSignalSource(BlockState blockstate) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public int getSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return (Integer) blockstate.getValue(SculkSensorBlock.POWER);
++    public int getSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
++        return (Integer) state.getValue(SculkSensorBlock.POWER);
+     }
+ 
+     @Override
+-    @Override
+-    public int getDirectSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return direction == Direction.UP ? blockstate.getSignal(blockgetter, blockpos, direction) : 0;
++    public int getDirectSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
++        return direction == Direction.UP ? state.getSignal(level, pos, direction) : 0;
+     }
+ 
+-    public static SculkSensorPhase getPhase(BlockState blockstate) {
+-        return (SculkSensorPhase) blockstate.getValue(SculkSensorBlock.PHASE);
++    public static SculkSensorPhase getPhase(IBlockData state) {
++        return (SculkSensorPhase) state.getValue(SculkSensorBlock.PHASE);
+     }
+ 
+-    public static boolean canActivate(BlockState blockstate) {
+-        return getPhase(blockstate) == SculkSensorPhase.INACTIVE;
++    public static boolean canActivate(IBlockData state) {
++        return getPhase(state) == SculkSensorPhase.INACTIVE;
+     }
+ 
+-    public static void deactivate(Level level, BlockPos blockpos, BlockState blockstate) {
+-        level.setBlock(blockpos, (BlockState) ((BlockState) blockstate.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.COOLDOWN)).setValue(SculkSensorBlock.POWER, 0), 3);
+-        level.scheduleTick(blockpos, blockstate.getBlock(), 10);
+-        updateNeighbours(level, blockpos, blockstate);
++    public static void deactivate(Level level, BlockPos pos, IBlockData state) {
++        // CraftBukkit start
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), state.getValue(SculkSensorBlock.POWER), 0);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() > 0) {
++            level.setBlock(pos, state.setValue(SculkSensorBlock.POWER, eventRedstone.getNewCurrent()), 3);
++            return;
++        }
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) ((IBlockData) state.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.COOLDOWN)).setValue(SculkSensorBlock.POWER, 0), 3);
++        level.scheduleTick(pos, state.getBlock(), 10);
++        updateNeighbours(level, pos, state);
+     }
+ 
+     @VisibleForTesting
+@@ -230,48 +240,56 @@
+         return 30;
+     }
+ 
+-    public void activate(@Nullable Entity entity, Level level, BlockPos blockpos, BlockState blockstate, int i, int j) {
+-        level.setBlock(blockpos, (BlockState) ((BlockState) blockstate.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.ACTIVE)).setValue(SculkSensorBlock.POWER, i), 3);
+-        level.scheduleTick(blockpos, blockstate.getBlock(), this.getActiveTicks());
+-        updateNeighbours(level, blockpos, blockstate);
+-        tryResonateVibration(entity, level, blockpos, j);
+-        level.gameEvent(entity, GameEvent.SCULK_SENSOR_TENDRILS_CLICKING, blockpos);
+-        if (!(Boolean) blockstate.getValue(SculkSensorBlock.WATERLOGGED)) {
+-            level.playSound((Player) null, (double) blockpos.getX() + 0.5D, (double) blockpos.getY() + 0.5D, (double) blockpos.getZ() + 0.5D, SoundEvents.SCULK_CLICKING, SoundSource.BLOCKS, 1.0F, level.random.nextFloat() * 0.2F + 0.8F);
++    public void activate(@Nullable Entity entity, Level level, BlockPos pos, IBlockData state, int power, int frequency) {
++        // CraftBukkit start
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), state.getValue(SculkSensorBlock.POWER), power);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() <= 0) {
++            return;
+         }
++        power = eventRedstone.getNewCurrent();
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) ((IBlockData) state.setValue(SculkSensorBlock.PHASE, SculkSensorPhase.ACTIVE)).setValue(SculkSensorBlock.POWER, power), 3);
++        level.scheduleTick(pos, state.getBlock(), this.getActiveTicks());
++        updateNeighbours(level, pos, state);
++        tryResonateVibration(entity, level, pos, frequency);
++        level.gameEvent(entity, GameEvent.SCULK_SENSOR_TENDRILS_CLICKING, pos);
++        if (!(Boolean) state.getValue(SculkSensorBlock.WATERLOGGED)) {
++            level.playSound((Player) null, (double) pos.getX() + 0.5D, (double) pos.getY() + 0.5D, (double) pos.getZ() + 0.5D, SoundEvents.SCULK_CLICKING, SoundSource.BLOCKS, 1.0F, level.random.nextFloat() * 0.2F + 0.8F);
++        }
+ 
+     }
+ 
+-    public static void tryResonateVibration(@Nullable Entity entity, Level level, BlockPos blockpos, int i) {
+-        Direction[] adirection = Direction.values();
+-        int j = adirection.length;
++    public static void tryResonateVibration(@Nullable Entity entity, Level level, BlockPos pos, int frequency) {
++        Direction[] aenumdirection = Direction.values();
++        int j = aenumdirection.length;
+ 
+         for (int k = 0; k < j; ++k) {
+-            Direction direction = adirection[k];
+-            BlockPos blockpos1 = blockpos.relative(direction);
+-            BlockState blockstate = level.getBlockState(blockpos1);
++            Direction enumdirection = aenumdirection[k];
++            BlockPos blockposition1 = pos.relative(enumdirection);
++            IBlockData iblockdata = level.getBlockState(blockposition1);
+ 
+-            if (blockstate.is(BlockTags.VIBRATION_RESONATORS)) {
+-                level.gameEvent(VibrationSystem.getResonanceEventByFrequency(i), blockpos1, GameEvent.Context.of(entity, blockstate));
+-                float f = SculkSensorBlock.RESONANCE_PITCH_BEND[i];
++            if (iblockdata.is(BlockTags.VIBRATION_RESONATORS)) {
++                level.gameEvent(VibrationSystem.getResonanceEventByFrequency(frequency), blockposition1, GameEvent.Context.of(entity, iblockdata));
++                float f = SculkSensorBlock.RESONANCE_PITCH_BEND[frequency];
+ 
+-                level.playSound((Player) null, blockpos1, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.BLOCKS, 1.0F, f);
++                level.playSound((Player) null, blockposition1, SoundEvents.AMETHYST_BLOCK_RESONATE, SoundSource.BLOCKS, 1.0F, f);
+             }
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void animateTick(BlockState blockstate, Level level, BlockPos blockpos, RandomSource randomsource) {
+-        if (getPhase(blockstate) == SculkSensorPhase.ACTIVE) {
+-            Direction direction = Direction.getRandom(randomsource);
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if (getPhase(state) == SculkSensorPhase.ACTIVE) {
++            Direction enumdirection = Direction.getRandom(random);
+ 
+-            if (direction != Direction.UP && direction != Direction.DOWN) {
+-                double d0 = (double) blockpos.getX() + 0.5D + (direction.getStepX() == 0 ? 0.5D - randomsource.nextDouble() : (double) direction.getStepX() * 0.6D);
+-                double d1 = (double) blockpos.getY() + 0.25D;
+-                double d2 = (double) blockpos.getZ() + 0.5D + (direction.getStepZ() == 0 ? 0.5D - randomsource.nextDouble() : (double) direction.getStepZ() * 0.6D);
+-                double d3 = (double) randomsource.nextFloat() * 0.04D;
++            if (enumdirection != Direction.UP && enumdirection != Direction.DOWN) {
++                double d0 = (double) pos.getX() + 0.5D + (enumdirection.getStepX() == 0 ? 0.5D - random.nextDouble() : (double) enumdirection.getStepX() * 0.6D);
++                double d1 = (double) pos.getY() + 0.25D;
++                double d2 = (double) pos.getZ() + 0.5D + (enumdirection.getStepZ() == 0 ? 0.5D - random.nextDouble() : (double) enumdirection.getStepZ() * 0.6D);
++                double d3 = (double) random.nextFloat() * 0.04D;
+ 
+                 level.addParticle(DustColorTransitionOptions.SCULK_TO_REDSTONE, d0, d1, d2, 0.0D, d3, 0.0D);
+             }
+@@ -279,50 +297,51 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(SculkSensorBlock.PHASE, SculkSensorBlock.POWER, SculkSensorBlock.WATERLOGGED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(SculkSensorBlock.PHASE, SculkSensorBlock.POWER, SculkSensorBlock.WATERLOGGED);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hasAnalogOutputSignal(BlockState blockstate) {
++    public boolean hasAnalogOutputSignal(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public int getAnalogOutputSignal(BlockState blockstate, Level level, BlockPos blockpos) {
+-        BlockEntity blockentity = level.getBlockEntity(blockpos);
++    public int getAnalogOutputSignal(IBlockData state, Level level, BlockPos pos) {
++        BlockEntity tileentity = level.getBlockEntity(pos);
+ 
+-        if (blockentity instanceof SculkSensorBlockEntity) {
+-            SculkSensorBlockEntity sculksensorblockentity = (SculkSensorBlockEntity) blockentity;
++        if (tileentity instanceof SculkSensorBlockEntity) {
++            SculkSensorBlockEntity sculksensorblockentity = (SculkSensorBlockEntity) tileentity;
+ 
+-            return getPhase(blockstate) == SculkSensorPhase.ACTIVE ? sculksensorblockentity.getLastVibrationFrequency() : 0;
++            return getPhase(state) == SculkSensorPhase.ACTIVE ? sculksensorblockentity.getLastVibrationFrequency() : 0;
+         } else {
+             return 0;
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isPathfindable(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, PathComputationType pathcomputationtype) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean useShapeForLightOcclusion(BlockState blockstate) {
++    public boolean useShapeForLightOcclusion(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
++    public void spawnAfterBreak(IBlockData state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
++        super.spawnAfterBreak(state, level, pos, stack, dropExperience);
++        // CraftBukkit start - Delegate to getExpDrop
++    }
++
+     @Override
+-    public void spawnAfterBreak(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, ItemStack itemstack, boolean flag) {
+-        super.spawnAfterBreak(blockstate, serverlevel, blockpos, itemstack, flag);
++    public int getExpDrop(IBlockData iblockdata, ServerLevel worldserver, BlockPos blockposition, ItemStack itemstack, boolean flag) {
+         if (flag) {
+-            this.tryDropExperience(serverlevel, blockpos, itemstack, ConstantInt.of(5));
++            return this.tryDropExperience(worldserver, blockposition, itemstack, ConstantInt.of(5));
+         }
+ 
++        return 0;
++        // CraftBukkit end
+     }
+ }

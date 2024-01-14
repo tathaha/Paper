@@ -1,0 +1,242 @@
+--- a/net/minecraft/world/level/block/TurtleEggBlock.java
++++ b/net/minecraft/world/level/block/TurtleEggBlock.java
+@@ -22,13 +22,18 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.IntegerProperty;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.event.entity.EntityInteractEvent;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
+ 
+ public class TurtleEggBlock extends Block {
+ 
+@@ -42,83 +47,102 @@
+     public static final IntegerProperty EGGS = BlockStateProperties.EGGS;
+ 
+     @Override
+-    @Override
+     public MapCodec<TurtleEggBlock> codec() {
+         return TurtleEggBlock.CODEC;
+     }
+ 
+-    public TurtleEggBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(TurtleEggBlock.HATCH, 0)).setValue(TurtleEggBlock.EGGS, 1));
++    public TurtleEggBlock(BlockBehaviour.Properties properties) {
++        super(properties);
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(TurtleEggBlock.HATCH, 0)).setValue(TurtleEggBlock.EGGS, 1));
+     }
+ 
+     @Override
+-    @Override
+-    public void stepOn(Level level, BlockPos blockpos, BlockState blockstate, Entity entity) {
++    public void stepOn(Level level, BlockPos pos, IBlockData state, Entity entity) {
+         if (!entity.isSteppingCarefully()) {
+-            this.destroyEgg(level, blockstate, blockpos, entity, 100);
++            this.destroyEgg(level, state, pos, entity, 100);
+         }
+ 
+-        super.stepOn(level, blockpos, blockstate, entity);
++        super.stepOn(level, pos, state, entity);
+     }
+ 
+     @Override
+-    @Override
+-    public void fallOn(Level level, BlockState blockstate, BlockPos blockpos, Entity entity, float f) {
++    public void fallOn(Level level, IBlockData state, BlockPos pos, Entity entity, float fallDistance) {
+         if (!(entity instanceof Zombie)) {
+-            this.destroyEgg(level, blockstate, blockpos, entity, 3);
++            this.destroyEgg(level, state, pos, entity, 3);
+         }
+ 
+-        super.fallOn(level, blockstate, blockpos, entity, f);
++        super.fallOn(level, state, pos, entity, fallDistance);
+     }
+ 
+-    private void destroyEgg(Level level, BlockState blockstate, BlockPos blockpos, Entity entity, int i) {
++    private void destroyEgg(Level level, IBlockData state, BlockPos pos, Entity entity, int chance) {
+         if (this.canDestroyEgg(level, entity)) {
+-            if (!level.isClientSide && level.random.nextInt(i) == 0 && blockstate.is(Blocks.TURTLE_EGG)) {
+-                this.decreaseEggs(level, blockpos, blockstate);
++            if (!level.isClientSide && level.random.nextInt(chance) == 0 && state.is(Blocks.TURTLE_EGG)) {
++                // CraftBukkit start - Step on eggs
++                org.bukkit.event.Cancellable cancellable;
++                if (entity instanceof Player) {
++                    cancellable = CraftEventFactory.callPlayerInteractEvent((Player) entity, org.bukkit.event.block.Action.PHYSICAL, pos, null, null, null);
++                } else {
++                    cancellable = new EntityInteractEvent(entity.getBukkitEntity(), CraftBlock.at(level, pos));
++                    level.getCraftServer().getPluginManager().callEvent((EntityInteractEvent) cancellable);
++                }
++
++                if (cancellable.isCancelled()) {
++                    return;
++                }
++                // CraftBukkit end
++                this.decreaseEggs(level, pos, state);
+             }
+ 
+         }
+     }
+ 
+-    private void decreaseEggs(Level level, BlockPos blockpos, BlockState blockstate) {
+-        level.playSound((Player) null, blockpos, SoundEvents.TURTLE_EGG_BREAK, SoundSource.BLOCKS, 0.7F, 0.9F + level.random.nextFloat() * 0.2F);
+-        int i = (Integer) blockstate.getValue(TurtleEggBlock.EGGS);
++    private void decreaseEggs(Level level, BlockPos pos, IBlockData state) {
++        level.playSound((Player) null, pos, SoundEvents.TURTLE_EGG_BREAK, SoundSource.BLOCKS, 0.7F, 0.9F + level.random.nextFloat() * 0.2F);
++        int i = (Integer) state.getValue(TurtleEggBlock.EGGS);
+ 
+         if (i <= 1) {
+-            level.destroyBlock(blockpos, false);
++            level.destroyBlock(pos, false);
+         } else {
+-            level.setBlock(blockpos, (BlockState) blockstate.setValue(TurtleEggBlock.EGGS, i - 1), 2);
+-            level.gameEvent(GameEvent.BLOCK_DESTROY, blockpos, GameEvent.Context.of(blockstate));
+-            level.levelEvent(2001, blockpos, Block.getId(blockstate));
++            level.setBlock(pos, (IBlockData) state.setValue(TurtleEggBlock.EGGS, i - 1), 2);
++            level.gameEvent(GameEvent.BLOCK_DESTROY, pos, GameEvent.Context.of(state));
++            level.levelEvent(2001, pos, Block.getId(state));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void randomTick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        if (this.shouldUpdateHatchLevel(serverlevel) && onSand(serverlevel, blockpos)) {
+-            int i = (Integer) blockstate.getValue(TurtleEggBlock.HATCH);
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if (this.shouldUpdateHatchLevel(level) && onSand(level, pos)) {
++            int i = (Integer) state.getValue(TurtleEggBlock.HATCH);
+ 
+             if (i < 2) {
+-                serverlevel.playSound((Player) null, blockpos, SoundEvents.TURTLE_EGG_CRACK, SoundSource.BLOCKS, 0.7F, 0.9F + randomsource.nextFloat() * 0.2F);
+-                serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(TurtleEggBlock.HATCH, i + 1), 2);
+-                serverlevel.gameEvent(GameEvent.BLOCK_CHANGE, blockpos, GameEvent.Context.of(blockstate));
++                // CraftBukkit start - Call BlockGrowEvent
++                if (!CraftEventFactory.handleBlockGrowEvent(level, pos, state.setValue(TurtleEggBlock.HATCH, i + 1), 2)) {
++                    return;
++                }
++                // CraftBukkit end
++                level.playSound((Player) null, pos, SoundEvents.TURTLE_EGG_CRACK, SoundSource.BLOCKS, 0.7F, 0.9F + random.nextFloat() * 0.2F);
++                // worldserver.setBlock(blockposition, (IBlockData) iblockdata.setValue(BlockTurtleEgg.HATCH, i + 1), 2); // CraftBukkit - handled above
++                level.gameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Context.of(state));
+             } else {
+-                serverlevel.playSound((Player) null, blockpos, SoundEvents.TURTLE_EGG_HATCH, SoundSource.BLOCKS, 0.7F, 0.9F + randomsource.nextFloat() * 0.2F);
+-                serverlevel.removeBlock(blockpos, false);
+-                serverlevel.gameEvent(GameEvent.BLOCK_DESTROY, blockpos, GameEvent.Context.of(blockstate));
++                // CraftBukkit start - Call BlockFadeEvent
++                if (CraftEventFactory.callBlockFadeEvent(level, pos, Blocks.AIR.defaultBlockState()).isCancelled()) {
++                    return;
++                }
++                // CraftBukkit end
++                level.playSound((Player) null, pos, SoundEvents.TURTLE_EGG_HATCH, SoundSource.BLOCKS, 0.7F, 0.9F + random.nextFloat() * 0.2F);
++                level.removeBlock(pos, false);
++                level.gameEvent(GameEvent.BLOCK_DESTROY, pos, GameEvent.Context.of(state));
+ 
+-                for (int j = 0; j < (Integer) blockstate.getValue(TurtleEggBlock.EGGS); ++j) {
+-                    serverlevel.levelEvent(2001, blockpos, Block.getId(blockstate));
+-                    Turtle turtle = (Turtle) EntityType.TURTLE.create(serverlevel);
++                for (int j = 0; j < (Integer) state.getValue(TurtleEggBlock.EGGS); ++j) {
++                    level.levelEvent(2001, pos, Block.getId(state));
++                    Turtle entityturtle = (Turtle) EntityType.TURTLE.create(level);
+ 
+-                    if (turtle != null) {
+-                        turtle.setAge(-24000);
+-                        turtle.setHomePos(blockpos);
+-                        turtle.moveTo((double) blockpos.getX() + 0.3D + (double) j * 0.2D, (double) blockpos.getY(), (double) blockpos.getZ() + 0.3D, 0.0F, 0.0F);
+-                        serverlevel.addFreshEntity(turtle);
++                    if (entityturtle != null) {
++                        entityturtle.setAge(-24000);
++                        entityturtle.setHomePos(pos);
++                        entityturtle.moveTo((double) pos.getX() + 0.3D + (double) j * 0.2D, (double) pos.getY(), (double) pos.getZ() + 0.3D, 0.0F, 0.0F);
++                        level.addFreshEntity(entityturtle, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.EGG); // CraftBukkit
+                     }
+                 }
+             }
+@@ -126,19 +150,18 @@
+ 
+     }
+ 
+-    public static boolean onSand(BlockGetter blockgetter, BlockPos blockpos) {
+-        return isSand(blockgetter, blockpos.below());
++    public static boolean onSand(BlockGetter level, BlockPos pos) {
++        return isSand(level, pos.below());
+     }
+ 
+-    public static boolean isSand(BlockGetter blockgetter, BlockPos blockpos) {
+-        return blockgetter.getBlockState(blockpos).is(BlockTags.SAND);
++    public static boolean isSand(BlockGetter reader, BlockPos pos) {
++        return reader.getBlockState(pos).is(BlockTags.SAND);
+     }
+ 
+     @Override
+-    @Override
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (onSand(level, blockpos) && !level.isClientSide) {
+-            level.levelEvent(2005, blockpos, 0);
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
++        if (onSand(level, pos) && !level.isClientSide) {
++            level.levelEvent(2005, pos, 0);
+         }
+ 
+     }
+@@ -150,37 +173,32 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void playerDestroy(Level level, Player player, BlockPos blockpos, BlockState blockstate, @Nullable BlockEntity blockentity, ItemStack itemstack) {
+-        super.playerDestroy(level, player, blockpos, blockstate, blockentity, itemstack);
+-        this.decreaseEggs(level, blockpos, blockstate);
++    public void playerDestroy(Level level, Player player, BlockPos pos, IBlockData state, @Nullable BlockEntity te, ItemStack stack) {
++        super.playerDestroy(level, player, pos, state, te, stack);
++        this.decreaseEggs(level, pos, state);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canBeReplaced(BlockState blockstate, BlockPlaceContext blockplacecontext) {
+-        return !blockplacecontext.isSecondaryUseActive() && blockplacecontext.getItemInHand().is(this.asItem()) && (Integer) blockstate.getValue(TurtleEggBlock.EGGS) < 4 ? true : super.canBeReplaced(blockstate, blockplacecontext);
++    public boolean canBeReplaced(IBlockData state, BlockPlaceContext useContext) {
++        return !useContext.isSecondaryUseActive() && useContext.getItemInHand().is(this.asItem()) && (Integer) state.getValue(TurtleEggBlock.EGGS) < 4 ? true : super.canBeReplaced(state, useContext);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext blockplacecontext) {
+-        BlockState blockstate = blockplacecontext.getLevel().getBlockState(blockplacecontext.getClickedPos());
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        IBlockData iblockdata = context.getLevel().getBlockState(context.getClickedPos());
+ 
+-        return blockstate.is((Block) this) ? (BlockState) blockstate.setValue(TurtleEggBlock.EGGS, Math.min(4, (Integer) blockstate.getValue(TurtleEggBlock.EGGS) + 1)) : super.getStateForPlacement(blockplacecontext);
++        return iblockdata.is((Block) this) ? (IBlockData) iblockdata.setValue(TurtleEggBlock.EGGS, Math.min(4, (Integer) iblockdata.getValue(TurtleEggBlock.EGGS) + 1)) : super.getStateForPlacement(context);
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        return (Integer) blockstate.getValue(TurtleEggBlock.EGGS) > 1 ? TurtleEggBlock.MULTIPLE_EGGS_AABB : TurtleEggBlock.ONE_EGG_AABB;
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return (Integer) state.getValue(TurtleEggBlock.EGGS) > 1 ? TurtleEggBlock.MULTIPLE_EGGS_AABB : TurtleEggBlock.ONE_EGG_AABB;
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(TurtleEggBlock.HATCH, TurtleEggBlock.EGGS);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(TurtleEggBlock.HATCH, TurtleEggBlock.EGGS);
+     }
+ 
+     private boolean canDestroyEgg(Level level, Entity entity) {

@@ -1,0 +1,120 @@
+--- a/net/minecraft/world/level/material/FlowingFluid.java
++++ b/net/minecraft/world/level/material/FlowingFluid.java
+@@ -29,6 +31,14 @@
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.block.BlockFace;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.block.data.CraftBlockData;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.block.BlockFromToEvent;
++import org.bukkit.event.block.FluidLevelChangeEvent;
++// CraftBukkit end
+ 
+ public abstract class FlowingFluid extends Fluid {
+     public static final BooleanProperty FALLING = BlockStateProperties.FALLING;
+@@ -111,12 +134,22 @@
+ 
+     protected void spread(Level level, BlockPos pos, FluidState state) {
+         if (!state.isEmpty()) {
+-            BlockState blockState = level.getBlockState(pos);
+-            BlockPos blockPos = pos.below();
+-            BlockState blockState1 = level.getBlockState(blockPos);
+-            FluidState newLiquid = this.getNewLiquid(level, blockPos, blockState1);
+-            if (this.canSpreadTo(level, pos, blockState, Direction.DOWN, blockPos, blockState1, level.getFluidState(blockPos), newLiquid.getType())) {
+-                this.spreadTo(level, blockPos, blockState1, Direction.DOWN, newLiquid);
++            IBlockData iblockdata = level.getBlockState(pos);
++            BlockPos blockposition1 = pos.below();
++            IBlockData iblockdata1 = level.getBlockState(blockposition1);
++            FluidState fluid1 = this.getNewLiquid(level, blockposition1, iblockdata1);
++
++            if (this.canSpreadTo(level, pos, iblockdata, Direction.DOWN, blockposition1, iblockdata1, level.getFluidState(blockposition1), fluid1.getType())) {
++                // CraftBukkit start
++                org.bukkit.block.Block source = CraftBlock.at(level, pos);
++                BlockFromToEvent event = new BlockFromToEvent(source, BlockFace.DOWN);
++                level.getCraftServer().getPluginManager().callEvent(event);
++
++                if (event.isCancelled()) {
++                    return;
++                }
++                // CraftBukkit end
++                this.spreadTo(level, blockposition1, iblockdata1, Direction.DOWN, fluid1);
+                 if (this.sourceNeighborCount(level, pos) >= 3) {
+                     this.spreadToSides(level, pos, state, blockState);
+                 }
+@@ -135,13 +171,24 @@
+         if (i > 0) {
+             Map<Direction, FluidState> spread = this.getSpread(level, pos, blockState);
+ 
+-            for (Entry<Direction, FluidState> entry : spread.entrySet()) {
+-                Direction direction = entry.getKey();
+-                FluidState fluidState1 = entry.getValue();
+-                BlockPos blockPos = pos.relative(direction);
+-                BlockState blockState1 = level.getBlockState(blockPos);
+-                if (this.canSpreadTo(level, pos, blockState, direction, blockPos, blockState1, level.getFluidState(blockPos), fluidState1.getType())) {
+-                    this.spreadTo(level, blockPos, blockState1, direction, fluidState1);
++            while (iterator.hasNext()) {
++                Entry<Direction, FluidState> entry = (Entry) iterator.next();
++                Direction enumdirection = (Direction) entry.getKey();
++                FluidState fluid1 = (FluidState) entry.getValue();
++                BlockPos blockposition1 = pos.relative(enumdirection);
++                IBlockData iblockdata1 = level.getBlockState(blockposition1);
++
++                if (this.canSpreadTo(level, pos, blockState, enumdirection, blockposition1, iblockdata1, level.getFluidState(blockposition1), fluid1.getType())) {
++                    // CraftBukkit start
++                    org.bukkit.block.Block source = CraftBlock.at(level, pos);
++                    BlockFromToEvent event = new BlockFromToEvent(source, org.bukkit.craftbukkit.block.CraftBlock.notchToBlockFace(enumdirection));
++                    level.getCraftServer().getPluginManager().callEvent(event);
++
++                    if (event.isCancelled()) {
++                        continue;
++                    }
++                    // CraftBukkit end
++                    this.spreadTo(level, blockposition1, iblockdata1, enumdirection, fluid1);
+                 }
+             }
+         }
+@@ -415,17 +459,30 @@
+     @Override
+     public void tick(Level level, BlockPos pos, FluidState state) {
+         if (!state.isSource()) {
+-            FluidState newLiquid = this.getNewLiquid(level, pos, level.getBlockState(pos));
+-            int spreadDelay = this.getSpreadDelay(level, pos, state, newLiquid);
+-            if (newLiquid.isEmpty()) {
+-                state = newLiquid;
+-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+-            } else if (!newLiquid.equals(state)) {
+-                state = newLiquid;
+-                BlockState blockState = newLiquid.createLegacyBlock();
+-                level.setBlock(pos, blockState, 2);
+-                level.scheduleTick(pos, newLiquid.getType(), spreadDelay);
+-                level.updateNeighborsAt(pos, blockState.getBlock());
++            FluidState fluid1 = this.getNewLiquid(level, pos, level.getBlockState(pos));
++            int i = this.getSpreadDelay(level, pos, state, fluid1);
++
++            if (fluid1.isEmpty()) {
++                state = fluid1;
++                // CraftBukkit start
++                FluidLevelChangeEvent event = CraftEventFactory.callFluidLevelChangeEvent(level, pos, Blocks.AIR.defaultBlockState());
++                if (event.isCancelled()) {
++                    return;
++                }
++                level.setBlock(pos, ((CraftBlockData) event.getNewData()).getState(), 3);
++                // CraftBukkit end
++            } else if (!fluid1.equals(state)) {
++                state = fluid1;
++                IBlockData iblockdata = fluid1.createLegacyBlock();
++                // CraftBukkit start
++                FluidLevelChangeEvent event = CraftEventFactory.callFluidLevelChangeEvent(level, pos, iblockdata);
++                if (event.isCancelled()) {
++                    return;
++                }
++                level.setBlock(pos, ((CraftBlockData) event.getNewData()).getState(), 2);
++                // CraftBukkit end
++                level.scheduleTick(pos, fluid1.getType(), i);
++                level.updateNeighborsAt(pos, iblockdata.getBlock());
+             }
+         }
+ 

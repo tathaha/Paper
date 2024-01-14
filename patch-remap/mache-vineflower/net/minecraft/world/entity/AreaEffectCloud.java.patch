@@ -1,0 +1,512 @@
+--- a/net/minecraft/world/entity/AreaEffectCloud.java
++++ b/net/minecraft/world/entity/AreaEffectCloud.java
+@@ -5,12 +5,14 @@
+ import com.mojang.brigadier.StringReader;
+ import com.mojang.brigadier.exceptions.CommandSyntaxException;
+ import com.mojang.logging.LogUtils;
++import java.util.Collection;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.UUID;
+-import java.util.Map.Entry;
+ import javax.annotation.Nullable;
+ import net.minecraft.commands.arguments.ParticleArgument;
++import net.minecraft.core.HolderLookup;
+ import net.minecraft.core.particles.ParticleOptions;
+ import net.minecraft.core.particles.ParticleTypes;
+ import net.minecraft.core.registries.BuiltInRegistries;
+@@ -26,10 +28,14 @@
+ import net.minecraft.world.item.alchemy.PotionUtils;
+ import net.minecraft.world.item.alchemy.Potions;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.material.PushReaction;
++import net.minecraft.world.level.material.EnumPistonReaction;
+ import org.slf4j.Logger;
++import org.bukkit.craftbukkit.entity.CraftLivingEntity;
++import org.bukkit.entity.LivingEntity;
++// CraftBukkit end
+ 
+ public class AreaEffectCloud extends Entity implements TraceableEntity {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private static final int TIME_BETWEEN_APPLICATIONS = 5;
+     private static final EntityDataAccessor<Float> DATA_RADIUS = SynchedEntityData.defineId(AreaEffectCloud.class, EntityDataSerializers.FLOAT);
+@@ -42,56 +48,64 @@
+     public static final float DEFAULT_WIDTH = 6.0F;
+     public static final float HEIGHT = 0.5F;
+     private static final String TAG_EFFECTS = "effects";
+-    private Potion potion = Potions.EMPTY;
+-    private final List<MobEffectInstance> effects = Lists.newArrayList();
+-    private final Map<Entity, Integer> victims = Maps.newHashMap();
+-    private int duration = 600;
+-    private int waitTime = 20;
+-    private int reapplicationDelay = 20;
++    public Potion potion;
++    public List<MobEffectInstance> effects;
++    private final Map<Entity, Integer> victims;
++    private int duration;
++    public int waitTime;
++    public int reapplicationDelay;
+     private boolean fixedColor;
+-    private int durationOnUse;
+-    private float radiusOnUse;
+-    private float radiusPerTick;
++    public int durationOnUse;
++    public float radiusOnUse;
++    public float radiusPerTick;
+     @Nullable
+-    private LivingEntity owner;
++    private net.minecraft.world.entity.LivingEntity owner;
+     @Nullable
+     private UUID ownerUUID;
+ 
+     public AreaEffectCloud(EntityType<? extends AreaEffectCloud> entityType, Level level) {
+         super(entityType, level);
++        this.potion = Potions.EMPTY;
++        this.effects = Lists.newArrayList();
++        this.victims = Maps.newHashMap();
++        this.duration = 600;
++        this.waitTime = 20;
++        this.reapplicationDelay = 20;
+         this.noPhysics = true;
+     }
+ 
+-    public AreaEffectCloud(Level level, double x, double y, double z) {
++    public AreaEffectCloud(Level level, double x, double d1, double y) {
+         this(EntityType.AREA_EFFECT_CLOUD, level);
+-        this.setPos(x, y, z);
++        this.setPos(x, d1, y);
+     }
+ 
+     @Override
+     protected void defineSynchedData() {
+-        this.getEntityData().define(DATA_COLOR, 0);
+-        this.getEntityData().define(DATA_RADIUS, 3.0F);
+-        this.getEntityData().define(DATA_WAITING, false);
+-        this.getEntityData().define(DATA_PARTICLE, ParticleTypes.ENTITY_EFFECT);
++        this.getEntityData().define(AreaEffectCloud.DATA_COLOR, 0);
++        this.getEntityData().define(AreaEffectCloud.DATA_RADIUS, 3.0F);
++        this.getEntityData().define(AreaEffectCloud.DATA_WAITING, false);
++        this.getEntityData().define(AreaEffectCloud.DATA_PARTICLE, ParticleTypes.ENTITY_EFFECT);
+     }
+ 
+     public void setRadius(float radius) {
+         if (!this.level().isClientSide) {
+-            this.getEntityData().set(DATA_RADIUS, Mth.clamp(radius, 0.0F, 32.0F));
++            this.getEntityData().set(AreaEffectCloud.DATA_RADIUS, Mth.clamp(radius, 0.0F, 32.0F));
+         }
++
+     }
+ 
+     @Override
+     public void refreshDimensions() {
+-        double x = this.getX();
+-        double y = this.getY();
+-        double z = this.getZ();
++        double d0 = this.getX();
++        double d1 = this.getY();
++        double d2 = this.getZ();
++
+         super.refreshDimensions();
+-        this.setPos(x, y, z);
++        this.setPos(d0, d1, d2);
+     }
+ 
+     public float getRadius() {
+-        return this.getEntityData().get(DATA_RADIUS);
++        return (Float) this.getEntityData().get(AreaEffectCloud.DATA_RADIUS);
+     }
+ 
+     public void setPotion(Potion potion) {
+@@ -99,14 +113,16 @@
+         if (!this.fixedColor) {
+             this.updateColor();
+         }
++
+     }
+ 
+-    private void updateColor() {
++    public void updateColor() {
+         if (this.potion == Potions.EMPTY && this.effects.isEmpty()) {
+-            this.getEntityData().set(DATA_COLOR, 0);
++            this.getEntityData().set(AreaEffectCloud.DATA_COLOR, 0);
+         } else {
+-            this.getEntityData().set(DATA_COLOR, PotionUtils.getColor(PotionUtils.getAllEffects(this.potion, this.effects)));
++            this.getEntityData().set(AreaEffectCloud.DATA_COLOR, PotionUtils.getColor((Collection) PotionUtils.getAllEffects(this.potion, this.effects)));
+         }
++
+     }
+ 
+     public void addEffect(MobEffectInstance effectInstance) {
+@@ -114,31 +130,32 @@
+         if (!this.fixedColor) {
+             this.updateColor();
+         }
++
+     }
+ 
+     public int getColor() {
+-        return this.getEntityData().get(DATA_COLOR);
++        return (Integer) this.getEntityData().get(AreaEffectCloud.DATA_COLOR);
+     }
+ 
+     public void setFixedColor(int color) {
+         this.fixedColor = true;
+-        this.getEntityData().set(DATA_COLOR, color);
++        this.getEntityData().set(AreaEffectCloud.DATA_COLOR, color);
+     }
+ 
+     public ParticleOptions getParticle() {
+-        return this.getEntityData().get(DATA_PARTICLE);
++        return (ParticleOptions) this.getEntityData().get(AreaEffectCloud.DATA_PARTICLE);
+     }
+ 
+     public void setParticle(ParticleOptions particleOption) {
+-        this.getEntityData().set(DATA_PARTICLE, particleOption);
++        this.getEntityData().set(AreaEffectCloud.DATA_PARTICLE, particleOption);
+     }
+ 
+     protected void setWaiting(boolean waiting) {
+-        this.getEntityData().set(DATA_WAITING, waiting);
++        this.getEntityData().set(AreaEffectCloud.DATA_WAITING, waiting);
+     }
+ 
+     public boolean isWaiting() {
+-        return this.getEntityData().get(DATA_WAITING);
++        return (Boolean) this.getEntityData().get(AreaEffectCloud.DATA_WAITING);
+     }
+ 
+     public int getDuration() {
+@@ -152,49 +169,53 @@
+     @Override
+     public void tick() {
+         super.tick();
+-        boolean isWaiting = this.isWaiting();
+-        float radius = this.getRadius();
++        boolean flag = this.isWaiting();
++        float f = this.getRadius();
++
+         if (this.level().isClientSide) {
+-            if (isWaiting && this.random.nextBoolean()) {
++            if (flag && this.random.nextBoolean()) {
+                 return;
+             }
+ 
+-            ParticleOptions particle = this.getParticle();
++            ParticleOptions particleparam = this.getParticle();
+             int i;
+-            float f;
+-            if (isWaiting) {
++            float f1;
++
++            if (flag) {
+                 i = 2;
+-                f = 0.2F;
++                f1 = 0.2F;
+             } else {
+-                i = Mth.ceil((float) Math.PI * radius * radius);
+-                f = radius;
++                i = Mth.ceil(3.1415927F * f * f);
++                f1 = f;
+             }
+ 
+-            for (int i1 = 0; i1 < i; i1++) {
+-                float f1 = this.random.nextFloat() * (float) (Math.PI * 2);
+-                float f2 = Mth.sqrt(this.random.nextFloat()) * f;
+-                double d = this.getX() + (double)(Mth.cos(f1) * f2);
+-                double y = this.getY();
+-                double d1 = this.getZ() + (double)(Mth.sin(f1) * f2);
+-                double d2;
++            for (int j = 0; j < i; ++j) {
++                float f2 = this.random.nextFloat() * 6.2831855F;
++                float f3 = Mth.sqrt(this.random.nextFloat()) * f1;
++                double d0 = this.getX() + (double) (Mth.cos(f2) * f3);
++                double d1 = this.getY();
++                double d2 = this.getZ() + (double) (Mth.sin(f2) * f3);
+                 double d3;
+                 double d4;
+-                if (particle.getType() == ParticleTypes.ENTITY_EFFECT) {
+-                    int i2 = isWaiting && this.random.nextBoolean() ? 16777215 : this.getColor();
+-                    d2 = (double)((float)(i2 >> 16 & 0xFF) / 255.0F);
+-                    d3 = (double)((float)(i2 >> 8 & 0xFF) / 255.0F);
+-                    d4 = (double)((float)(i2 & 0xFF) / 255.0F);
+-                } else if (isWaiting) {
+-                    d2 = 0.0;
+-                    d3 = 0.0;
+-                    d4 = 0.0;
++                double d5;
++
++                if (particleparam.getType() == ParticleTypes.ENTITY_EFFECT) {
++                    int k = flag && this.random.nextBoolean() ? 16777215 : this.getColor();
++
++                    d3 = (double) ((float) (k >> 16 & 255) / 255.0F);
++                    d4 = (double) ((float) (k >> 8 & 255) / 255.0F);
++                    d5 = (double) ((float) (k & 255) / 255.0F);
++                } else if (flag) {
++                    d3 = 0.0D;
++                    d4 = 0.0D;
++                    d5 = 0.0D;
+                 } else {
+-                    d2 = (0.5 - this.random.nextDouble()) * 0.15;
+-                    d3 = 0.01F;
+-                    d4 = (0.5 - this.random.nextDouble()) * 0.15;
++                    d3 = (0.5D - this.random.nextDouble()) * 0.15D;
++                    d4 = 0.009999999776482582D;
++                    d5 = (0.5D - this.random.nextDouble()) * 0.15D;
+                 }
+ 
+-                this.level().addAlwaysVisibleParticle(particle, d, y, d1, d2, d3, d4);
++                this.level().addAlwaysVisibleParticle(particleparam, d0, d1, d2, d3, d4, d5);
+             }
+         } else {
+             if (this.tickCount >= this.waitTime + this.duration) {
+@@ -202,76 +223,96 @@
+                 return;
+             }
+ 
+-            boolean flag = this.tickCount < this.waitTime;
+-            if (isWaiting != flag) {
+-                this.setWaiting(flag);
++            boolean flag1 = this.tickCount < this.waitTime;
++
++            if (flag != flag1) {
++                this.setWaiting(flag1);
+             }
+ 
+-            if (flag) {
++            if (flag1) {
+                 return;
+             }
+ 
+             if (this.radiusPerTick != 0.0F) {
+-                radius += this.radiusPerTick;
+-                if (radius < 0.5F) {
++                f += this.radiusPerTick;
++                if (f < 0.5F) {
+                     this.discard();
+                     return;
+                 }
+ 
+-                this.setRadius(radius);
++                this.setRadius(f);
+             }
+ 
+             if (this.tickCount % 5 == 0) {
+-                this.victims.entrySet().removeIf(victim -> this.tickCount >= victim.getValue());
++                this.victims.entrySet().removeIf((entry) -> {
++                    return this.tickCount >= (Integer) entry.getValue();
++                });
+                 List<MobEffectInstance> list = Lists.newArrayList();
++                Iterator iterator = this.potion.getEffects().iterator();
+ 
+-                for (MobEffectInstance mobEffectInstance : this.potion.getEffects()) {
+-                    list.add(
+-                        new MobEffectInstance(
+-                            mobEffectInstance.getEffect(),
+-                            mobEffectInstance.mapDuration(i3 -> i3 / 4),
+-                            mobEffectInstance.getAmplifier(),
+-                            mobEffectInstance.isAmbient(),
+-                            mobEffectInstance.isVisible()
+-                        )
+-                    );
++                while (iterator.hasNext()) {
++                    MobEffectInstance mobeffect = (MobEffectInstance) iterator.next();
++
++                    list.add(new MobEffectInstance(mobeffect.getEffect(), mobeffect.mapDuration((l) -> {
++                        return l / 4;
++                    }), mobeffect.getAmplifier(), mobeffect.isAmbient(), mobeffect.isVisible()));
+                 }
+ 
+                 list.addAll(this.effects);
+                 if (list.isEmpty()) {
+                     this.victims.clear();
+                 } else {
+-                    List<LivingEntity> entitiesOfClass = this.level().getEntitiesOfClass(LivingEntity.class, this.getBoundingBox());
+-                    if (!entitiesOfClass.isEmpty()) {
+-                        for (LivingEntity livingEntity : entitiesOfClass) {
+-                            if (!this.victims.containsKey(livingEntity) && livingEntity.isAffectedByPotions()) {
+-                                double d5 = livingEntity.getX() - this.getX();
+-                                double d6 = livingEntity.getZ() - this.getZ();
+-                                double d7 = d5 * d5 + d6 * d6;
+-                                if (d7 <= (double)(radius * radius)) {
+-                                    this.victims.put(livingEntity, this.tickCount + this.reapplicationDelay);
++                    List<net.minecraft.world.entity.LivingEntity> list1 = this.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, this.getBoundingBox());
+ 
+-                                    for (MobEffectInstance mobEffectInstance1 : list) {
+-                                        if (mobEffectInstance1.getEffect().isInstantenous()) {
+-                                            mobEffectInstance1.getEffect()
+-                                                .applyInstantenousEffect(this, this.getOwner(), livingEntity, mobEffectInstance1.getAmplifier(), 0.5);
++                    if (!list1.isEmpty()) {
++                        Iterator iterator1 = list1.iterator();
++
++                        List<LivingEntity> entities = new java.util.ArrayList<LivingEntity>(); // CraftBukkit
++                        while (iterator1.hasNext()) {
++                            net.minecraft.world.entity.LivingEntity entityliving = (net.minecraft.world.entity.LivingEntity) iterator1.next();
++
++                            if (!this.victims.containsKey(entityliving) && entityliving.isAffectedByPotions()) {
++                                double d6 = entityliving.getX() - this.getX();
++                                double d7 = entityliving.getZ() - this.getZ();
++                                double d8 = d6 * d6 + d7 * d7;
++
++                                if (d8 <= (double) (f * f)) {
++                                    // CraftBukkit start
++                                    entities.add((LivingEntity) entityliving.getBukkitEntity());
++                                }
++                            }
++                        }
++                        org.bukkit.event.entity.AreaEffectCloudApplyEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callAreaEffectCloudApplyEvent(this, entities);
++                        if (!event.isCancelled()) {
++                            for (LivingEntity entity : event.getAffectedEntities()) {
++                                if (entity instanceof CraftLivingEntity) {
++                                    net.minecraft.world.entity.LivingEntity entityliving = ((CraftLivingEntity) entity).getHandle();
++                                    // CraftBukkit end
++                                    this.victims.put(entityliving, this.tickCount + this.reapplicationDelay);
++                                    Iterator iterator2 = list.iterator();
++
++                                    while (iterator2.hasNext()) {
++                                        MobEffectInstance mobeffect1 = (MobEffectInstance) iterator2.next();
++
++                                        if (mobeffect1.getEffect().isInstantenous()) {
++                                            mobeffect1.getEffect().applyInstantenousEffect(this, this.getOwner(), entityliving, mobeffect1.getAmplifier(), 0.5D);
+                                         } else {
+-                                            livingEntity.addEffect(new MobEffectInstance(mobEffectInstance1), this);
++                                            entityliving.addEffect(new MobEffectInstance(mobeffect1), this, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.AREA_EFFECT_CLOUD); // CraftBukkit
+                                         }
+                                     }
+ 
+                                     if (this.radiusOnUse != 0.0F) {
+-                                        radius += this.radiusOnUse;
+-                                        if (radius < 0.5F) {
++                                        f += this.radiusOnUse;
++                                        if (f < 0.5F) {
+                                             this.discard();
+                                             return;
+                                         }
+ 
+-                                        this.setRadius(radius);
++                                        this.setRadius(f);
+                                     }
+ 
+                                     if (this.durationOnUse != 0) {
+-                                        this.duration = this.duration + this.durationOnUse;
++                                        this.duration += this.durationOnUse;
+                                         if (this.duration <= 0) {
+                                             this.discard();
+                                             return;
+@@ -284,6 +325,7 @@
+                 }
+             }
+         }
++
+     }
+ 
+     public float getRadiusOnUse() {
+@@ -318,18 +360,19 @@
+         this.waitTime = waitTime;
+     }
+ 
+-    public void setOwner(@Nullable LivingEntity owner) {
++    public void setOwner(@Nullable net.minecraft.world.entity.LivingEntity owner) {
+         this.owner = owner;
+         this.ownerUUID = owner == null ? null : owner.getUUID();
+     }
+ 
+     @Nullable
+     @Override
+-    public LivingEntity getOwner() {
++    public net.minecraft.world.entity.LivingEntity getOwner() {
+         if (this.owner == null && this.ownerUUID != null && this.level() instanceof ServerLevel) {
+-            Entity entity = ((ServerLevel)this.level()).getEntity(this.ownerUUID);
+-            if (entity instanceof LivingEntity) {
+-                this.owner = (LivingEntity)entity;
++            Entity entity = ((ServerLevel) this.level()).getEntity(this.ownerUUID);
++
++            if (entity instanceof net.minecraft.world.entity.LivingEntity) {
++                this.owner = (net.minecraft.world.entity.LivingEntity) entity;
+             }
+         }
+ 
+@@ -352,9 +395,9 @@
+ 
+         if (compound.contains("Particle", 8)) {
+             try {
+-                this.setParticle(ParticleArgument.readParticle(new StringReader(compound.getString("Particle")), BuiltInRegistries.PARTICLE_TYPE.asLookup()));
+-            } catch (CommandSyntaxException var5) {
+-                LOGGER.warn("Couldn't load custom particle {}", compound.getString("Particle"), var5);
++                this.setParticle(ParticleArgument.readParticle(new StringReader(compound.getString("Particle")), (HolderLookup) BuiltInRegistries.PARTICLE_TYPE.asLookup()));
++            } catch (CommandSyntaxException commandsyntaxexception) {
++                AreaEffectCloud.LOGGER.warn("Couldn't load custom particle {}", compound.getString("Particle"), commandsyntaxexception);
+             }
+         }
+ 
+@@ -367,16 +410,19 @@
+         }
+ 
+         if (compound.contains("effects", 9)) {
+-            ListTag list = compound.getList("effects", 10);
++            ListTag nbttaglist = compound.getList("effects", 10);
++
+             this.effects.clear();
+ 
+-            for (int i = 0; i < list.size(); i++) {
+-                MobEffectInstance mobEffectInstance = MobEffectInstance.load(list.getCompound(i));
+-                if (mobEffectInstance != null) {
+-                    this.addEffect(mobEffectInstance);
++            for (int i = 0; i < nbttaglist.size(); ++i) {
++                MobEffectInstance mobeffect = MobEffectInstance.load(nbttaglist.getCompound(i));
++
++                if (mobeffect != null) {
++                    this.addEffect(mobeffect);
+                 }
+             }
+         }
++
+     }
+ 
+     @Override
+@@ -403,19 +449,23 @@
+         }
+ 
+         if (!this.effects.isEmpty()) {
+-            ListTag list = new ListTag();
++            ListTag nbttaglist = new ListTag();
++            Iterator iterator = this.effects.iterator();
+ 
+-            for (MobEffectInstance mobEffectInstance : this.effects) {
+-                list.add(mobEffectInstance.save(new CompoundTag()));
++            while (iterator.hasNext()) {
++                MobEffectInstance mobeffect = (MobEffectInstance) iterator.next();
++
++                nbttaglist.add(mobeffect.save(new CompoundTag()));
+             }
+ 
+-            compound.put("effects", list);
++            compound.put("effects", nbttaglist);
+         }
++
+     }
+ 
+     @Override
+     public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+-        if (DATA_RADIUS.equals(key)) {
++        if (AreaEffectCloud.DATA_RADIUS.equals(key)) {
+             this.refreshDimensions();
+         }
+ 
+@@ -427,12 +477,12 @@
+     }
+ 
+     @Override
+-    public PushReaction getPistonPushReaction() {
+-        return PushReaction.IGNORE;
++    public EnumPistonReaction getPistonPushReaction() {
++        return EnumPistonReaction.IGNORE;
+     }
+ 
+     @Override
+-    public EntityDimensions getDimensions(Pose pose) {
++    public EntityDimensions getDimensions(EntityPose pose) {
+         return EntityDimensions.scalable(this.getRadius() * 2.0F, 0.5F);
+     }
+ }

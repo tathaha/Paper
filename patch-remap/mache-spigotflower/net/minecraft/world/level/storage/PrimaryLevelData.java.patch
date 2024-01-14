@@ -1,0 +1,803 @@
+--- a/net/minecraft/world/level/storage/PrimaryLevelData.java
++++ b/net/minecraft/world/level/storage/PrimaryLevelData.java
+@@ -19,16 +19,13 @@
+ import net.minecraft.Util;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.HolderLookup;
++import net.minecraft.core.Registry;
+ import net.minecraft.core.RegistryAccess;
+ import net.minecraft.core.UUIDUtil;
+-import net.minecraft.nbt.CompoundTag;
+-import net.minecraft.nbt.ListTag;
+-import net.minecraft.nbt.NbtOps;
+-import net.minecraft.nbt.NbtUtils;
+-import net.minecraft.nbt.StringTag;
+-import net.minecraft.nbt.Tag;
+ import net.minecraft.resources.RegistryOps;
+ import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.Difficulty;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.GameType;
+@@ -36,12 +33,26 @@
+ import net.minecraft.world.level.LevelSettings;
+ import net.minecraft.world.level.WorldDataConfiguration;
+ import net.minecraft.world.level.border.WorldBorder;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
+-import net.minecraft.world.level.levelgen.WorldGenSettings;
+ import net.minecraft.world.level.levelgen.WorldOptions;
+ import net.minecraft.world.level.timers.TimerCallbacks;
+ import net.minecraft.world.level.timers.TimerQueue;
+ import org.slf4j.Logger;
++import net.minecraft.core.registries.Registries;
++import net.minecraft.nbt.CompoundTag;
++import net.minecraft.nbt.ListTag;
++import net.minecraft.nbt.NbtOps;
++import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.StringTag;
++import net.minecraft.nbt.Tag;
++import net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket;
++import net.minecraft.world.level.levelgen.WorldDimensions;
++import net.minecraft.world.level.levelgen.WorldGenSettings;
++import org.bukkit.Bukkit;
++import org.bukkit.event.weather.ThunderChangeEvent;
++import org.bukkit.event.weather.WeatherChangeEvent;
++// CraftBukkit end
+ 
+ public class PrimaryLevelData implements ServerLevelData, WorldData {
+ 
+@@ -49,9 +60,9 @@
+     public static final String LEVEL_NAME = "LevelName";
+     protected static final String PLAYER = "Player";
+     protected static final String WORLD_GEN_SETTINGS = "WorldGenSettings";
+-    private LevelSettings settings;
++    public LevelSettings settings;
+     private final WorldOptions worldOptions;
+-    private final PrimaryLevelData.SpecialWorldProperty specialWorldProperty;
++    private final PrimaryLevelData.a specialWorldProperty;
+     private final Lifecycle worldGenSettingsLifecycle;
+     private int xSpawn;
+     private int ySpawn;
+@@ -81,8 +92,22 @@
+     private boolean wasModded;
+     private final Set<String> removedFeatureFlags;
+     private final TimerQueue<MinecraftServer> scheduledEvents;
++    // CraftBukkit start - Add world and pdc
++    public Registry<LevelStem> customDimensions;
++    private ServerLevel world;
++    protected Tag pdc;
+ 
+-    private PrimaryLevelData(@Nullable CompoundTag compoundtag, boolean flag, int i, int j, int k, float f, long l, long i1, int j1, int k1, int l1, boolean flag1, int i2, boolean flag2, boolean flag3, boolean flag4, WorldBorder.Settings worldborder_settings, int j2, int k2, @Nullable UUID uuid, Set<String> set, Set<String> set1, TimerQueue<MinecraftServer> timerqueue, @Nullable CompoundTag compoundtag1, EndDragonFight.Data enddragonfight_data, LevelSettings levelsettings, WorldOptions worldoptions, PrimaryLevelData.SpecialWorldProperty primaryleveldata_specialworldproperty, Lifecycle lifecycle) {
++    public void setWorld(ServerLevel world) {
++        if (this.world != null) {
++            return;
++        }
++        this.world = world;
++        world.getWorld().readBukkitValues(pdc);
++        pdc = null;
++    }
++    // CraftBukkit end
++
++    private PrimaryLevelData(@Nullable CompoundTag nbttagcompound, boolean flag, int i, int j, int k, float f, long l, long i1, int j1, int k1, int l1, boolean flag1, int i2, boolean flag2, boolean flag3, boolean flag4, WorldBorder.Settings worldborder_c, int j2, int k2, @Nullable UUID uuid, Set<String> set, Set<String> set1, TimerQueue<MinecraftServer> customfunctioncallbacktimerqueue, @Nullable CompoundTag nbttagcompound1, EndDragonFight.Data enderdragonbattle_a, LevelSettings worldsettings, WorldOptions worldoptions, PrimaryLevelData.a worlddataserver_a, Lifecycle lifecycle) {
+         this.wasModded = flag;
+         this.xSpawn = i;
+         this.ySpawn = j;
+@@ -98,29 +123,29 @@
+         this.thundering = flag2;
+         this.initialized = flag3;
+         this.difficultyLocked = flag4;
+-        this.worldBorder = worldborder_settings;
++        this.worldBorder = worldborder_c;
+         this.wanderingTraderSpawnDelay = j2;
+         this.wanderingTraderSpawnChance = k2;
+         this.wanderingTraderId = uuid;
+         this.knownServerBrands = set;
+         this.removedFeatureFlags = set1;
+-        this.loadedPlayerTag = compoundtag;
+-        this.scheduledEvents = timerqueue;
+-        this.customBossEvents = compoundtag1;
+-        this.endDragonFightData = enddragonfight_data;
+-        this.settings = levelsettings;
++        this.loadedPlayerTag = nbttagcompound;
++        this.scheduledEvents = customfunctioncallbacktimerqueue;
++        this.customBossEvents = nbttagcompound1;
++        this.endDragonFightData = enderdragonbattle_a;
++        this.settings = worldsettings;
+         this.worldOptions = worldoptions;
+-        this.specialWorldProperty = primaryleveldata_specialworldproperty;
++        this.specialWorldProperty = worlddataserver_a;
+         this.worldGenSettingsLifecycle = lifecycle;
+     }
+ 
+-    public PrimaryLevelData(LevelSettings levelsettings, WorldOptions worldoptions, PrimaryLevelData.SpecialWorldProperty primaryleveldata_specialworldproperty, Lifecycle lifecycle) {
+-        this((CompoundTag) null, false, 0, 0, 0, 0.0F, 0L, 0L, 19133, 0, 0, false, 0, false, false, false, WorldBorder.DEFAULT_SETTINGS, 0, 0, (UUID) null, Sets.newLinkedHashSet(), new HashSet(), new TimerQueue<>(TimerCallbacks.SERVER_CALLBACKS), (CompoundTag) null, EndDragonFight.Data.DEFAULT, levelsettings.copy(), worldoptions, primaryleveldata_specialworldproperty, lifecycle);
++    public PrimaryLevelData(LevelSettings settings, WorldOptions worldOptions, PrimaryLevelData.a specialWorldProperty, Lifecycle worldGenSettingsLifecycle) {
++        this((CompoundTag) null, false, 0, 0, 0, 0.0F, 0L, 0L, 19133, 0, 0, false, 0, false, false, false, WorldBorder.DEFAULT_SETTINGS, 0, 0, (UUID) null, Sets.newLinkedHashSet(), new HashSet(), new TimerQueue<>(TimerCallbacks.SERVER_CALLBACKS), (CompoundTag) null, EndDragonFight.Data.DEFAULT, settings.copy(), worldOptions, specialWorldProperty, worldGenSettingsLifecycle);
+     }
+ 
+-    public static <T> PrimaryLevelData parse(Dynamic<T> dynamic, LevelSettings levelsettings, PrimaryLevelData.SpecialWorldProperty primaryleveldata_specialworldproperty, WorldOptions worldoptions, Lifecycle lifecycle) {
++    public static <T> PrimaryLevelData parse(Dynamic<T> dynamic, LevelSettings worldsettings, PrimaryLevelData.a worlddataserver_a, WorldOptions worldoptions, Lifecycle lifecycle) {
+         long i = dynamic.get("Time").asLong(0L);
+-        CompoundTag compoundtag = (CompoundTag) CompoundTag.CODEC.parse(dynamic.get("Player").orElseEmptyMap()).result().orElse((Object) null);
++        CompoundTag nbttagcompound = (CompoundTag) CompoundTag.CODEC.parse(dynamic.get("Player").orElseEmptyMap()).result().orElse(null); // CraftBukkit - decompile error
+         boolean flag = dynamic.get("WasModded").asBoolean(false);
+         int j = dynamic.get("SpawnX").asInt(0);
+         int k = dynamic.get("SpawnY").asInt(0);
+@@ -135,509 +160,489 @@
+         boolean flag2 = dynamic.get("thundering").asBoolean(false);
+         boolean flag3 = dynamic.get("initialized").asBoolean(true);
+         boolean flag4 = dynamic.get("DifficultyLocked").asBoolean(false);
+-        WorldBorder.Settings worldborder_settings = WorldBorder.Settings.read(dynamic, WorldBorder.DEFAULT_SETTINGS);
++        WorldBorder.Settings worldborder_c = WorldBorder.Settings.read(dynamic, WorldBorder.DEFAULT_SETTINGS);
+         int j2 = dynamic.get("WanderingTraderSpawnDelay").asInt(0);
+         int k2 = dynamic.get("WanderingTraderSpawnChance").asInt(0);
+-        UUID uuid = (UUID) dynamic.get("WanderingTraderId").read(UUIDUtil.CODEC).result().orElse((Object) null);
++        UUID uuid = (UUID) dynamic.get("WanderingTraderId").read(UUIDUtil.CODEC).result().orElse(null); // CraftBukkit - decompile error
+         Set set = (Set) dynamic.get("ServerBrands").asStream().flatMap((dynamic1) -> {
+             return dynamic1.asString().result().stream();
+         }).collect(Collectors.toCollection(Sets::newLinkedHashSet));
+         Set set1 = (Set) dynamic.get("removed_features").asStream().flatMap((dynamic1) -> {
+             return dynamic1.asString().result().stream();
+         }).collect(Collectors.toSet());
+-        TimerQueue timerqueue = new TimerQueue<>(TimerCallbacks.SERVER_CALLBACKS, dynamic.get("ScheduledEvents").asStream());
+-        CompoundTag compoundtag1 = (CompoundTag) dynamic.get("CustomBossEvents").orElseEmptyMap().getValue();
+-        DataResult dataresult = dynamic.get("DragonFight").read(EndDragonFight.Data.CODEC);
++        TimerQueue customfunctioncallbacktimerqueue = new TimerQueue<>(TimerCallbacks.SERVER_CALLBACKS, dynamic.get("ScheduledEvents").asStream());
++        CompoundTag nbttagcompound1 = (CompoundTag) dynamic.get("CustomBossEvents").orElseEmptyMap().getValue();
++        DataResult<EndDragonFight.Data> dataresult = dynamic.get("DragonFight").read(EndDragonFight.Data.CODEC); // CraftBukkit - decompile error
+         Logger logger = PrimaryLevelData.LOGGER;
+ 
+         Objects.requireNonNull(logger);
+-        return new PrimaryLevelData(compoundtag, flag, j, k, l, f, i, i1, j1, k1, l1, flag1, i2, flag2, flag3, flag4, worldborder_settings, j2, k2, uuid, set, set1, timerqueue, compoundtag1, (EndDragonFight.Data) dataresult.resultOrPartial(logger::error).orElse(EndDragonFight.Data.DEFAULT), levelsettings, worldoptions, primaryleveldata_specialworldproperty, lifecycle);
++        return new PrimaryLevelData(nbttagcompound, flag, j, k, l, f, i, i1, j1, k1, l1, flag1, i2, flag2, flag3, flag4, worldborder_c, j2, k2, uuid, set, set1, customfunctioncallbacktimerqueue, nbttagcompound1, (EndDragonFight.Data) dataresult.resultOrPartial(logger::error).orElse(EndDragonFight.Data.DEFAULT), worldsettings, worldoptions, worlddataserver_a, lifecycle);
+     }
+ 
+     @Override
+-    @Override
+-    public CompoundTag createTag(RegistryAccess registryaccess, @Nullable CompoundTag compoundtag) {
+-        if (compoundtag == null) {
+-            compoundtag = this.loadedPlayerTag;
++    public CompoundTag createTag(RegistryAccess registries, @Nullable CompoundTag hostPlayerNBT) {
++        if (hostPlayerNBT == null) {
++            hostPlayerNBT = this.loadedPlayerTag;
+         }
+ 
+-        CompoundTag compoundtag1 = new CompoundTag();
++        CompoundTag nbttagcompound1 = new CompoundTag();
+ 
+-        this.setTagData(registryaccess, compoundtag1, compoundtag);
+-        return compoundtag1;
++        this.setTagData(registries, nbttagcompound1, hostPlayerNBT);
++        return nbttagcompound1;
+     }
+ 
+-    private void setTagData(RegistryAccess registryaccess, CompoundTag compoundtag, @Nullable CompoundTag compoundtag1) {
+-        compoundtag.put("ServerBrands", stringCollectionToTag(this.knownServerBrands));
+-        compoundtag.putBoolean("WasModded", this.wasModded);
++    private void setTagData(RegistryAccess registry, CompoundTag nbt, @Nullable CompoundTag playerNBT) {
++        nbt.put("ServerBrands", stringCollectionToTag(this.knownServerBrands));
++        nbt.putBoolean("WasModded", this.wasModded);
+         if (!this.removedFeatureFlags.isEmpty()) {
+-            compoundtag.put("removed_features", stringCollectionToTag(this.removedFeatureFlags));
++            nbt.put("removed_features", stringCollectionToTag(this.removedFeatureFlags));
+         }
+ 
+-        CompoundTag compoundtag2 = new CompoundTag();
++        CompoundTag nbttagcompound2 = new CompoundTag();
+ 
+-        compoundtag2.putString("Name", SharedConstants.getCurrentVersion().getName());
+-        compoundtag2.putInt("Id", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
+-        compoundtag2.putBoolean("Snapshot", !SharedConstants.getCurrentVersion().isStable());
+-        compoundtag2.putString("Series", SharedConstants.getCurrentVersion().getDataVersion().getSeries());
+-        compoundtag.put("Version", compoundtag2);
+-        NbtUtils.addCurrentDataVersion(compoundtag);
+-        DynamicOps<Tag> dynamicops = RegistryOps.create(NbtOps.INSTANCE, (HolderLookup.Provider) registryaccess);
+-        DataResult dataresult = WorldGenSettings.encode(dynamicops, this.worldOptions, registryaccess);
++        nbttagcompound2.putString("Name", SharedConstants.getCurrentVersion().getName());
++        nbttagcompound2.putInt("Id", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
++        nbttagcompound2.putBoolean("Snapshot", !SharedConstants.getCurrentVersion().isStable());
++        nbttagcompound2.putString("Series", SharedConstants.getCurrentVersion().getDataVersion().getSeries());
++        nbt.put("Version", nbttagcompound2);
++        NbtUtils.addCurrentDataVersion(nbt);
++        DynamicOps<Tag> dynamicops = RegistryOps.create(NbtOps.INSTANCE, (HolderLookup.Provider) registry);
++        DataResult<Tag> dataresult = WorldGenSettings.encode(dynamicops, this.worldOptions, new WorldDimensions(this.customDimensions != null ? this.customDimensions : registry.registryOrThrow(Registries.LEVEL_STEM))); // CraftBukkit
+         Logger logger = PrimaryLevelData.LOGGER;
+ 
+         Objects.requireNonNull(logger);
+-        dataresult.resultOrPartial(Util.prefix("WorldGenSettings: ", logger::error)).ifPresent((tag) -> {
+-            compoundtag.put("WorldGenSettings", tag);
++        dataresult.resultOrPartial(Util.prefix("WorldGenSettings: ", logger::error)).ifPresent((nbtbase) -> {
++            nbt.put("WorldGenSettings", nbtbase);
+         });
+-        compoundtag.putInt("GameType", this.settings.gameType().getId());
+-        compoundtag.putInt("SpawnX", this.xSpawn);
+-        compoundtag.putInt("SpawnY", this.ySpawn);
+-        compoundtag.putInt("SpawnZ", this.zSpawn);
+-        compoundtag.putFloat("SpawnAngle", this.spawnAngle);
+-        compoundtag.putLong("Time", this.gameTime);
+-        compoundtag.putLong("DayTime", this.dayTime);
+-        compoundtag.putLong("LastPlayed", Util.getEpochMillis());
+-        compoundtag.putString("LevelName", this.settings.levelName());
+-        compoundtag.putInt("version", 19133);
+-        compoundtag.putInt("clearWeatherTime", this.clearWeatherTime);
+-        compoundtag.putInt("rainTime", this.rainTime);
+-        compoundtag.putBoolean("raining", this.raining);
+-        compoundtag.putInt("thunderTime", this.thunderTime);
+-        compoundtag.putBoolean("thundering", this.thundering);
+-        compoundtag.putBoolean("hardcore", this.settings.hardcore());
+-        compoundtag.putBoolean("allowCommands", this.settings.allowCommands());
+-        compoundtag.putBoolean("initialized", this.initialized);
+-        this.worldBorder.write(compoundtag);
+-        compoundtag.putByte("Difficulty", (byte) this.settings.difficulty().getId());
+-        compoundtag.putBoolean("DifficultyLocked", this.difficultyLocked);
+-        compoundtag.put("GameRules", this.settings.gameRules().createTag());
+-        compoundtag.put("DragonFight", (Tag) Util.getOrThrow(EndDragonFight.Data.CODEC.encodeStart(NbtOps.INSTANCE, this.endDragonFightData), IllegalStateException::new));
+-        if (compoundtag1 != null) {
+-            compoundtag.put("Player", compoundtag1);
++        nbt.putInt("GameType", this.settings.gameType().getId());
++        nbt.putInt("SpawnX", this.xSpawn);
++        nbt.putInt("SpawnY", this.ySpawn);
++        nbt.putInt("SpawnZ", this.zSpawn);
++        nbt.putFloat("SpawnAngle", this.spawnAngle);
++        nbt.putLong("Time", this.gameTime);
++        nbt.putLong("DayTime", this.dayTime);
++        nbt.putLong("LastPlayed", Util.getEpochMillis());
++        nbt.putString("LevelName", this.settings.levelName());
++        nbt.putInt("version", 19133);
++        nbt.putInt("clearWeatherTime", this.clearWeatherTime);
++        nbt.putInt("rainTime", this.rainTime);
++        nbt.putBoolean("raining", this.raining);
++        nbt.putInt("thunderTime", this.thunderTime);
++        nbt.putBoolean("thundering", this.thundering);
++        nbt.putBoolean("hardcore", this.settings.hardcore());
++        nbt.putBoolean("allowCommands", this.settings.allowCommands());
++        nbt.putBoolean("initialized", this.initialized);
++        this.worldBorder.write(nbt);
++        nbt.putByte("Difficulty", (byte) this.settings.difficulty().getId());
++        nbt.putBoolean("DifficultyLocked", this.difficultyLocked);
++        nbt.put("GameRules", this.settings.gameRules().createTag());
++        nbt.put("DragonFight", (Tag) Util.getOrThrow(EndDragonFight.Data.CODEC.encodeStart(NbtOps.INSTANCE, this.endDragonFightData), IllegalStateException::new));
++        if (playerNBT != null) {
++            nbt.put("Player", playerNBT);
+         }
+ 
+         DataResult<Tag> dataresult1 = WorldDataConfiguration.CODEC.encodeStart(NbtOps.INSTANCE, this.settings.getDataConfiguration());
+ 
+-        dataresult1.get().ifLeft((tag) -> {
+-            compoundtag.merge((CompoundTag) tag);
++        dataresult1.get().ifLeft((nbtbase) -> {
++            nbt.merge((CompoundTag) nbtbase);
+         }).ifRight((partialresult) -> {
+             PrimaryLevelData.LOGGER.warn("Failed to encode configuration {}", partialresult.message());
+         });
+         if (this.customBossEvents != null) {
+-            compoundtag.put("CustomBossEvents", this.customBossEvents);
++            nbt.put("CustomBossEvents", this.customBossEvents);
+         }
+ 
+-        compoundtag.put("ScheduledEvents", this.scheduledEvents.store());
+-        compoundtag.putInt("WanderingTraderSpawnDelay", this.wanderingTraderSpawnDelay);
+-        compoundtag.putInt("WanderingTraderSpawnChance", this.wanderingTraderSpawnChance);
++        nbt.put("ScheduledEvents", this.scheduledEvents.store());
++        nbt.putInt("WanderingTraderSpawnDelay", this.wanderingTraderSpawnDelay);
++        nbt.putInt("WanderingTraderSpawnChance", this.wanderingTraderSpawnChance);
+         if (this.wanderingTraderId != null) {
+-            compoundtag.putUUID("WanderingTraderId", this.wanderingTraderId);
++            nbt.putUUID("WanderingTraderId", this.wanderingTraderId);
+         }
+ 
++        nbt.putString("Bukkit.Version", Bukkit.getName() + "/" + Bukkit.getVersion() + "/" + Bukkit.getBukkitVersion()); // CraftBukkit
++        world.getWorld().storeBukkitValues(nbt); // CraftBukkit - add pdc
+     }
+ 
+-    private static ListTag stringCollectionToTag(Set<String> set) {
+-        ListTag listtag = new ListTag();
+-        Stream stream = set.stream().map(StringTag::valueOf);
++    private static ListTag stringCollectionToTag(Set<String> stringCollection) {
++        ListTag nbttaglist = new ListTag();
++        Stream<StringTag> stream = stringCollection.stream().map(StringTag::valueOf); // CraftBukkit - decompile error
+ 
+-        Objects.requireNonNull(listtag);
+-        stream.forEach(listtag::add);
+-        return listtag;
++        Objects.requireNonNull(nbttaglist);
++        stream.forEach(nbttaglist::add);
++        return nbttaglist;
+     }
+ 
+     @Override
+-    @Override
+     public int getXSpawn() {
+         return this.xSpawn;
+     }
+ 
+     @Override
+-    @Override
+     public int getYSpawn() {
+         return this.ySpawn;
+     }
+ 
+     @Override
+-    @Override
+     public int getZSpawn() {
+         return this.zSpawn;
+     }
+ 
+     @Override
+-    @Override
+     public float getSpawnAngle() {
+         return this.spawnAngle;
+     }
+ 
+     @Override
+-    @Override
+     public long getGameTime() {
+         return this.gameTime;
+     }
+ 
+     @Override
+-    @Override
+     public long getDayTime() {
+         return this.dayTime;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public CompoundTag getLoadedPlayerTag() {
+         return this.loadedPlayerTag;
+     }
+ 
+     @Override
+-    @Override
+-    public void setXSpawn(int i) {
+-        this.xSpawn = i;
++    public void setXSpawn(int x) {
++        this.xSpawn = x;
+     }
+ 
+     @Override
+-    @Override
+-    public void setYSpawn(int i) {
+-        this.ySpawn = i;
++    public void setYSpawn(int y) {
++        this.ySpawn = y;
+     }
+ 
+     @Override
+-    @Override
+-    public void setZSpawn(int i) {
+-        this.zSpawn = i;
++    public void setZSpawn(int z) {
++        this.zSpawn = z;
+     }
+ 
+     @Override
+-    @Override
+-    public void setSpawnAngle(float f) {
+-        this.spawnAngle = f;
++    public void setSpawnAngle(float angle) {
++        this.spawnAngle = angle;
+     }
+ 
+     @Override
+-    @Override
+-    public void setGameTime(long i) {
+-        this.gameTime = i;
++    public void setGameTime(long time) {
++        this.gameTime = time;
+     }
+ 
+     @Override
+-    @Override
+-    public void setDayTime(long i) {
+-        this.dayTime = i;
++    public void setDayTime(long time) {
++        this.dayTime = time;
+     }
+ 
+     @Override
+-    @Override
+-    public void setSpawn(BlockPos blockpos, float f) {
+-        this.xSpawn = blockpos.getX();
+-        this.ySpawn = blockpos.getY();
+-        this.zSpawn = blockpos.getZ();
+-        this.spawnAngle = f;
++    public void setSpawn(BlockPos spawnPoint, float angle) {
++        this.xSpawn = spawnPoint.getX();
++        this.ySpawn = spawnPoint.getY();
++        this.zSpawn = spawnPoint.getZ();
++        this.spawnAngle = angle;
+     }
+ 
+     @Override
+-    @Override
+     public String getLevelName() {
+         return this.settings.levelName();
+     }
+ 
+     @Override
+-    @Override
+     public int getVersion() {
+         return this.version;
+     }
+ 
+     @Override
+-    @Override
+     public int getClearWeatherTime() {
+         return this.clearWeatherTime;
+     }
+ 
+     @Override
+-    @Override
+-    public void setClearWeatherTime(int i) {
+-        this.clearWeatherTime = i;
++    public void setClearWeatherTime(int time) {
++        this.clearWeatherTime = time;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isThundering() {
+         return this.thundering;
+     }
+ 
+     @Override
+-    @Override
+-    public void setThundering(boolean flag) {
+-        this.thundering = flag;
++    public void setThundering(boolean thundering) {
++        // CraftBukkit start
++        if (this.thundering == thundering) {
++            return;
++        }
++
++        org.bukkit.World world = Bukkit.getWorld(getLevelName());
++        if (world != null) {
++            ThunderChangeEvent thunder = new ThunderChangeEvent(world, thundering);
++            Bukkit.getServer().getPluginManager().callEvent(thunder);
++            if (thunder.isCancelled()) {
++                return;
++            }
++        }
++        // CraftBukkit end
++        this.thundering = thundering;
+     }
+ 
+     @Override
+-    @Override
+     public int getThunderTime() {
+         return this.thunderTime;
+     }
+ 
+     @Override
+-    @Override
+-    public void setThunderTime(int i) {
+-        this.thunderTime = i;
++    public void setThunderTime(int time) {
++        this.thunderTime = time;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isRaining() {
+         return this.raining;
+     }
+ 
+     @Override
+-    @Override
+-    public void setRaining(boolean flag) {
+-        this.raining = flag;
++    public void setRaining(boolean isRaining) {
++        // CraftBukkit start
++        if (this.raining == isRaining) {
++            return;
++        }
++
++        org.bukkit.World world = Bukkit.getWorld(getLevelName());
++        if (world != null) {
++            WeatherChangeEvent weather = new WeatherChangeEvent(world, isRaining);
++            Bukkit.getServer().getPluginManager().callEvent(weather);
++            if (weather.isCancelled()) {
++                return;
++            }
++        }
++        // CraftBukkit end
++        this.raining = isRaining;
+     }
+ 
+     @Override
+-    @Override
+     public int getRainTime() {
+         return this.rainTime;
+     }
+ 
+     @Override
+-    @Override
+-    public void setRainTime(int i) {
+-        this.rainTime = i;
++    public void setRainTime(int time) {
++        this.rainTime = time;
+     }
+ 
+     @Override
+-    @Override
+     public GameType getGameType() {
+         return this.settings.gameType();
+     }
+ 
+     @Override
+-    @Override
+-    public void setGameType(GameType gametype) {
+-        this.settings = this.settings.withGameType(gametype);
++    public void setGameType(GameType type) {
++        this.settings = this.settings.withGameType(type);
+     }
+ 
+     @Override
+-    @Override
+     public boolean isHardcore() {
+         return this.settings.hardcore();
+     }
+ 
+     @Override
+-    @Override
+     public boolean getAllowCommands() {
+         return this.settings.allowCommands();
+     }
+ 
+     @Override
+-    @Override
+     public boolean isInitialized() {
+         return this.initialized;
+     }
+ 
+     @Override
+-    @Override
+-    public void setInitialized(boolean flag) {
+-        this.initialized = flag;
++    public void setInitialized(boolean initialized) {
++        this.initialized = initialized;
+     }
+ 
+     @Override
+-    @Override
+     public GameRules getGameRules() {
+         return this.settings.gameRules();
+     }
+ 
+     @Override
+-    @Override
+     public WorldBorder.Settings getWorldBorder() {
+         return this.worldBorder;
+     }
+ 
+     @Override
+-    @Override
+-    public void setWorldBorder(WorldBorder.Settings worldborder_settings) {
+-        this.worldBorder = worldborder_settings;
++    public void setWorldBorder(WorldBorder.Settings serializer) {
++        this.worldBorder = serializer;
+     }
+ 
+     @Override
+-    @Override
+     public Difficulty getDifficulty() {
+         return this.settings.difficulty();
+     }
+ 
+     @Override
+-    @Override
+     public void setDifficulty(Difficulty difficulty) {
+         this.settings = this.settings.withDifficulty(difficulty);
++        // CraftBukkit start
++        ClientboundChangeDifficultyPacket packet = new ClientboundChangeDifficultyPacket(this.getDifficulty(), this.isDifficultyLocked());
++        for (ServerPlayer player : (java.util.List<ServerPlayer>) (java.util.List) world.players()) {
++            player.connection.send(packet);
++        }
++        // CraftBukkit end
+     }
+ 
+     @Override
+-    @Override
+     public boolean isDifficultyLocked() {
+         return this.difficultyLocked;
+     }
+ 
+     @Override
+-    @Override
+-    public void setDifficultyLocked(boolean flag) {
+-        this.difficultyLocked = flag;
++    public void setDifficultyLocked(boolean locked) {
++        this.difficultyLocked = locked;
+     }
+ 
+     @Override
+-    @Override
+     public TimerQueue<MinecraftServer> getScheduledEvents() {
+         return this.scheduledEvents;
+     }
+ 
+     @Override
+-    @Override
+-    public void fillCrashReportCategory(CrashReportCategory crashreportcategory, LevelHeightAccessor levelheightaccessor) {
+-        ServerLevelData.super.fillCrashReportCategory(crashreportcategory, levelheightaccessor);
+-        WorldData.super.fillCrashReportCategory(crashreportcategory);
++    public void fillCrashReportCategory(CrashReportCategory crashReportCategory, LevelHeightAccessor level) {
++        ServerLevelData.super.fillCrashReportCategory(crashReportCategory, level);
++        WorldData.super.fillCrashReportCategory(crashReportCategory);
+     }
+ 
+     @Override
+-    @Override
+     public WorldOptions worldGenOptions() {
+         return this.worldOptions;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isFlatWorld() {
+-        return this.specialWorldProperty == PrimaryLevelData.SpecialWorldProperty.FLAT;
++        return this.specialWorldProperty == PrimaryLevelData.a.FLAT;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isDebugWorld() {
+-        return this.specialWorldProperty == PrimaryLevelData.SpecialWorldProperty.DEBUG;
++        return this.specialWorldProperty == PrimaryLevelData.a.DEBUG;
+     }
+ 
+     @Override
+-    @Override
+     public Lifecycle worldGenSettingsLifecycle() {
+         return this.worldGenSettingsLifecycle;
+     }
+ 
+     @Override
+-    @Override
+     public EndDragonFight.Data endDragonFightData() {
+         return this.endDragonFightData;
+     }
+ 
+     @Override
+-    @Override
+-    public void setEndDragonFightData(EndDragonFight.Data enddragonfight_data) {
+-        this.endDragonFightData = enddragonfight_data;
++    public void setEndDragonFightData(EndDragonFight.Data endDragonFightData) {
++        this.endDragonFightData = endDragonFightData;
+     }
+ 
+     @Override
+-    @Override
+     public WorldDataConfiguration getDataConfiguration() {
+         return this.settings.getDataConfiguration();
+     }
+ 
+     @Override
+-    @Override
+-    public void setDataConfiguration(WorldDataConfiguration worlddataconfiguration) {
+-        this.settings = this.settings.withDataConfiguration(worlddataconfiguration);
++    public void setDataConfiguration(WorldDataConfiguration dataConfiguration) {
++        this.settings = this.settings.withDataConfiguration(dataConfiguration);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public CompoundTag getCustomBossEvents() {
+         return this.customBossEvents;
+     }
+ 
+     @Override
+-    @Override
+-    public void setCustomBossEvents(@Nullable CompoundTag compoundtag) {
+-        this.customBossEvents = compoundtag;
++    public void setCustomBossEvents(@Nullable CompoundTag nbt) {
++        this.customBossEvents = nbt;
+     }
+ 
+     @Override
+-    @Override
+     public int getWanderingTraderSpawnDelay() {
+         return this.wanderingTraderSpawnDelay;
+     }
+ 
+     @Override
+-    @Override
+-    public void setWanderingTraderSpawnDelay(int i) {
+-        this.wanderingTraderSpawnDelay = i;
++    public void setWanderingTraderSpawnDelay(int delay) {
++        this.wanderingTraderSpawnDelay = delay;
+     }
+ 
+     @Override
+-    @Override
+     public int getWanderingTraderSpawnChance() {
+         return this.wanderingTraderSpawnChance;
+     }
+ 
+     @Override
+-    @Override
+-    public void setWanderingTraderSpawnChance(int i) {
+-        this.wanderingTraderSpawnChance = i;
++    public void setWanderingTraderSpawnChance(int chance) {
++        this.wanderingTraderSpawnChance = chance;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public UUID getWanderingTraderId() {
+         return this.wanderingTraderId;
+     }
+ 
+     @Override
+-    @Override
+-    public void setWanderingTraderId(UUID uuid) {
+-        this.wanderingTraderId = uuid;
++    public void setWanderingTraderId(UUID id) {
++        this.wanderingTraderId = id;
+     }
+ 
+     @Override
+-    @Override
+-    public void setModdedInfo(String s, boolean flag) {
+-        this.knownServerBrands.add(s);
+-        this.wasModded |= flag;
++    public void setModdedInfo(String name, boolean isModded) {
++        this.knownServerBrands.add(name);
++        this.wasModded |= isModded;
+     }
+ 
+     @Override
+-    @Override
+     public boolean wasModded() {
+         return this.wasModded;
+     }
+ 
+     @Override
+-    @Override
+     public Set<String> getKnownServerBrands() {
+         return ImmutableSet.copyOf(this.knownServerBrands);
+     }
+ 
+     @Override
+-    @Override
+     public Set<String> getRemovedFeatureFlags() {
+         return Set.copyOf(this.removedFeatureFlags);
+     }
+ 
+     @Override
+-    @Override
+     public ServerLevelData overworldData() {
+         return this;
+     }
+ 
+     @Override
+-    @Override
+     public LevelSettings getLevelSettings() {
+         return this.settings.copy();
+     }
+ 
++    // CraftBukkit start - Check if the name stored in NBT is the correct one
++    public void checkName(String name) {
++        if (!this.settings.levelName.equals(name)) {
++            this.settings.levelName = name;
++        }
++    }
++    // CraftBukkit end
++
+     /** @deprecated */
+     @Deprecated
+-    public static enum SpecialWorldProperty {
++    public static enum a {
+ 
+         NONE, FLAT, DEBUG;
+ 
+-        private SpecialWorldProperty() {}
++        private a() {}
+     }
+ }

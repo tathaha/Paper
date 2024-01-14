@@ -1,0 +1,347 @@
+--- a/net/minecraft/network/chat/Component.java
++++ b/net/minecraft/network/chat/Component.java
+@@ -18,6 +18,7 @@
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Date;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Optional;
+ import java.util.UUID;
+@@ -25,16 +26,31 @@
+ import net.minecraft.Util;
+ import net.minecraft.network.chat.contents.DataSource;
+ import net.minecraft.network.chat.contents.KeybindContents;
++import net.minecraft.network.chat.contents.LiteralContents;
+ import net.minecraft.network.chat.contents.NbtContents;
+-import net.minecraft.network.chat.contents.PlainTextContents;
+ import net.minecraft.network.chat.contents.ScoreContents;
+ import net.minecraft.network.chat.contents.SelectorContents;
+ import net.minecraft.network.chat.contents.TranslatableContents;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.util.FormattedCharSequence;
+ import net.minecraft.world.level.ChunkPos;
++// CraftBukkit start
++import java.util.stream.Stream;
++// CraftBukkit end
+ 
+-public interface Component extends Message, FormattedText {
++public interface Component extends Message, FormattedText, Iterable<Component> { // CraftBukkit
++
++    // CraftBukkit start
++    default Stream<Component> stream() {
++        return com.google.common.collect.Streams.concat(new Stream[]{Stream.of(this), this.getSiblings().stream().flatMap(Component::stream)});
++    }
++
++    @Override
++    default Iterator<Component> iterator() {
++        return this.stream().iterator();
++    }
++    // CraftBukkit end
++
+     Style getStyle();
+ 
+     ComponentContents getContents();
+@@ -45,25 +61,33 @@
+     }
+ 
+     default String getString(int maxLength) {
+-        StringBuilder stringBuilder = new StringBuilder();
+-        this.visit(content -> {
+-            int i = maxLength - stringBuilder.length();
+-            if (i <= 0) {
+-                return STOP_ITERATION;
++        StringBuilder stringbuilder = new StringBuilder();
++
++        this.visit((s) -> {
++            int j = maxLength - stringbuilder.length();
++
++            if (j <= 0) {
++                return Component.STOP_ITERATION;
+             } else {
+-                stringBuilder.append(content.length() <= i ? content : content.substring(0, i));
++                stringbuilder.append(s.length() <= j ? s : s.substring(0, j));
+                 return Optional.empty();
+             }
+         });
+-        return stringBuilder.toString();
++        return stringbuilder.toString();
+     }
+ 
+     List<Component> getSiblings();
+ 
+     @Nullable
+     default String tryCollapseToString() {
+-        if (this.getContents() instanceof PlainTextContents plainTextContents && this.getSiblings().isEmpty() && this.getStyle().isEmpty()) {
+-            return plainTextContents.text();
++        ComponentContents componentcontents = this.getContents();
++
++        if (componentcontents instanceof LiteralContents) {
++            LiteralContents literalcontents = (LiteralContents) componentcontents;
++
++            if (this.getSiblings().isEmpty() && this.getStyle().isEmpty()) {
++                return literalcontents.text();
++            }
+         }
+ 
+         return null;
+@@ -74,43 +98,59 @@
+     }
+ 
+     default MutableComponent copy() {
+-        return new MutableComponent(this.getContents(), new ArrayList<>(this.getSiblings()), this.getStyle());
++        return new MutableComponent(this.getContents(), new ArrayList(this.getSiblings()), this.getStyle());
+     }
+ 
+     FormattedCharSequence getVisualOrderText();
+ 
+     @Override
+     default <T> Optional<T> visit(FormattedText.StyledContentConsumer<T> acceptor, Style style) {
+-        Style style1 = this.getStyle().applyTo(style);
+-        Optional<T> optional = this.getContents().visit(acceptor, style1);
++        Style chatmodifier1 = this.getStyle().applyTo(style);
++        Optional<T> optional = this.getContents().visit(acceptor, chatmodifier1);
++
+         if (optional.isPresent()) {
+             return optional;
+         } else {
+-            for (Component component : this.getSiblings()) {
+-                Optional<T> optional1 = component.visit(acceptor, style1);
+-                if (optional1.isPresent()) {
+-                    return optional1;
++            Iterator iterator = this.getSiblings().iterator();
++
++            Optional optional1;
++
++            do {
++                if (!iterator.hasNext()) {
++                    return Optional.empty();
+                 }
+-            }
+ 
+-            return Optional.empty();
++                Component ichatbasecomponent = (Component) iterator.next();
++
++                optional1 = ichatbasecomponent.visit(acceptor, chatmodifier1);
++            } while (!optional1.isPresent());
++
++            return optional1;
+         }
+     }
+ 
+     @Override
+     default <T> Optional<T> visit(FormattedText.ContentConsumer<T> acceptor) {
+         Optional<T> optional = this.getContents().visit(acceptor);
++
+         if (optional.isPresent()) {
+             return optional;
+         } else {
+-            for (Component component : this.getSiblings()) {
+-                Optional<T> optional1 = component.visit(acceptor);
+-                if (optional1.isPresent()) {
+-                    return optional1;
++            Iterator iterator = this.getSiblings().iterator();
++
++            Optional optional1;
++
++            do {
++                if (!iterator.hasNext()) {
++                    return Optional.empty();
+                 }
+-            }
+ 
+-            return Optional.empty();
++                Component ichatbasecomponent = (Component) iterator.next();
++
++                optional1 = ichatbasecomponent.visit(acceptor);
++            } while (!optional1.isPresent());
++
++            return optional1;
+         }
+     }
+ 
+@@ -120,9 +160,10 @@
+ 
+     default List<Component> toFlatList(Style style) {
+         List<Component> list = Lists.newArrayList();
+-        this.visit((style1, content) -> {
+-            if (!content.isEmpty()) {
+-                list.add(literal(content).withStyle(style1));
++
++        this.visit((chatmodifier1, s) -> {
++            if (!s.isEmpty()) {
++                list.add(literal(s).withStyle(chatmodifier1));
+             }
+ 
+             return Optional.empty();
+@@ -136,35 +177,37 @@
+         } else {
+             List<Component> list = this.toFlatList();
+             List<Component> list1 = other.toFlatList(this.getStyle());
++
+             return Collections.indexOfSubList(list, list1) != -1;
+         }
+     }
+ 
+     static Component nullToEmpty(@Nullable String text) {
+-        return (Component)(text != null ? literal(text) : CommonComponents.EMPTY);
++        return (Component) (text != null ? literal(text) : CommonComponents.EMPTY);
+     }
+ 
+     static MutableComponent literal(String text) {
+-        return MutableComponent.create(PlainTextContents.create(text));
++        return MutableComponent.create(LiteralContents.create(text));
+     }
+ 
+     static MutableComponent translatable(String key) {
+-        return MutableComponent.create(new TranslatableContents(key, null, TranslatableContents.NO_ARGS));
++        return MutableComponent.create(new TranslatableContents(key, (String) null, TranslatableContents.NO_ARGS));
+     }
+ 
+     static MutableComponent translatable(String key, Object... args) {
+-        return MutableComponent.create(new TranslatableContents(key, null, args));
++        return MutableComponent.create(new TranslatableContents(key, (String) null, args));
+     }
+ 
+-    static MutableComponent translatableEscape(String string, Object... objects) {
+-        for (int i = 0; i < objects.length; i++) {
+-            Object object = objects[i];
++    static MutableComponent translatableEscape(String s, Object... aobject) {
++        for (int i = 0; i < aobject.length; ++i) {
++            Object object = aobject[i];
++
+             if (!TranslatableContents.isAllowedPrimitiveArgument(object) && !(object instanceof Component)) {
+-                objects[i] = String.valueOf(object);
++                aobject[i] = String.valueOf(object);
+             }
+         }
+ 
+-        return translatable(string, objects);
++        return translatable(s, aobject);
+     }
+ 
+     static MutableComponent translatableWithFallback(String key, @Nullable String fallback) {
+@@ -176,7 +219,7 @@
+     }
+ 
+     static MutableComponent empty() {
+-        return MutableComponent.create(PlainTextContents.EMPTY);
++        return MutableComponent.create(LiteralContents.EMPTY);
+     }
+ 
+     static MutableComponent keybind(String name) {
+@@ -200,37 +243,60 @@
+     }
+ 
+     static Component translationArg(Message message) {
+-        return (Component)(message instanceof Component component ? component : literal(message.getString()));
++        Object object;
++
++        if (message instanceof Component) {
++            Component ichatbasecomponent = (Component) message;
++
++            object = ichatbasecomponent;
++        } else {
++            object = literal(message.getString());
++        }
++
++        return (Component) object;
+     }
+ 
+-    static Component translationArg(UUID uUID) {
+-        return literal(uUID.toString());
++    static Component translationArg(UUID uuid) {
++        return literal(uuid.toString());
+     }
+ 
+-    static Component translationArg(ResourceLocation resourceLocation) {
+-        return literal(resourceLocation.toString());
++    static Component translationArg(ResourceLocation minecraftkey) {
++        return literal(minecraftkey.toString());
+     }
+ 
+-    static Component translationArg(ChunkPos chunkPos) {
+-        return literal(chunkPos.toString());
++    static Component translationArg(ChunkPos chunkcoordintpair) {
++        return literal(chunkcoordintpair.toString());
+     }
+ 
+-    public static class Serializer {
+-        private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
++    public static class b implements JsonDeserializer<MutableComponent>, JsonSerializer<Component> {
+ 
+-        private Serializer() {
++        public b() {}
++
++        public MutableComponent deserialize(JsonElement jsonelement, Type type, JsonDeserializationContext jsondeserializationcontext) throws JsonParseException {
++            return Component.Serializer.deserialize(jsonelement);
+         }
+ 
+-        static MutableComponent deserialize(JsonElement jsonElement) {
+-            return (MutableComponent)Util.getOrThrow(ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, jsonElement), JsonParseException::new);
++        public JsonElement serialize(Component ichatbasecomponent, Type type, JsonSerializationContext jsonserializationcontext) {
++            return Component.Serializer.serialize(ichatbasecomponent);
+         }
++    }
+ 
+-        static JsonElement serialize(Component component) {
+-            return Util.getOrThrow(ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, component), JsonParseException::new);
++    public static class Serializer {
++
++        private static final Gson GSON = (new GsonBuilder()).disableHtmlEscaping().create();
++
++        private Serializer() {}
++
++        static MutableComponent deserialize(JsonElement jsonelement) {
++            return (MutableComponent) Util.getOrThrow(ComponentSerialization.CODEC.parse(JsonOps.INSTANCE, jsonelement), JsonParseException::new);
+         }
+ 
++        static JsonElement serialize(Component ichatbasecomponent) {
++            return (JsonElement) Util.getOrThrow(ComponentSerialization.CODEC.encodeStart(JsonOps.INSTANCE, ichatbasecomponent), JsonParseException::new);
++        }
++
+         public static String toJson(Component component) {
+-            return GSON.toJson(serialize(component));
++            return Component.Serializer.GSON.toJson(serialize(component));
+         }
+ 
+         public static JsonElement toJsonTree(Component component) {
+@@ -239,8 +305,9 @@
+ 
+         @Nullable
+         public static MutableComponent fromJson(String json) {
+-            JsonElement jsonElement = JsonParser.parseString(json);
+-            return jsonElement == null ? null : deserialize(jsonElement);
++            JsonElement jsonelement = JsonParser.parseString(json);
++
++            return jsonelement == null ? null : deserialize(jsonelement);
+         }
+ 
+         @Nullable
+@@ -250,22 +317,12 @@
+ 
+         @Nullable
+         public static MutableComponent fromJsonLenient(String json) {
+-            JsonReader jsonReader = new JsonReader(new StringReader(json));
+-            jsonReader.setLenient(true);
+-            JsonElement jsonElement = JsonParser.parseReader(jsonReader);
+-            return jsonElement == null ? null : deserialize(jsonElement);
+-        }
+-    }
++            JsonReader jsonreader = new JsonReader(new StringReader(json));
+ 
+-    public static class SerializerAdapter implements JsonDeserializer<MutableComponent>, JsonSerializer<Component> {
+-        @Override
+-        public MutableComponent deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext jsonDeserializationContext) throws JsonParseException {
+-            return Component.Serializer.deserialize(jsonElement);
+-        }
++            jsonreader.setLenient(true);
++            JsonElement jsonelement = JsonParser.parseReader(jsonreader);
+ 
+-        @Override
+-        public JsonElement serialize(Component component, Type type, JsonSerializationContext jsonSerializationContext) {
+-            return Component.Serializer.serialize(component);
++            return jsonelement == null ? null : deserialize(jsonelement);
+         }
+     }
+ }

@@ -1,0 +1,91 @@
+--- a/net/minecraft/world/level/chunk/storage/ChunkStorage.java
++++ b/net/minecraft/world/level/chunk/storage/ChunkStorage.java
+@@ -16,6 +18,10 @@
+ import net.minecraft.world.level.ChunkPos;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.chunk.ChunkGenerator;
++// CraftBukkit start
++import java.util.concurrent.ExecutionException;
++import net.minecraft.world.level.chunk.ChunkStatus;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.levelgen.structure.LegacyStructureDataHandler;
+ import net.minecraft.world.level.storage.DimensionDataStorage;
+ 
+@@ -36,9 +42,53 @@
+         return this.worker.isOldChunkAround(chunkpos, i);
+     }
+ 
+-    public CompoundTag upgradeChunkTag(ResourceKey<Level> resourcekey, Supplier<DimensionDataStorage> supplier, CompoundTag compoundtag, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> optional) {
+-        int i = getVersion(compoundtag);
++    // CraftBukkit start
++    private boolean check(ServerChunkCache cps, int x, int z) {
++        ChunkPos pos = new ChunkPos(x, z);
++        if (cps != null) {
++            com.google.common.base.Preconditions.checkState(org.bukkit.Bukkit.isPrimaryThread(), "primary thread");
++            if (cps.hasChunk(x, z)) {
++                return true;
++            }
++        }
+ 
++        CompoundTag nbt;
++        try {
++            nbt = read(pos).get().orElse(null);
++        } catch (InterruptedException | ExecutionException ex) {
++            throw new RuntimeException(ex);
++        }
++        if (nbt != null) {
++            CompoundTag level = nbt.getCompound("Level");
++            if (level.getBoolean("TerrainPopulated")) {
++                return true;
++            }
++
++            ChunkStatus status = ChunkStatus.byName(level.getString("Status"));
++            if (status != null && status.isOrAfter(ChunkStatus.FEATURES)) {
++                return true;
++            }
++        }
++
++        return false;
++    }
++
++    public CompoundTag upgradeChunkTag(ResourceKey<LevelStem> resourcekey, Supplier<DimensionDataStorage> supplier, CompoundTag nbttagcompound, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> optional, ChunkPos pos, @Nullable LevelAccessor generatoraccess) {
++        // CraftBukkit end
++        int i = getVersion(nbttagcompound);
++
++        // CraftBukkit start
++        if (i < 1466) {
++            CompoundTag level = nbttagcompound.getCompound("Level");
++            if (level.getBoolean("TerrainPopulated") && !level.getBoolean("LightPopulated")) {
++                ServerChunkCache cps = (generatoraccess == null) ? null : ((ServerLevel) generatoraccess).getChunkSource();
++                if (check(cps, pos.x - 1, pos.z) && check(cps, pos.x - 1, pos.z - 1) && check(cps, pos.x, pos.z - 1)) {
++                    level.putBoolean("LightPopulated", true);
++                }
++            }
++        }
++        // CraftBukkit end
++
+         if (i < 1493) {
+             compoundtag = DataFixTypes.CHUNK.update(this.fixerUpper, compoundtag, i, 1493);
+             if (compoundtag.getCompound("Level").getBoolean("hasLegacyStructureData")) {
+@@ -58,8 +108,8 @@
+         return compoundtag;
+     }
+ 
+-    private LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<Level> resourcekey, Supplier<DimensionDataStorage> supplier) {
+-        LegacyStructureDataHandler legacystructuredatahandler = this.legacyStructureHandler;
++    private LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<LevelStem> level, Supplier<DimensionDataStorage> storage) { // CraftBukkit
++        LegacyStructureDataHandler persistentstructurelegacy = this.legacyStructureHandler;
+ 
+         if (legacystructuredatahandler == null) {
+             synchronized (this) {
+@@ -73,8 +123,8 @@
+         return legacystructuredatahandler;
+     }
+ 
+-    public static void injectDatafixingContext(CompoundTag compoundtag, ResourceKey<Level> resourcekey, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> optional) {
+-        CompoundTag compoundtag1 = new CompoundTag();
++    public static void injectDatafixingContext(CompoundTag chunkData, ResourceKey<LevelStem> levelKey, Optional<ResourceKey<Codec<? extends ChunkGenerator>>> chunkGeneratorKey) { // CraftBukkit
++        CompoundTag nbttagcompound1 = new CompoundTag();
+ 
+         compoundtag1.putString("dimension", resourcekey.location().toString());
+         optional.ifPresent((resourcekey1) -> {

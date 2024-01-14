@@ -1,0 +1,190 @@
+--- a/net/minecraft/world/level/BaseCommandBlock.java
++++ b/net/minecraft/world/level/BaseCommandBlock.java
+@@ -30,6 +30,10 @@
+     private Component lastOutput;
+     private String command = "";
+     private Component name;
++    // CraftBukkit start
++    @Override
++    public abstract org.bukkit.command.CommandSender getBukkitSender(CommandSourceStack wrapper);
++    // CraftBukkit end
+ 
+     public BaseCommandBlock() {
+         this.name = BaseCommandBlock.DEFAULT_NAME;
+@@ -39,45 +43,45 @@
+         return this.successCount;
+     }
+ 
+-    public void setSuccessCount(int i) {
+-        this.successCount = i;
++    public void setSuccessCount(int successCount) {
++        this.successCount = successCount;
+     }
+ 
+     public Component getLastOutput() {
+         return this.lastOutput == null ? CommonComponents.EMPTY : this.lastOutput;
+     }
+ 
+-    public CompoundTag save(CompoundTag compoundtag) {
+-        compoundtag.putString("Command", this.command);
+-        compoundtag.putInt("SuccessCount", this.successCount);
+-        compoundtag.putString("CustomName", Component.Serializer.toJson(this.name));
+-        compoundtag.putBoolean("TrackOutput", this.trackOutput);
++    public CompoundTag save(CompoundTag compound) {
++        compound.putString("Command", this.command);
++        compound.putInt("SuccessCount", this.successCount);
++        compound.putString("CustomName", Component.Serializer.toJson(this.name));
++        compound.putBoolean("TrackOutput", this.trackOutput);
+         if (this.lastOutput != null && this.trackOutput) {
+-            compoundtag.putString("LastOutput", Component.Serializer.toJson(this.lastOutput));
++            compound.putString("LastOutput", Component.Serializer.toJson(this.lastOutput));
+         }
+ 
+-        compoundtag.putBoolean("UpdateLastExecution", this.updateLastExecution);
++        compound.putBoolean("UpdateLastExecution", this.updateLastExecution);
+         if (this.updateLastExecution && this.lastExecution > 0L) {
+-            compoundtag.putLong("LastExecution", this.lastExecution);
++            compound.putLong("LastExecution", this.lastExecution);
+         }
+ 
+-        return compoundtag;
++        return compound;
+     }
+ 
+-    public void load(CompoundTag compoundtag) {
+-        this.command = compoundtag.getString("Command");
+-        this.successCount = compoundtag.getInt("SuccessCount");
+-        if (compoundtag.contains("CustomName", 8)) {
+-            this.setName(Component.Serializer.fromJson(compoundtag.getString("CustomName")));
++    public void load(CompoundTag nbt) {
++        this.command = nbt.getString("Command");
++        this.successCount = nbt.getInt("SuccessCount");
++        if (nbt.contains("CustomName", 8)) {
++            this.setName(Component.Serializer.fromJson(nbt.getString("CustomName")));
+         }
+ 
+-        if (compoundtag.contains("TrackOutput", 1)) {
+-            this.trackOutput = compoundtag.getBoolean("TrackOutput");
++        if (nbt.contains("TrackOutput", 1)) {
++            this.trackOutput = nbt.getBoolean("TrackOutput");
+         }
+ 
+-        if (compoundtag.contains("LastOutput", 8) && this.trackOutput) {
++        if (nbt.contains("LastOutput", 8) && this.trackOutput) {
+             try {
+-                this.lastOutput = Component.Serializer.fromJson(compoundtag.getString("LastOutput"));
++                this.lastOutput = Component.Serializer.fromJson(nbt.getString("LastOutput"));
+             } catch (Throwable throwable) {
+                 this.lastOutput = Component.literal(throwable.getMessage());
+             }
+@@ -85,20 +89,20 @@
+             this.lastOutput = null;
+         }
+ 
+-        if (compoundtag.contains("UpdateLastExecution")) {
+-            this.updateLastExecution = compoundtag.getBoolean("UpdateLastExecution");
++        if (nbt.contains("UpdateLastExecution")) {
++            this.updateLastExecution = nbt.getBoolean("UpdateLastExecution");
+         }
+ 
+-        if (this.updateLastExecution && compoundtag.contains("LastExecution")) {
+-            this.lastExecution = compoundtag.getLong("LastExecution");
++        if (this.updateLastExecution && nbt.contains("LastExecution")) {
++            this.lastExecution = nbt.getLong("LastExecution");
+         } else {
+             this.lastExecution = -1L;
+         }
+ 
+     }
+ 
+-    public void setCommand(String s) {
+-        this.command = s;
++    public void setCommand(String command) {
++        this.command = command;
+         this.successCount = 0;
+     }
+ 
+@@ -119,20 +123,20 @@
+                 if (minecraftserver.isCommandBlockEnabled() && !StringUtil.isNullOrEmpty(this.command)) {
+                     try {
+                         this.lastOutput = null;
+-                        CommandSourceStack commandsourcestack = this.createCommandSourceStack().withCallback((flag, i) -> {
++                        CommandSourceStack commandlistenerwrapper = this.createCommandSourceStack().withCallback((flag, i) -> {
+                             if (flag) {
+                                 ++this.successCount;
+                             }
+ 
+                         });
+ 
+-                        minecraftserver.getCommands().performPrefixedCommand(commandsourcestack, this.command);
++                        minecraftserver.getCommands().dispatchServerCommand(commandlistenerwrapper, this.command); // CraftBukkit
+                     } catch (Throwable throwable) {
+                         CrashReport crashreport = CrashReport.forThrowable(throwable, "Executing command block");
+-                        CrashReportCategory crashreportcategory = crashreport.addCategory("Command to be executed");
++                        CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Command to be executed");
+ 
+-                        crashreportcategory.setDetail("Command", this::getCommand);
+-                        crashreportcategory.setDetail("Name", () -> {
++                        crashreportsystemdetails.setDetail("Command", this::getCommand);
++                        crashreportsystemdetails.setDetail("Name", () -> {
+                             return this.getName().getString();
+                         });
+                         throw new ReportedException(crashreport);
+@@ -156,9 +160,9 @@
+         return this.name;
+     }
+ 
+-    public void setName(@Nullable Component component) {
+-        if (component != null) {
+-            this.name = component;
++    public void setName(@Nullable Component name) {
++        if (name != null) {
++            this.name = name;
+         } else {
+             this.name = BaseCommandBlock.DEFAULT_NAME;
+         }
+@@ -166,7 +170,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void sendSystemMessage(Component component) {
+         if (this.trackOutput) {
+             SimpleDateFormat simpledateformat = BaseCommandBlock.TIME_FORMAT;
+@@ -182,12 +185,12 @@
+ 
+     public abstract void onUpdated();
+ 
+-    public void setLastOutput(@Nullable Component component) {
+-        this.lastOutput = component;
++    public void setLastOutput(@Nullable Component lastOutputMessage) {
++        this.lastOutput = lastOutputMessage;
+     }
+ 
+-    public void setTrackOutput(boolean flag) {
+-        this.trackOutput = flag;
++    public void setTrackOutput(boolean shouldTrackOutput) {
++        this.trackOutput = shouldTrackOutput;
+     }
+ 
+     public boolean isTrackOutput() {
+@@ -211,19 +214,16 @@
+     public abstract CommandSourceStack createCommandSourceStack();
+ 
+     @Override
+-    @Override
+     public boolean acceptsSuccess() {
+         return this.getLevel().getGameRules().getBoolean(GameRules.RULE_SENDCOMMANDFEEDBACK) && this.trackOutput;
+     }
+ 
+     @Override
+-    @Override
+     public boolean acceptsFailure() {
+         return this.trackOutput;
+     }
+ 
+     @Override
+-    @Override
+     public boolean shouldInformAdmins() {
+         return this.getLevel().getGameRules().getBoolean(GameRules.RULE_COMMANDBLOCKOUTPUT);
+     }

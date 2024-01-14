@@ -1,0 +1,117 @@
+--- a/net/minecraft/world/level/storage/PlayerDataStorage.java
++++ b/net/minecraft/world/level/storage/PlayerDataStorage.java
+@@ -11,29 +11,36 @@
+ import net.minecraft.nbt.NbtAccounter;
+ import net.minecraft.nbt.NbtIo;
+ import net.minecraft.nbt.NbtUtils;
++import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.entity.player.Player;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import java.io.FileInputStream;
++import java.io.InputStream;
++import org.bukkit.craftbukkit.entity.CraftPlayer;
++// CraftBukkit end
++
+ public class PlayerDataStorage {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private final File playerDir;
+     protected final DataFixer fixerUpper;
+ 
+-    public PlayerDataStorage(LevelStorageSource.LevelStorageAccess levelstoragesource_levelstorageaccess, DataFixer datafixer) {
+-        this.fixerUpper = datafixer;
+-        this.playerDir = levelstoragesource_levelstorageaccess.getLevelPath(LevelResource.PLAYER_DATA_DIR).toFile();
++    public PlayerDataStorage(LevelStorageSource.LevelStorageAccess levelStorageAccess, DataFixer fixerUpper) {
++        this.fixerUpper = fixerUpper;
++        this.playerDir = levelStorageAccess.getLevelPath(LevelResource.PLAYER_DATA_DIR).toFile();
+         this.playerDir.mkdirs();
+     }
+ 
+     public void save(Player player) {
+         try {
+-            CompoundTag compoundtag = player.saveWithoutId(new CompoundTag());
++            CompoundTag nbttagcompound = player.saveWithoutId(new CompoundTag());
+             Path path = this.playerDir.toPath();
+             Path path1 = Files.createTempFile(path, player.getStringUUID() + "-", ".dat");
+ 
+-            NbtIo.writeCompressed(compoundtag, path1);
++            NbtIo.writeCompressed(nbttagcompound, path1);
+             Path path2 = path.resolve(player.getStringUUID() + ".dat");
+             Path path3 = path.resolve(player.getStringUUID() + ".dat_old");
+ 
+@@ -46,28 +53,54 @@
+ 
+     @Nullable
+     public CompoundTag load(Player player) {
+-        CompoundTag compoundtag = null;
++        CompoundTag nbttagcompound = null;
+ 
+         try {
+             File file = new File(this.playerDir, player.getStringUUID() + ".dat");
+ 
+             if (file.exists() && file.isFile()) {
+-                compoundtag = NbtIo.readCompressed(file.toPath(), NbtAccounter.unlimitedHeap());
++                nbttagcompound = NbtIo.readCompressed(file.toPath(), NbtAccounter.unlimitedHeap());
+             }
+         } catch (Exception exception) {
+             PlayerDataStorage.LOGGER.warn("Failed to load player data for {}", player.getName().getString());
+         }
+ 
+-        if (compoundtag != null) {
+-            int i = NbtUtils.getDataVersion(compoundtag, -1);
++        if (nbttagcompound != null) {
++            // CraftBukkit start
++            if (player instanceof ServerPlayer) {
++                CraftPlayer player = (CraftPlayer) player.getBukkitEntity();
++                // Only update first played if it is older than the one we have
++                long modified = new File(this.playerDir, player.getUUID().toString() + ".dat").lastModified();
++                if (modified < player.getFirstPlayed()) {
++                    player.setFirstPlayed(modified);
++                }
++            }
++            // CraftBukkit end
++            int i = NbtUtils.getDataVersion(nbttagcompound, -1);
+ 
+-            compoundtag = DataFixTypes.PLAYER.updateToCurrentVersion(this.fixerUpper, compoundtag, i);
+-            player.load(compoundtag);
++            nbttagcompound = DataFixTypes.PLAYER.updateToCurrentVersion(this.fixerUpper, nbttagcompound, i);
++            player.load(nbttagcompound);
+         }
+ 
+-        return compoundtag;
++        return nbttagcompound;
+     }
+ 
++    // CraftBukkit start
++    public CompoundTag getPlayerData(String s) {
++        try {
++            File file1 = new File(this.playerDir, s + ".dat");
++
++            if (file1.exists()) {
++                return NbtIo.readCompressed(file1.toPath(), NbtAccounter.unlimitedHeap());
++            }
++        } catch (Exception exception) {
++            LOGGER.warn("Failed to load player data for " + s);
++        }
++
++        return null;
++    }
++    // CraftBukkit end
++
+     public String[] getSeenPlayers() {
+         String[] astring = this.playerDir.list();
+ 
+@@ -83,4 +116,10 @@
+ 
+         return astring;
+     }
++
++    // CraftBukkit start
++    public File getPlayerDir() {
++        return playerDir;
++    }
++    // CraftBukkit end
+ }

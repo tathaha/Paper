@@ -1,0 +1,1242 @@
+--- a/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java
++++ b/net/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplate.java
+@@ -24,13 +24,15 @@
+ import net.minecraft.nbt.IntTag;
+ import net.minecraft.nbt.ListTag;
+ import net.minecraft.nbt.NbtUtils;
++import net.minecraft.nbt.Tag;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.Clearable;
+ import net.minecraft.world.RandomizableContainer;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMobSpawn;
++import net.minecraft.world.entity.GroupDataEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MobSpawnType;
+ import net.minecraft.world.entity.decoration.Painting;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.EmptyBlockGetter;
+@@ -43,15 +45,19 @@
+ import net.minecraft.world.level.block.Mirror;
+ import net.minecraft.world.level.block.Rotation;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.levelgen.structure.BoundingBox;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.BitSetDiscreteVoxelShape;
+ import net.minecraft.world.phys.shapes.DiscreteVoxelShape;
++import org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer;
++import org.bukkit.craftbukkit.persistence.CraftPersistentDataTypeRegistry;
++// CraftBukkit end
+ 
+ public class StructureTemplate {
++
+     public static final String PALETTE_TAG = "palette";
+     public static final String PALETTE_LIST_TAG = "palettes";
+     public static final String ENTITIES_TAG = "entities";
+@@ -63,11 +69,21 @@
+     public static final String ENTITY_TAG_BLOCKPOS = "blockPos";
+     public static final String ENTITY_TAG_NBT = "nbt";
+     public static final String SIZE_TAG = "size";
+-    private final List<StructureTemplate.Palette> palettes = Lists.newArrayList();
+-    private final List<StructureTemplate.StructureEntityInfo> entityInfoList = Lists.newArrayList();
+-    private Vec3i size = Vec3i.ZERO;
+-    private String author = "?";
++    public final List<StructureTemplate.Palette> palettes = Lists.newArrayList();
++    public final List<StructureTemplate.StructureEntityInfo> entityInfoList = Lists.newArrayList();
++    private Vec3i size;
++    private String author;
+ 
++    // CraftBukkit start - data containers
++    private static final CraftPersistentDataTypeRegistry DATA_TYPE_REGISTRY = new CraftPersistentDataTypeRegistry();
++    public CraftPersistentDataContainer persistentDataContainer = new CraftPersistentDataContainer(DATA_TYPE_REGISTRY);
++    // CraftBukkit end
++
++    public StructureTemplate() {
++        this.size = Vec3i.ZERO;
++        this.author = "?";
++    }
++
+     public Vec3i getSize() {
+         return this.size;
+     }
+@@ -82,51 +98,49 @@
+ 
+     public void fillFromWorld(Level level, BlockPos pos, Vec3i size, boolean withEntities, @Nullable Block toIgnore) {
+         if (size.getX() >= 1 && size.getY() >= 1 && size.getZ() >= 1) {
+-            BlockPos blockPos = pos.offset(size).offset(-1, -1, -1);
++            BlockPos blockposition1 = pos.offset(size).offset(-1, -1, -1);
+             List<StructureTemplate.StructureBlockInfo> list = Lists.newArrayList();
+             List<StructureTemplate.StructureBlockInfo> list1 = Lists.newArrayList();
+             List<StructureTemplate.StructureBlockInfo> list2 = Lists.newArrayList();
+-            BlockPos blockPos1 = new BlockPos(
+-                Math.min(pos.getX(), blockPos.getX()), Math.min(pos.getY(), blockPos.getY()), Math.min(pos.getZ(), blockPos.getZ())
+-            );
+-            BlockPos blockPos2 = new BlockPos(
+-                Math.max(pos.getX(), blockPos.getX()), Math.max(pos.getY(), blockPos.getY()), Math.max(pos.getZ(), blockPos.getZ())
+-            );
++            BlockPos blockposition2 = new BlockPos(Math.min(pos.getX(), blockposition1.getX()), Math.min(pos.getY(), blockposition1.getY()), Math.min(pos.getZ(), blockposition1.getZ()));
++            BlockPos blockposition3 = new BlockPos(Math.max(pos.getX(), blockposition1.getX()), Math.max(pos.getY(), blockposition1.getY()), Math.max(pos.getZ(), blockposition1.getZ()));
++
+             this.size = size;
++            Iterator iterator = BlockPos.betweenClosed(blockposition2, blockposition3).iterator();
+ 
+-            for (BlockPos blockPos3 : BlockPos.betweenClosed(blockPos1, blockPos2)) {
+-                BlockPos blockPos4 = blockPos3.subtract(blockPos1);
+-                BlockState blockState = level.getBlockState(blockPos3);
+-                if (toIgnore == null || !blockState.is(toIgnore)) {
+-                    BlockEntity blockEntity = level.getBlockEntity(blockPos3);
+-                    StructureTemplate.StructureBlockInfo structureBlockInfo;
+-                    if (blockEntity != null) {
+-                        structureBlockInfo = new StructureTemplate.StructureBlockInfo(blockPos4, blockState, blockEntity.saveWithId());
++            while (iterator.hasNext()) {
++                BlockPos blockposition4 = (BlockPos) iterator.next();
++                BlockPos blockposition5 = blockposition4.subtract(blockposition2);
++                IBlockData iblockdata = level.getBlockState(blockposition4);
++
++                if (toIgnore == null || !iblockdata.is(toIgnore)) {
++                    BlockEntity tileentity = level.getBlockEntity(blockposition4);
++                    StructureTemplate.StructureBlockInfo definedstructure_blockinfo;
++
++                    if (tileentity != null) {
++                        definedstructure_blockinfo = new StructureTemplate.StructureBlockInfo(blockposition5, iblockdata, tileentity.saveWithId());
+                     } else {
+-                        structureBlockInfo = new StructureTemplate.StructureBlockInfo(blockPos4, blockState, null);
++                        definedstructure_blockinfo = new StructureTemplate.StructureBlockInfo(blockposition5, iblockdata, (CompoundTag) null);
+                     }
+ 
+-                    addToLists(structureBlockInfo, list, list1, list2);
++                    addToLists(definedstructure_blockinfo, list, list1, list2);
+                 }
+             }
+ 
+             List<StructureTemplate.StructureBlockInfo> list3 = buildInfoList(list, list1, list2);
++
+             this.palettes.clear();
+             this.palettes.add(new StructureTemplate.Palette(list3));
+             if (withEntities) {
+-                this.fillEntityList(level, blockPos1, blockPos2);
++                this.fillEntityList(level, blockposition2, blockposition3);
+             } else {
+                 this.entityInfoList.clear();
+             }
++
+         }
+     }
+ 
+-    private static void addToLists(
+-        StructureTemplate.StructureBlockInfo blockInfo,
+-        List<StructureTemplate.StructureBlockInfo> normalBlocks,
+-        List<StructureTemplate.StructureBlockInfo> blocksWithNbt,
+-        List<StructureTemplate.StructureBlockInfo> blocksWithSpecialShape
+-    ) {
++    private static void addToLists(StructureTemplate.StructureBlockInfo blockInfo, List<StructureTemplate.StructureBlockInfo> normalBlocks, List<StructureTemplate.StructureBlockInfo> blocksWithNbt, List<StructureTemplate.StructureBlockInfo> blocksWithSpecialShape) {
+         if (blockInfo.nbt != null) {
+             blocksWithNbt.add(blockInfo);
+         } else if (!blockInfo.state.getBlock().hasDynamicShape() && blockInfo.state.isCollisionShapeFullBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)) {
+@@ -134,78 +148,86 @@
+         } else {
+             blocksWithSpecialShape.add(blockInfo);
+         }
++
+     }
+ 
+-    private static List<StructureTemplate.StructureBlockInfo> buildInfoList(
+-        List<StructureTemplate.StructureBlockInfo> normalBlocks,
+-        List<StructureTemplate.StructureBlockInfo> blocksWithNbt,
+-        List<StructureTemplate.StructureBlockInfo> blocksWithSpecialShape
+-    ) {
+-        Comparator<StructureTemplate.StructureBlockInfo> comparator = Comparator.<StructureTemplate.StructureBlockInfo>comparingInt(
+-                structureBlockInfo -> structureBlockInfo.pos.getY()
+-            )
+-            .thenComparingInt(structureBlockInfo -> structureBlockInfo.pos.getX())
+-            .thenComparingInt(structureBlockInfo -> structureBlockInfo.pos.getZ());
++    private static List<StructureTemplate.StructureBlockInfo> buildInfoList(List<StructureTemplate.StructureBlockInfo> normalBlocks, List<StructureTemplate.StructureBlockInfo> blocksWithNbt, List<StructureTemplate.StructureBlockInfo> blocksWithSpecialShape) {
++        Comparator<StructureTemplate.StructureBlockInfo> comparator = Comparator.<StructureTemplate.StructureBlockInfo>comparingInt((definedstructure_blockinfo) -> { // CraftBukkit - decompile error
++            return definedstructure_blockinfo.pos.getY();
++        }).thenComparingInt((definedstructure_blockinfo) -> {
++            return definedstructure_blockinfo.pos.getX();
++        }).thenComparingInt((definedstructure_blockinfo) -> {
++            return definedstructure_blockinfo.pos.getZ();
++        });
++
+         normalBlocks.sort(comparator);
+         blocksWithSpecialShape.sort(comparator);
+         blocksWithNbt.sort(comparator);
+-        List<StructureTemplate.StructureBlockInfo> list = Lists.newArrayList();
+-        list.addAll(normalBlocks);
+-        list.addAll(blocksWithSpecialShape);
+-        list.addAll(blocksWithNbt);
+-        return list;
++        List<StructureTemplate.StructureBlockInfo> list3 = Lists.newArrayList();
++
++        list3.addAll(normalBlocks);
++        list3.addAll(blocksWithSpecialShape);
++        list3.addAll(blocksWithNbt);
++        return list3;
+     }
+ 
+     private void fillEntityList(Level level, BlockPos startPos, BlockPos endPos) {
+-        List<Entity> entitiesOfClass = level.getEntitiesOfClass(
+-            Entity.class, AABB.encapsulatingFullBlocks(startPos, endPos), entity1 -> !(entity1 instanceof Player)
+-        );
++        List<Entity> list = level.getEntitiesOfClass(Entity.class, AABB.encapsulatingFullBlocks(startPos, endPos), (entity) -> {
++            return !(entity instanceof Player);
++        });
++
+         this.entityInfoList.clear();
+ 
+-        for (Entity entity : entitiesOfClass) {
+-            Vec3 vec3 = new Vec3(entity.getX() - (double)startPos.getX(), entity.getY() - (double)startPos.getY(), entity.getZ() - (double)startPos.getZ());
+-            CompoundTag compoundTag = new CompoundTag();
+-            entity.save(compoundTag);
+-            BlockPos blockPos;
++        Vec3 vec3d;
++        CompoundTag nbttagcompound;
++        BlockPos blockposition2;
++
++        for (Iterator iterator = list.iterator(); iterator.hasNext(); this.entityInfoList.add(new StructureTemplate.StructureEntityInfo(vec3d, blockposition2, nbttagcompound.copy()))) {
++            Entity entity = (Entity) iterator.next();
++
++            vec3d = new Vec3(entity.getX() - (double) startPos.getX(), entity.getY() - (double) startPos.getY(), entity.getZ() - (double) startPos.getZ());
++            nbttagcompound = new CompoundTag();
++            entity.save(nbttagcompound);
+             if (entity instanceof Painting) {
+-                blockPos = ((Painting)entity).getPos().subtract(startPos);
++                blockposition2 = ((Painting) entity).getPos().subtract(startPos);
+             } else {
+-                blockPos = BlockPos.containing(vec3);
++                blockposition2 = BlockPos.containing(vec3d);
+             }
+-
+-            this.entityInfoList.add(new StructureTemplate.StructureEntityInfo(vec3, blockPos, compoundTag.copy()));
+         }
++
+     }
+ 
+     public List<StructureTemplate.StructureBlockInfo> filterBlocks(BlockPos pos, StructurePlaceSettings settings, Block block) {
+         return this.filterBlocks(pos, settings, block, true);
+     }
+ 
+-    public ObjectArrayList<StructureTemplate.StructureBlockInfo> filterBlocks(
+-        BlockPos pos, StructurePlaceSettings settings, Block block, boolean relativePosition
+-    ) {
+-        ObjectArrayList<StructureTemplate.StructureBlockInfo> list = new ObjectArrayList<>();
+-        BoundingBox boundingBox = settings.getBoundingBox();
++    public ObjectArrayList<StructureTemplate.StructureBlockInfo> filterBlocks(BlockPos pos, StructurePlaceSettings settings, Block block, boolean relativePosition) {
++        ObjectArrayList<StructureTemplate.StructureBlockInfo> objectarraylist = new ObjectArrayList();
++        BoundingBox structureboundingbox = settings.getBoundingBox();
++
+         if (this.palettes.isEmpty()) {
+-            return list;
++            return objectarraylist;
+         } else {
+-            for (StructureTemplate.StructureBlockInfo structureBlockInfo : settings.getRandomPalette(this.palettes, pos).blocks(block)) {
+-                BlockPos blockPos = relativePosition ? calculateRelativePosition(settings, structureBlockInfo.pos).offset(pos) : structureBlockInfo.pos;
+-                if (boundingBox == null || boundingBox.isInside(blockPos)) {
+-                    list.add(
+-                        new StructureTemplate.StructureBlockInfo(blockPos, structureBlockInfo.state.rotate(settings.getRotation()), structureBlockInfo.nbt)
+-                    );
++            Iterator iterator = settings.getRandomPalette(this.palettes, pos).blocks(block).iterator();
++
++            while (iterator.hasNext()) {
++                StructureTemplate.StructureBlockInfo definedstructure_blockinfo = (StructureTemplate.StructureBlockInfo) iterator.next();
++                BlockPos blockposition1 = relativePosition ? calculateRelativePosition(settings, definedstructure_blockinfo.pos).offset(pos) : definedstructure_blockinfo.pos;
++
++                if (structureboundingbox == null || structureboundingbox.isInside(blockposition1)) {
++                    objectarraylist.add(new StructureTemplate.StructureBlockInfo(blockposition1, definedstructure_blockinfo.state.rotate(settings.getRotation()), definedstructure_blockinfo.nbt));
+                 }
+             }
+ 
+-            return list;
++            return objectarraylist;
+         }
+     }
+ 
+     public BlockPos calculateConnectedPosition(StructurePlaceSettings decorator, BlockPos start, StructurePlaceSettings settings, BlockPos end) {
+-        BlockPos blockPos = calculateRelativePosition(decorator, start);
+-        BlockPos blockPos1 = calculateRelativePosition(settings, end);
+-        return blockPos.subtract(blockPos1);
++        BlockPos blockposition2 = calculateRelativePosition(decorator, start);
++        BlockPos blockposition3 = calculateRelativePosition(settings, end);
++
++        return blockposition2.subtract(blockposition3);
+     }
+ 
+     public static BlockPos calculateRelativePosition(StructurePlaceSettings decorator, BlockPos pos) {
+@@ -216,59 +238,91 @@
+         if (this.palettes.isEmpty()) {
+             return false;
+         } else {
++            // CraftBukkit start
++            // We only want the TransformerGeneratorAccess at certain locations because in here are many "block update" calls that shouldn't be transformed
++            ServerLevelAccessor wrappedAccess = serverLevel;
++            org.bukkit.craftbukkit.util.CraftStructureTransformer structureTransformer = null;
++            if (wrappedAccess instanceof org.bukkit.craftbukkit.util.TransformerGeneratorAccess transformerAccess) {
++                serverLevel = transformerAccess.getHandle();
++                structureTransformer = transformerAccess.getStructureTransformer();
++                // The structureTransformer is not needed if we can not transform blocks therefore we can save a little bit of performance doing this
++                if (structureTransformer != null && !structureTransformer.canTransformBlocks()) {
++                    structureTransformer = null;
++                }
++            }
++            // CraftBukkit end
+             List<StructureTemplate.StructureBlockInfo> list = settings.getRandomPalette(this.palettes, offset).blocks();
+-            if ((!list.isEmpty() || !settings.isIgnoreEntities() && !this.entityInfoList.isEmpty())
+-                && this.size.getX() >= 1
+-                && this.size.getY() >= 1
+-                && this.size.getZ() >= 1) {
+-                BoundingBox boundingBox = settings.getBoundingBox();
++
++            if ((!list.isEmpty() || !settings.isIgnoreEntities() && !this.entityInfoList.isEmpty()) && this.size.getX() >= 1 && this.size.getY() >= 1 && this.size.getZ() >= 1) {
++                BoundingBox structureboundingbox = settings.getBoundingBox();
+                 List<BlockPos> list1 = Lists.newArrayListWithCapacity(settings.shouldKeepLiquids() ? list.size() : 0);
+                 List<BlockPos> list2 = Lists.newArrayListWithCapacity(settings.shouldKeepLiquids() ? list.size() : 0);
+                 List<Pair<BlockPos, CompoundTag>> list3 = Lists.newArrayListWithCapacity(list.size());
+-                int i = Integer.MAX_VALUE;
+-                int i1 = Integer.MAX_VALUE;
+-                int i2 = Integer.MAX_VALUE;
+-                int i3 = Integer.MIN_VALUE;
+-                int i4 = Integer.MIN_VALUE;
+-                int i5 = Integer.MIN_VALUE;
++                int j = Integer.MAX_VALUE;
++                int k = Integer.MAX_VALUE;
++                int l = Integer.MAX_VALUE;
++                int i1 = Integer.MIN_VALUE;
++                int j1 = Integer.MIN_VALUE;
++                int k1 = Integer.MIN_VALUE;
++                List<StructureTemplate.StructureBlockInfo> list4 = processBlockInfos(serverLevel, offset, pos, settings, list);
++                Iterator iterator = list4.iterator();
+ 
+-                for (StructureTemplate.StructureBlockInfo structureBlockInfo : processBlockInfos(serverLevel, offset, pos, settings, list)) {
+-                    BlockPos blockPos = structureBlockInfo.pos;
+-                    if (boundingBox == null || boundingBox.isInside(blockPos)) {
+-                        FluidState fluidState = settings.shouldKeepLiquids() ? serverLevel.getFluidState(blockPos) : null;
+-                        BlockState blockState = structureBlockInfo.state.mirror(settings.getMirror()).rotate(settings.getRotation());
+-                        if (structureBlockInfo.nbt != null) {
+-                            BlockEntity blockEntity = serverLevel.getBlockEntity(blockPos);
+-                            Clearable.tryClear(blockEntity);
+-                            serverLevel.setBlock(blockPos, Blocks.BARRIER.defaultBlockState(), 20);
++                BlockEntity tileentity;
++
++                while (iterator.hasNext()) {
++                    StructureTemplate.StructureBlockInfo definedstructure_blockinfo = (StructureTemplate.StructureBlockInfo) iterator.next();
++                    BlockPos blockposition2 = definedstructure_blockinfo.pos;
++
++                    if (structureboundingbox == null || structureboundingbox.isInside(blockposition2)) {
++                        FluidState fluid = settings.shouldKeepLiquids() ? serverLevel.getFluidState(blockposition2) : null;
++                        IBlockData iblockdata = definedstructure_blockinfo.state.mirror(settings.getMirror()).rotate(settings.getRotation());
++
++                        if (definedstructure_blockinfo.nbt != null) {
++                            tileentity = serverLevel.getBlockEntity(blockposition2);
++                            Clearable.tryClear(tileentity);
++                            serverLevel.setBlock(blockposition2, Blocks.BARRIER.defaultBlockState(), 20);
+                         }
++                        // CraftBukkit start
++                        if (structureTransformer != null) {
++                            org.bukkit.craftbukkit.block.CraftBlockState craftBlockState = (org.bukkit.craftbukkit.block.CraftBlockState) org.bukkit.craftbukkit.block.CraftBlockStates.getBlockState(blockposition2, iblockdata, null);
++                            if (definedstructure_blockinfo.nbt != null && craftBlockState instanceof org.bukkit.craftbukkit.block.CraftBlockEntityState<?> entityState) {
++                                entityState.loadData(definedstructure_blockinfo.nbt);
++                                if (craftBlockState instanceof org.bukkit.craftbukkit.block.CraftLootable<?> craftLootable) {
++                                    craftLootable.setSeed(random.nextLong());
++                                }
++                            }
++                            craftBlockState = structureTransformer.transformCraftState(craftBlockState);
++                            iblockdata = craftBlockState.getHandle();
++                            definedstructure_blockinfo = new StructureTemplate.StructureBlockInfo(blockposition2, iblockdata, (craftBlockState instanceof org.bukkit.craftbukkit.block.CraftBlockEntityState<?> craftBlockEntityState ? craftBlockEntityState.getSnapshotNBT() : null));
++                        }
++                        // CraftBukkit end
+ 
+-                        if (serverLevel.setBlock(blockPos, blockState, flags)) {
+-                            i = Math.min(i, blockPos.getX());
+-                            i1 = Math.min(i1, blockPos.getY());
+-                            i2 = Math.min(i2, blockPos.getZ());
+-                            i3 = Math.max(i3, blockPos.getX());
+-                            i4 = Math.max(i4, blockPos.getY());
+-                            i5 = Math.max(i5, blockPos.getZ());
+-                            list3.add(Pair.of(blockPos, structureBlockInfo.nbt));
+-                            if (structureBlockInfo.nbt != null) {
+-                                BlockEntity blockEntity = serverLevel.getBlockEntity(blockPos);
+-                                if (blockEntity != null) {
+-                                    if (blockEntity instanceof RandomizableContainer) {
+-                                        structureBlockInfo.nbt.putLong("LootTableSeed", random.nextLong());
++                        if (serverLevel.setBlock(blockposition2, iblockdata, flags)) {
++                            j = Math.min(j, blockposition2.getX());
++                            k = Math.min(k, blockposition2.getY());
++                            l = Math.min(l, blockposition2.getZ());
++                            i1 = Math.max(i1, blockposition2.getX());
++                            j1 = Math.max(j1, blockposition2.getY());
++                            k1 = Math.max(k1, blockposition2.getZ());
++                            list3.add(Pair.of(blockposition2, definedstructure_blockinfo.nbt));
++                            if (definedstructure_blockinfo.nbt != null) {
++                                tileentity = serverLevel.getBlockEntity(blockposition2);
++                                if (tileentity != null) {
++                                    if (structureTransformer == null && tileentity instanceof RandomizableContainer) { // CraftBukkit - only process if don't have a transformer access (Was already set above) - SPIGOT-7520: Use structureTransformer as check, so that it is the same as above
++                                        definedstructure_blockinfo.nbt.putLong("LootTableSeed", random.nextLong());
+                                     }
+ 
+-                                    blockEntity.load(structureBlockInfo.nbt);
++                                    tileentity.load(definedstructure_blockinfo.nbt);
+                                 }
+                             }
+ 
+-                            if (fluidState != null) {
+-                                if (blockState.getFluidState().isSource()) {
+-                                    list2.add(blockPos);
+-                                } else if (blockState.getBlock() instanceof LiquidBlockContainer) {
+-                                    ((LiquidBlockContainer)blockState.getBlock()).placeLiquid(serverLevel, blockPos, blockState, fluidState);
+-                                    if (!fluidState.isSource()) {
+-                                        list1.add(blockPos);
++                            if (fluid != null) {
++                                if (iblockdata.getFluidState().isSource()) {
++                                    list2.add(blockposition2);
++                                } else if (iblockdata.getBlock() instanceof LiquidBlockContainer) {
++                                    ((LiquidBlockContainer) iblockdata.getBlock()).placeLiquid(serverLevel, blockposition2, iblockdata, fluid);
++                                    if (!fluid.isSource()) {
++                                        list1.add(blockposition2);
+                                     }
+                                 }
+                             }
+@@ -277,82 +331,89 @@
+                 }
+ 
+                 boolean flag = true;
+-                Direction[] directions = new Direction[]{Direction.UP, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST};
++                Direction[] aenumdirection = new Direction[]{Direction.UP, Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST};
+ 
++                Iterator iterator1;
++                int l1;
++                IBlockData iblockdata1;
++
+                 while (flag && !list1.isEmpty()) {
+                     flag = false;
+-                    Iterator<BlockPos> iterator = list1.iterator();
++                    iterator1 = list1.iterator();
+ 
+-                    while (iterator.hasNext()) {
+-                        BlockPos blockPos1 = iterator.next();
+-                        FluidState fluidState1 = serverLevel.getFluidState(blockPos1);
++                    while (iterator1.hasNext()) {
++                        BlockPos blockposition3 = (BlockPos) iterator1.next();
++                        FluidState fluid1 = serverLevel.getFluidState(blockposition3);
+ 
+-                        for (int i6 = 0; i6 < directions.length && !fluidState1.isSource(); i6++) {
+-                            BlockPos blockPos2 = blockPos1.relative(directions[i6]);
+-                            FluidState fluidState2 = serverLevel.getFluidState(blockPos2);
+-                            if (fluidState2.isSource() && !list2.contains(blockPos2)) {
+-                                fluidState1 = fluidState2;
++                        for (l1 = 0; l1 < aenumdirection.length && !fluid1.isSource(); ++l1) {
++                            BlockPos blockposition4 = blockposition3.relative(aenumdirection[l1]);
++                            FluidState fluid2 = serverLevel.getFluidState(blockposition4);
++
++                            if (fluid2.isSource() && !list2.contains(blockposition4)) {
++                                fluid1 = fluid2;
+                             }
+                         }
+ 
+-                        if (fluidState1.isSource()) {
+-                            BlockState blockState1 = serverLevel.getBlockState(blockPos1);
+-                            Block block = blockState1.getBlock();
++                        if (fluid1.isSource()) {
++                            iblockdata1 = serverLevel.getBlockState(blockposition3);
++                            Block block = iblockdata1.getBlock();
++
+                             if (block instanceof LiquidBlockContainer) {
+-                                ((LiquidBlockContainer)block).placeLiquid(serverLevel, blockPos1, blockState1, fluidState1);
++                                ((LiquidBlockContainer) block).placeLiquid(serverLevel, blockposition3, iblockdata1, fluid1);
+                                 flag = true;
+-                                iterator.remove();
++                                iterator1.remove();
+                             }
+                         }
+                     }
+                 }
+ 
+-                if (i <= i3) {
++                if (j <= i1) {
+                     if (!settings.getKnownShape()) {
+-                        DiscreteVoxelShape discreteVoxelShape = new BitSetDiscreteVoxelShape(i3 - i + 1, i4 - i1 + 1, i5 - i2 + 1);
+-                        int i7 = i;
+-                        int i8 = i1;
+-                        int i6x = i2;
++                        BitSetDiscreteVoxelShape voxelshapebitset = new BitSetDiscreteVoxelShape(i1 - j + 1, j1 - k + 1, k1 - l + 1);
++                        int i2 = j;
++                        int j2 = k;
+ 
+-                        for (Pair<BlockPos, CompoundTag> pair : list3) {
+-                            BlockPos blockPos3 = pair.getFirst();
+-                            discreteVoxelShape.fill(blockPos3.getX() - i7, blockPos3.getY() - i8, blockPos3.getZ() - i6x);
++                        l1 = l;
++                        Iterator iterator2 = list3.iterator();
++
++                        while (iterator2.hasNext()) {
++                            Pair<BlockPos, CompoundTag> pair = (Pair) iterator2.next();
++                            BlockPos blockposition5 = (BlockPos) pair.getFirst();
++
++                            voxelshapebitset.fill(blockposition5.getX() - i2, blockposition5.getY() - j2, blockposition5.getZ() - l1);
+                         }
+ 
+-                        updateShapeAtEdge(serverLevel, flags, discreteVoxelShape, i7, i8, i6x);
++                        updateShapeAtEdge(serverLevel, flags, voxelshapebitset, i2, j2, l1);
+                     }
+ 
+-                    for (Pair<BlockPos, CompoundTag> pair1 : list3) {
+-                        BlockPos blockPos4 = pair1.getFirst();
++                    iterator1 = list3.iterator();
++
++                    while (iterator1.hasNext()) {
++                        Pair<BlockPos, CompoundTag> pair1 = (Pair) iterator1.next();
++                        BlockPos blockposition6 = (BlockPos) pair1.getFirst();
++
+                         if (!settings.getKnownShape()) {
+-                            BlockState blockState1 = serverLevel.getBlockState(blockPos4);
+-                            BlockState blockState2 = Block.updateFromNeighbourShapes(blockState1, serverLevel, blockPos4);
+-                            if (blockState1 != blockState2) {
+-                                serverLevel.setBlock(blockPos4, blockState2, flags & -2 | 16);
++                            iblockdata1 = serverLevel.getBlockState(blockposition6);
++                            IBlockData iblockdata2 = Block.updateFromNeighbourShapes(iblockdata1, serverLevel, blockposition6);
++
++                            if (iblockdata1 != iblockdata2) {
++                                serverLevel.setBlock(blockposition6, iblockdata2, flags & -2 | 16);
+                             }
+ 
+-                            serverLevel.blockUpdated(blockPos4, blockState2.getBlock());
++                            serverLevel.blockUpdated(blockposition6, iblockdata2.getBlock());
+                         }
+ 
+                         if (pair1.getSecond() != null) {
+-                            BlockEntity blockEntity = serverLevel.getBlockEntity(blockPos4);
+-                            if (blockEntity != null) {
+-                                blockEntity.setChanged();
++                            tileentity = serverLevel.getBlockEntity(blockposition6);
++                            if (tileentity != null) {
++                                tileentity.setChanged();
+                             }
+                         }
+                     }
+                 }
+ 
+                 if (!settings.isIgnoreEntities()) {
+-                    this.placeEntities(
+-                        serverLevel,
+-                        offset,
+-                        settings.getMirror(),
+-                        settings.getRotation(),
+-                        settings.getRotationPivot(),
+-                        boundingBox,
+-                        settings.shouldFinalizeEntities()
+-                    );
++                    this.placeEntities(wrappedAccess, offset, settings.getMirror(), settings.getRotation(), settings.getRotationPivot(), structureboundingbox, settings.shouldFinalizeEntities()); // CraftBukkit
+                 }
+ 
+                 return true;
+@@ -363,100 +424,97 @@
+     }
+ 
+     public static void updateShapeAtEdge(LevelAccessor level, int flags, DiscreteVoxelShape shape, int x, int y, int z) {
+-        shape.forAllFaces((direction, x1, y1, z1) -> {
+-            BlockPos blockPos = new BlockPos(x + x1, y + y1, z + z1);
+-            BlockPos blockPos1 = blockPos.relative(direction);
+-            BlockState blockState = level.getBlockState(blockPos);
+-            BlockState blockState1 = level.getBlockState(blockPos1);
+-            BlockState blockState2 = blockState.updateShape(direction, blockState1, level, blockPos, blockPos1);
+-            if (blockState != blockState2) {
+-                level.setBlock(blockPos, blockState2, flags & -2);
++        shape.forAllFaces((enumdirection, i1, j1, k1) -> {
++            BlockPos blockposition = new BlockPos(x + i1, y + j1, z + k1);
++            BlockPos blockposition1 = blockposition.relative(enumdirection);
++            IBlockData iblockdata = level.getBlockState(blockposition);
++            IBlockData iblockdata1 = level.getBlockState(blockposition1);
++            IBlockData iblockdata2 = iblockdata.updateShape(enumdirection, iblockdata1, level, blockposition, blockposition1);
++
++            if (iblockdata != iblockdata2) {
++                level.setBlock(blockposition, iblockdata2, flags & -2);
+             }
+ 
+-            BlockState blockState3 = blockState1.updateShape(direction.getOpposite(), blockState2, level, blockPos1, blockPos);
+-            if (blockState1 != blockState3) {
+-                level.setBlock(blockPos1, blockState3, flags & -2);
++            IBlockData iblockdata3 = iblockdata1.updateShape(enumdirection.getOpposite(), iblockdata2, level, blockposition1, blockposition);
++
++            if (iblockdata1 != iblockdata3) {
++                level.setBlock(blockposition1, iblockdata3, flags & -2);
+             }
++
+         });
+     }
+ 
+-    public static List<StructureTemplate.StructureBlockInfo> processBlockInfos(
+-        ServerLevelAccessor serverLevel, BlockPos offset, BlockPos pos, StructurePlaceSettings settings, List<StructureTemplate.StructureBlockInfo> blockInfos
+-    ) {
+-        List<StructureTemplate.StructureBlockInfo> list = new ArrayList<>();
+-        List<StructureTemplate.StructureBlockInfo> list1 = new ArrayList<>();
++    public static List<StructureTemplate.StructureBlockInfo> processBlockInfos(ServerLevelAccessor serverLevel, BlockPos offset, BlockPos pos, StructurePlaceSettings settings, List<StructureTemplate.StructureBlockInfo> blockInfos) {
++        List<StructureTemplate.StructureBlockInfo> list1 = new ArrayList();
++        List<StructureTemplate.StructureBlockInfo> list2 = new ArrayList();
++        Iterator iterator = blockInfos.iterator();
+ 
+-        for (StructureTemplate.StructureBlockInfo structureBlockInfo : blockInfos) {
+-            BlockPos blockPos = calculateRelativePosition(settings, structureBlockInfo.pos).offset(offset);
+-            StructureTemplate.StructureBlockInfo structureBlockInfo1 = new StructureTemplate.StructureBlockInfo(
+-                blockPos, structureBlockInfo.state, structureBlockInfo.nbt != null ? structureBlockInfo.nbt.copy() : null
+-            );
+-            Iterator<StructureProcessor> iterator = settings.getProcessors().iterator();
++        while (iterator.hasNext()) {
++            StructureTemplate.StructureBlockInfo definedstructure_blockinfo = (StructureTemplate.StructureBlockInfo) iterator.next();
++            BlockPos blockposition2 = calculateRelativePosition(settings, definedstructure_blockinfo.pos).offset(offset);
++            StructureTemplate.StructureBlockInfo definedstructure_blockinfo1 = new StructureTemplate.StructureBlockInfo(blockposition2, definedstructure_blockinfo.state, definedstructure_blockinfo.nbt != null ? definedstructure_blockinfo.nbt.copy() : null);
+ 
+-            while (structureBlockInfo1 != null && iterator.hasNext()) {
+-                structureBlockInfo1 = iterator.next().processBlock(serverLevel, offset, pos, structureBlockInfo, structureBlockInfo1, settings);
++            for (Iterator iterator1 = settings.getProcessors().iterator(); definedstructure_blockinfo1 != null && iterator1.hasNext(); definedstructure_blockinfo1 = ((StructureProcessor) iterator1.next()).processBlock(serverLevel, offset, pos, definedstructure_blockinfo, definedstructure_blockinfo1, settings)) {
++                ;
+             }
+ 
+-            if (structureBlockInfo1 != null) {
+-                list1.add(structureBlockInfo1);
+-                list.add(structureBlockInfo);
++            if (definedstructure_blockinfo1 != null) {
++                ((List) list2).add(definedstructure_blockinfo1);
++                list1.add(definedstructure_blockinfo);
+             }
+         }
+ 
+-        for (StructureProcessor structureProcessor : settings.getProcessors()) {
+-            list1 = structureProcessor.finalizeProcessing(serverLevel, offset, pos, list, list1, settings);
++        StructureProcessor definedstructureprocessor;
++
++        for (iterator = settings.getProcessors().iterator(); iterator.hasNext(); list2 = definedstructureprocessor.finalizeProcessing(serverLevel, offset, pos, list1, (List) list2, settings)) {
++            definedstructureprocessor = (StructureProcessor) iterator.next();
+         }
+ 
+-        return list1;
++        return (List) list2;
+     }
+ 
+-    private void placeEntities(
+-        ServerLevelAccessor serverLevel,
+-        BlockPos pos,
+-        Mirror mirror,
+-        Rotation rotation,
+-        BlockPos offset,
+-        @Nullable BoundingBox boundingBox,
+-        boolean withEntities
+-    ) {
+-        for (StructureTemplate.StructureEntityInfo structureEntityInfo : this.entityInfoList) {
+-            BlockPos blockPos = transform(structureEntityInfo.blockPos, mirror, rotation, offset).offset(pos);
+-            if (boundingBox == null || boundingBox.isInside(blockPos)) {
+-                CompoundTag compoundTag = structureEntityInfo.nbt.copy();
+-                Vec3 vec3 = transform(structureEntityInfo.pos, mirror, rotation, offset);
+-                Vec3 vec31 = vec3.add((double)pos.getX(), (double)pos.getY(), (double)pos.getZ());
+-                ListTag list = new ListTag();
+-                list.add(DoubleTag.valueOf(vec31.x));
+-                list.add(DoubleTag.valueOf(vec31.y));
+-                list.add(DoubleTag.valueOf(vec31.z));
+-                compoundTag.put("Pos", list);
+-                compoundTag.remove("UUID");
+-                createEntityIgnoreException(serverLevel, compoundTag)
+-                    .ifPresent(
+-                        entity -> {
+-                            float f = entity.rotate(rotation);
+-                            f += entity.mirror(mirror) - entity.getYRot();
+-                            entity.moveTo(vec31.x, vec31.y, vec31.z, f, entity.getXRot());
+-                            if (withEntities && entity instanceof Mob) {
+-                                ((Mob)entity)
+-                                    .finalizeSpawn(
+-                                        serverLevel, serverLevel.getCurrentDifficultyAt(BlockPos.containing(vec31)), MobSpawnType.STRUCTURE, null, compoundTag
+-                                    );
+-                            }
+-        
+-                            serverLevel.addFreshEntityWithPassengers(entity);
+-                        }
+-                    );
++    private void placeEntities(ServerLevelAccessor serverLevel, BlockPos pos, Mirror mirror, Rotation rotation, BlockPos offset, @Nullable BoundingBox boundingBox, boolean withEntities) {
++        Iterator iterator = this.entityInfoList.iterator();
++
++        while (iterator.hasNext()) {
++            StructureTemplate.StructureEntityInfo definedstructure_entityinfo = (StructureTemplate.StructureEntityInfo) iterator.next();
++            BlockPos blockposition2 = transform(definedstructure_entityinfo.blockPos, mirror, rotation, offset).offset(pos);
++
++            if (boundingBox == null || boundingBox.isInside(blockposition2)) {
++                CompoundTag nbttagcompound = definedstructure_entityinfo.nbt.copy();
++                Vec3 vec3d = transform(definedstructure_entityinfo.pos, mirror, rotation, offset);
++                Vec3 vec3d1 = vec3d.add((double) pos.getX(), (double) pos.getY(), (double) pos.getZ());
++                ListTag nbttaglist = new ListTag();
++
++                nbttaglist.add(DoubleTag.valueOf(vec3d1.x));
++                nbttaglist.add(DoubleTag.valueOf(vec3d1.y));
++                nbttaglist.add(DoubleTag.valueOf(vec3d1.z));
++                nbttagcompound.put("Pos", nbttaglist);
++                nbttagcompound.remove("UUID");
++                createEntityIgnoreException(serverLevel, nbttagcompound).ifPresent((entity) -> {
++                    float f = entity.rotate(rotation);
++
++                    f += entity.mirror(mirror) - entity.getYRot();
++                    entity.moveTo(vec3d1.x, vec3d1.y, vec3d1.z, f, entity.getXRot());
++                    if (withEntities && entity instanceof Mob) {
++                        ((Mob) entity).finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(BlockPos.containing(vec3d1)), EnumMobSpawn.STRUCTURE, (GroupDataEntity) null, nbttagcompound);
++                    }
++
++                    serverLevel.addFreshEntityWithPassengers(entity);
++                });
+             }
+         }
++
+     }
+ 
+     private static Optional<Entity> createEntityIgnoreException(ServerLevelAccessor level, CompoundTag tag) {
+-        try {
++        // CraftBukkit start
++        // try {
+             return EntityType.create(tag, level.getLevel());
+-        } catch (Exception var3) {
+-            return Optional.empty();
+-        }
++        // } catch (Exception exception) {
++            // return Optional.empty();
++        // }
++        // CraftBukkit end
+     }
+ 
+     public Vec3i getSize(Rotation rotation) {
+@@ -470,62 +528,66 @@
+     }
+ 
+     public static BlockPos transform(BlockPos targetPos, Mirror mirror, Rotation rotation, BlockPos offset) {
+-        int x = targetPos.getX();
+-        int y = targetPos.getY();
+-        int z = targetPos.getZ();
++        int i = targetPos.getX();
++        int j = targetPos.getY();
++        int k = targetPos.getZ();
+         boolean flag = true;
++
+         switch (mirror) {
+             case LEFT_RIGHT:
+-                z = -z;
++                k = -k;
+                 break;
+             case FRONT_BACK:
+-                x = -x;
++                i = -i;
+                 break;
+             default:
+                 flag = false;
+         }
+ 
+-        int x1 = offset.getX();
+-        int z1 = offset.getZ();
++        int l = offset.getX();
++        int i1 = offset.getZ();
++
+         switch (rotation) {
+             case COUNTERCLOCKWISE_90:
+-                return new BlockPos(x1 - z1 + z, y, x1 + z1 - x);
++                return new BlockPos(l - i1 + k, j, l + i1 - i);
+             case CLOCKWISE_90:
+-                return new BlockPos(x1 + z1 - z, y, z1 - x1 + x);
++                return new BlockPos(l + i1 - k, j, i1 - l + i);
+             case CLOCKWISE_180:
+-                return new BlockPos(x1 + x1 - x, y, z1 + z1 - z);
++                return new BlockPos(l + l - i, j, i1 + i1 - k);
+             default:
+-                return flag ? new BlockPos(x, y, z) : targetPos;
++                return flag ? new BlockPos(i, j, k) : targetPos;
+         }
+     }
+ 
+     public static Vec3 transform(Vec3 target, Mirror mirror, Rotation rotation, BlockPos centerOffset) {
+-        double d = target.x;
++        double d0 = target.x;
+         double d1 = target.y;
+         double d2 = target.z;
+         boolean flag = true;
++
+         switch (mirror) {
+             case LEFT_RIGHT:
+-                d2 = 1.0 - d2;
++                d2 = 1.0D - d2;
+                 break;
+             case FRONT_BACK:
+-                d = 1.0 - d;
++                d0 = 1.0D - d0;
+                 break;
+             default:
+                 flag = false;
+         }
+ 
+-        int x = centerOffset.getX();
+-        int z = centerOffset.getZ();
++        int i = centerOffset.getX();
++        int j = centerOffset.getZ();
++
+         switch (rotation) {
+             case COUNTERCLOCKWISE_90:
+-                return new Vec3((double)(x - z) + d2, d1, (double)(x + z + 1) - d);
++                return new Vec3((double) (i - j) + d2, d1, (double) (i + j + 1) - d0);
+             case CLOCKWISE_90:
+-                return new Vec3((double)(x + z + 1) - d2, d1, (double)(z - x) + d);
++                return new Vec3((double) (i + j + 1) - d2, d1, (double) (j - i) + d0);
+             case CLOCKWISE_180:
+-                return new Vec3((double)(x + x + 1) - d, d1, (double)(z + z + 1) - d2);
++                return new Vec3((double) (i + i + 1) - d0, d1, (double) (j + j + 1) - d2);
+             default:
+-                return flag ? new Vec3(d, d1, d2) : target;
++                return flag ? new Vec3(d0, d1, d2) : target;
+         }
+     }
+ 
+@@ -534,26 +596,27 @@
+     }
+ 
+     public static BlockPos getZeroPositionWithTransform(BlockPos pos, Mirror mirror, Rotation rotation, int sizeX, int sizeZ) {
+-        sizeX--;
+-        sizeZ--;
+-        int i = mirror == Mirror.FRONT_BACK ? sizeX : 0;
+-        int i1 = mirror == Mirror.LEFT_RIGHT ? sizeZ : 0;
+-        BlockPos blockPos = pos;
++        --sizeX;
++        --sizeZ;
++        int k = mirror == Mirror.FRONT_BACK ? sizeX : 0;
++        int l = mirror == Mirror.LEFT_RIGHT ? sizeZ : 0;
++        BlockPos blockposition1 = pos;
++
+         switch (rotation) {
+             case COUNTERCLOCKWISE_90:
+-                blockPos = pos.offset(i1, 0, sizeX - i);
++                blockposition1 = pos.offset(l, 0, sizeX - k);
+                 break;
+             case CLOCKWISE_90:
+-                blockPos = pos.offset(sizeZ - i1, 0, i);
++                blockposition1 = pos.offset(sizeZ - l, 0, k);
+                 break;
+             case CLOCKWISE_180:
+-                blockPos = pos.offset(sizeX - i, 0, sizeZ - i1);
++                blockposition1 = pos.offset(sizeX - k, 0, sizeZ - l);
+                 break;
+             case NONE:
+-                blockPos = pos.offset(i, 0, i1);
++                blockposition1 = pos.offset(k, 0, l);
+         }
+ 
+-        return blockPos;
++        return blockposition1;
+     }
+ 
+     public BoundingBox getBoundingBox(StructurePlaceSettings settings, BlockPos startPos) {
+@@ -566,10 +629,11 @@
+ 
+     @VisibleForTesting
+     protected static BoundingBox getBoundingBox(BlockPos startPos, Rotation rotation, BlockPos pivotPos, Mirror mirror, Vec3i size) {
+-        Vec3i vec3i = size.offset(-1, -1, -1);
+-        BlockPos blockPos = transform(BlockPos.ZERO, mirror, rotation, pivotPos);
+-        BlockPos blockPos1 = transform(BlockPos.ZERO.offset(vec3i), mirror, rotation, pivotPos);
+-        return BoundingBox.fromCorners(blockPos, blockPos1).move(startPos);
++        Vec3i baseblockposition1 = size.offset(-1, -1, -1);
++        BlockPos blockposition2 = transform(BlockPos.ZERO, mirror, rotation, pivotPos);
++        BlockPos blockposition3 = transform(BlockPos.ZERO.offset(baseblockposition1), mirror, rotation, pivotPos);
++
++        return BoundingBox.fromCorners(blockposition2, blockposition3).move(startPos);
+     }
+ 
+     public CompoundTag save(CompoundTag tag) {
+@@ -578,163 +642,215 @@
+             tag.put("palette", new ListTag());
+         } else {
+             List<StructureTemplate.SimplePalette> list = Lists.newArrayList();
+-            StructureTemplate.SimplePalette simplePalette = new StructureTemplate.SimplePalette();
+-            list.add(simplePalette);
++            StructureTemplate.SimplePalette definedstructure_b = new StructureTemplate.SimplePalette();
+ 
+-            for (int i = 1; i < this.palettes.size(); i++) {
++            list.add(definedstructure_b);
++
++            for (int i = 1; i < this.palettes.size(); ++i) {
+                 list.add(new StructureTemplate.SimplePalette());
+             }
+ 
+-            ListTag list1 = new ListTag();
+-            List<StructureTemplate.StructureBlockInfo> list2 = this.palettes.get(0).blocks();
++            ListTag nbttaglist = new ListTag();
++            List<StructureTemplate.StructureBlockInfo> list1 = ((StructureTemplate.Palette) this.palettes.get(0)).blocks();
+ 
+-            for (int i1 = 0; i1 < list2.size(); i1++) {
+-                StructureTemplate.StructureBlockInfo structureBlockInfo = list2.get(i1);
+-                CompoundTag compoundTag = new CompoundTag();
+-                compoundTag.put("pos", this.newIntegerList(structureBlockInfo.pos.getX(), structureBlockInfo.pos.getY(), structureBlockInfo.pos.getZ()));
+-                int i2 = simplePalette.idFor(structureBlockInfo.state);
+-                compoundTag.putInt("state", i2);
+-                if (structureBlockInfo.nbt != null) {
+-                    compoundTag.put("nbt", structureBlockInfo.nbt);
++            for (int j = 0; j < list1.size(); ++j) {
++                StructureTemplate.StructureBlockInfo definedstructure_blockinfo = (StructureTemplate.StructureBlockInfo) list1.get(j);
++                CompoundTag nbttagcompound1 = new CompoundTag();
++
++                nbttagcompound1.put("pos", this.newIntegerList(definedstructure_blockinfo.pos.getX(), definedstructure_blockinfo.pos.getY(), definedstructure_blockinfo.pos.getZ()));
++                int k = definedstructure_b.idFor(definedstructure_blockinfo.state);
++
++                nbttagcompound1.putInt("state", k);
++                if (definedstructure_blockinfo.nbt != null) {
++                    nbttagcompound1.put("nbt", definedstructure_blockinfo.nbt);
+                 }
+ 
+-                list1.add(compoundTag);
++                nbttaglist.add(nbttagcompound1);
+ 
+-                for (int i3 = 1; i3 < this.palettes.size(); i3++) {
+-                    StructureTemplate.SimplePalette simplePalette1 = list.get(i3);
+-                    simplePalette1.addMapping(this.palettes.get(i3).blocks().get(i1).state, i2);
++                for (int l = 1; l < this.palettes.size(); ++l) {
++                    StructureTemplate.SimplePalette definedstructure_b1 = (StructureTemplate.SimplePalette) list.get(l);
++
++                    definedstructure_b1.addMapping(((StructureTemplate.StructureBlockInfo) ((StructureTemplate.Palette) this.palettes.get(l)).blocks().get(j)).state, k);
+                 }
+             }
+ 
+-            tag.put("blocks", list1);
++            tag.put("blocks", nbttaglist);
++            ListTag nbttaglist1;
++            Iterator iterator;
++
+             if (list.size() == 1) {
+-                ListTag list3 = new ListTag();
++                nbttaglist1 = new ListTag();
++                iterator = definedstructure_b.iterator();
+ 
+-                for (BlockState blockState : simplePalette) {
+-                    list3.add(NbtUtils.writeBlockState(blockState));
++                while (iterator.hasNext()) {
++                    IBlockData iblockdata = (IBlockData) iterator.next();
++
++                    nbttaglist1.add(NbtUtils.writeBlockState(iblockdata));
+                 }
+ 
+-                tag.put("palette", list3);
++                tag.put("palette", nbttaglist1);
+             } else {
+-                ListTag list3 = new ListTag();
++                nbttaglist1 = new ListTag();
++                iterator = list.iterator();
+ 
+-                for (StructureTemplate.SimplePalette simplePalette2 : list) {
+-                    ListTag list4 = new ListTag();
++                while (iterator.hasNext()) {
++                    StructureTemplate.SimplePalette definedstructure_b2 = (StructureTemplate.SimplePalette) iterator.next();
++                    ListTag nbttaglist2 = new ListTag();
++                    Iterator iterator1 = definedstructure_b2.iterator();
+ 
+-                    for (BlockState blockState1 : simplePalette2) {
+-                        list4.add(NbtUtils.writeBlockState(blockState1));
++                    while (iterator1.hasNext()) {
++                        IBlockData iblockdata1 = (IBlockData) iterator1.next();
++
++                        nbttaglist2.add(NbtUtils.writeBlockState(iblockdata1));
+                     }
+ 
+-                    list3.add(list4);
++                    nbttaglist1.add(nbttaglist2);
+                 }
+ 
+-                tag.put("palettes", list3);
++                tag.put("palettes", nbttaglist1);
+             }
+         }
+ 
+-        ListTag list5 = new ListTag();
++        ListTag nbttaglist3 = new ListTag();
+ 
+-        for (StructureTemplate.StructureEntityInfo structureEntityInfo : this.entityInfoList) {
+-            CompoundTag compoundTag1 = new CompoundTag();
+-            compoundTag1.put("pos", this.newDoubleList(structureEntityInfo.pos.x, structureEntityInfo.pos.y, structureEntityInfo.pos.z));
+-            compoundTag1.put(
+-                "blockPos", this.newIntegerList(structureEntityInfo.blockPos.getX(), structureEntityInfo.blockPos.getY(), structureEntityInfo.blockPos.getZ())
+-            );
+-            if (structureEntityInfo.nbt != null) {
+-                compoundTag1.put("nbt", structureEntityInfo.nbt);
+-            }
++        CompoundTag nbttagcompound2;
+ 
+-            list5.add(compoundTag1);
++        for (Iterator iterator2 = this.entityInfoList.iterator(); iterator2.hasNext(); nbttaglist3.add(nbttagcompound2)) {
++            StructureTemplate.StructureEntityInfo definedstructure_entityinfo = (StructureTemplate.StructureEntityInfo) iterator2.next();
++
++            nbttagcompound2 = new CompoundTag();
++            nbttagcompound2.put("pos", this.newDoubleList(definedstructure_entityinfo.pos.x, definedstructure_entityinfo.pos.y, definedstructure_entityinfo.pos.z));
++            nbttagcompound2.put("blockPos", this.newIntegerList(definedstructure_entityinfo.blockPos.getX(), definedstructure_entityinfo.blockPos.getY(), definedstructure_entityinfo.blockPos.getZ()));
++            if (definedstructure_entityinfo.nbt != null) {
++                nbttagcompound2.put("nbt", definedstructure_entityinfo.nbt);
++            }
+         }
+ 
+-        tag.put("entities", list5);
++        tag.put("entities", nbttaglist3);
+         tag.put("size", this.newIntegerList(this.size.getX(), this.size.getY(), this.size.getZ()));
++        // CraftBukkit start - PDC
++        if (!this.persistentDataContainer.isEmpty()) {
++            tag.put("BukkitValues", this.persistentDataContainer.toTagCompound());
++        }
++        // CraftBukkit end
+         return NbtUtils.addCurrentDataVersion(tag);
+     }
+ 
+     public void load(HolderGetter<Block> blockGetter, CompoundTag tag) {
+         this.palettes.clear();
+         this.entityInfoList.clear();
+-        ListTag list = tag.getList("size", 3);
+-        this.size = new Vec3i(list.getInt(0), list.getInt(1), list.getInt(2));
+-        ListTag list1 = tag.getList("blocks", 10);
++        ListTag nbttaglist = tag.getList("size", 3);
++
++        this.size = new Vec3i(nbttaglist.getInt(0), nbttaglist.getInt(1), nbttaglist.getInt(2));
++        ListTag nbttaglist1 = tag.getList("blocks", 10);
++        ListTag nbttaglist2;
++        int i;
++
+         if (tag.contains("palettes", 9)) {
+-            ListTag list2 = tag.getList("palettes", 9);
++            nbttaglist2 = tag.getList("palettes", 9);
+ 
+-            for (int i = 0; i < list2.size(); i++) {
+-                this.loadPalette(blockGetter, list2.getList(i), list1);
++            for (i = 0; i < nbttaglist2.size(); ++i) {
++                this.loadPalette(blockGetter, nbttaglist2.getList(i), nbttaglist1);
+             }
+         } else {
+-            this.loadPalette(blockGetter, tag.getList("palette", 10), list1);
++            this.loadPalette(blockGetter, tag.getList("palette", 10), nbttaglist1);
+         }
+ 
+-        ListTag list2 = tag.getList("entities", 10);
++        nbttaglist2 = tag.getList("entities", 10);
+ 
+-        for (int i = 0; i < list2.size(); i++) {
+-            CompoundTag compound = list2.getCompound(i);
+-            ListTag list3 = compound.getList("pos", 6);
+-            Vec3 vec3 = new Vec3(list3.getDouble(0), list3.getDouble(1), list3.getDouble(2));
+-            ListTag list4 = compound.getList("blockPos", 3);
+-            BlockPos blockPos = new BlockPos(list4.getInt(0), list4.getInt(1), list4.getInt(2));
+-            if (compound.contains("nbt")) {
+-                CompoundTag compound1 = compound.getCompound("nbt");
+-                this.entityInfoList.add(new StructureTemplate.StructureEntityInfo(vec3, blockPos, compound1));
++        for (i = 0; i < nbttaglist2.size(); ++i) {
++            CompoundTag nbttagcompound1 = nbttaglist2.getCompound(i);
++            ListTag nbttaglist3 = nbttagcompound1.getList("pos", 6);
++            Vec3 vec3d = new Vec3(nbttaglist3.getDouble(0), nbttaglist3.getDouble(1), nbttaglist3.getDouble(2));
++            ListTag nbttaglist4 = nbttagcompound1.getList("blockPos", 3);
++            BlockPos blockposition = new BlockPos(nbttaglist4.getInt(0), nbttaglist4.getInt(1), nbttaglist4.getInt(2));
++
++            if (nbttagcompound1.contains("nbt")) {
++                CompoundTag nbttagcompound2 = nbttagcompound1.getCompound("nbt");
++
++                this.entityInfoList.add(new StructureTemplate.StructureEntityInfo(vec3d, blockposition, nbttagcompound2));
+             }
+         }
++
++        // CraftBukkit start - PDC
++        Tag base = tag.get("BukkitValues");
++        if (base instanceof CompoundTag) {
++            this.persistentDataContainer.putAll((CompoundTag) base);
++        }
++        // CraftBukkit end
+     }
+ 
+     private void loadPalette(HolderGetter<Block> blockGetter, ListTag paletteTag, ListTag blocksTag) {
+-        StructureTemplate.SimplePalette simplePalette = new StructureTemplate.SimplePalette();
++        StructureTemplate.SimplePalette definedstructure_b = new StructureTemplate.SimplePalette();
+ 
+-        for (int i = 0; i < paletteTag.size(); i++) {
+-            simplePalette.addMapping(NbtUtils.readBlockState(blockGetter, paletteTag.getCompound(i)), i);
++        for (int i = 0; i < paletteTag.size(); ++i) {
++            definedstructure_b.addMapping(NbtUtils.readBlockState(blockGetter, paletteTag.getCompound(i)), i);
+         }
+ 
+         List<StructureTemplate.StructureBlockInfo> list = Lists.newArrayList();
+         List<StructureTemplate.StructureBlockInfo> list1 = Lists.newArrayList();
+         List<StructureTemplate.StructureBlockInfo> list2 = Lists.newArrayList();
+ 
+-        for (int i1 = 0; i1 < blocksTag.size(); i1++) {
+-            CompoundTag compound = blocksTag.getCompound(i1);
+-            ListTag list3 = compound.getList("pos", 3);
+-            BlockPos blockPos = new BlockPos(list3.getInt(0), list3.getInt(1), list3.getInt(2));
+-            BlockState blockState = simplePalette.stateFor(compound.getInt("state"));
+-            CompoundTag compound1;
+-            if (compound.contains("nbt")) {
+-                compound1 = compound.getCompound("nbt");
++        for (int j = 0; j < blocksTag.size(); ++j) {
++            CompoundTag nbttagcompound = blocksTag.getCompound(j);
++            ListTag nbttaglist2 = nbttagcompound.getList("pos", 3);
++            BlockPos blockposition = new BlockPos(nbttaglist2.getInt(0), nbttaglist2.getInt(1), nbttaglist2.getInt(2));
++            IBlockData iblockdata = definedstructure_b.stateFor(nbttagcompound.getInt("state"));
++            CompoundTag nbttagcompound1;
++
++            if (nbttagcompound.contains("nbt")) {
++                nbttagcompound1 = nbttagcompound.getCompound("nbt");
+             } else {
+-                compound1 = null;
++                nbttagcompound1 = null;
+             }
+ 
+-            StructureTemplate.StructureBlockInfo structureBlockInfo = new StructureTemplate.StructureBlockInfo(blockPos, blockState, compound1);
+-            addToLists(structureBlockInfo, list, list1, list2);
++            StructureTemplate.StructureBlockInfo definedstructure_blockinfo = new StructureTemplate.StructureBlockInfo(blockposition, iblockdata, nbttagcompound1);
++
++            addToLists(definedstructure_blockinfo, list, list1, list2);
+         }
+ 
+-        List<StructureTemplate.StructureBlockInfo> list4 = buildInfoList(list, list1, list2);
+-        this.palettes.add(new StructureTemplate.Palette(list4));
++        List<StructureTemplate.StructureBlockInfo> list3 = buildInfoList(list, list1, list2);
++
++        this.palettes.add(new StructureTemplate.Palette(list3));
+     }
+ 
+     private ListTag newIntegerList(int... values) {
+-        ListTag list = new ListTag();
++        ListTag nbttaglist = new ListTag();
++        int[] aint1 = values;
++        int i = values.length;
+ 
+-        for (int i : values) {
+-            list.add(IntTag.valueOf(i));
++        for (int j = 0; j < i; ++j) {
++            int k = aint1[j];
++
++            nbttaglist.add(IntTag.valueOf(k));
+         }
+ 
+-        return list;
++        return nbttaglist;
+     }
+ 
+     private ListTag newDoubleList(double... values) {
+-        ListTag list = new ListTag();
++        ListTag nbttaglist = new ListTag();
++        double[] adouble1 = values;
++        int i = values.length;
+ 
+-        for (double d : values) {
+-            list.add(DoubleTag.valueOf(d));
++        for (int j = 0; j < i; ++j) {
++            double d0 = adouble1[j];
++
++            nbttaglist.add(DoubleTag.valueOf(d0));
+         }
+ 
+-        return list;
++        return nbttaglist;
+     }
+ 
++    public static record StructureBlockInfo(BlockPos pos, IBlockData state, @Nullable CompoundTag nbt) {
++
++        public String toString() {
++            return String.format(Locale.ROOT, "<StructureBlockInfo | %s | %s | %s>", this.pos, this.state, this.nbt);
++        }
++    }
++
+     public static final class Palette {
++
+         private final List<StructureTemplate.StructureBlockInfo> blocks;
+         private final Map<Block, List<StructureTemplate.StructureBlockInfo>> cache = Maps.newHashMap();
+ 
+@@ -747,60 +863,59 @@
+         }
+ 
+         public List<StructureTemplate.StructureBlockInfo> blocks(Block block) {
+-            return this.cache
+-                .computeIfAbsent(
+-                    block, block1 -> this.blocks.stream().filter(structureBlockInfo -> structureBlockInfo.state.is(block1)).collect(Collectors.toList())
+-                );
++            return (List) this.cache.computeIfAbsent(block, (block1) -> {
++                return (List) this.blocks.stream().filter((definedstructure_blockinfo) -> {
++                    return definedstructure_blockinfo.state.is(block1);
++                }).collect(Collectors.toList());
++            });
+         }
+     }
+ 
+-    static class SimplePalette implements Iterable<BlockState> {
+-        public static final BlockState DEFAULT_BLOCK_STATE = Blocks.AIR.defaultBlockState();
+-        private final IdMapper<BlockState> ids = new IdMapper<>(16);
++    public static class StructureEntityInfo {
++
++        public final Vec3 pos;
++        public final BlockPos blockPos;
++        public final CompoundTag nbt;
++
++        public StructureEntityInfo(Vec3 pos, BlockPos blockPos, CompoundTag nbt) {
++            this.pos = pos;
++            this.blockPos = blockPos;
++            this.nbt = nbt;
++        }
++    }
++
++    private static class SimplePalette implements Iterable<IBlockData> {
++
++        public static final IBlockData DEFAULT_BLOCK_STATE = Blocks.AIR.defaultBlockState();
++        private final IdMapper<IBlockData> ids = new IdMapper<>(16);
+         private int lastId;
+ 
+-        public int idFor(BlockState state) {
+-            int id = this.ids.getId(state);
+-            if (id == -1) {
+-                id = this.lastId++;
+-                this.ids.addMapping(state, id);
++        SimplePalette() {}
++
++        public int idFor(IBlockData state) {
++            int i = this.ids.getId(state);
++
++            if (i == -1) {
++                i = this.lastId++;
++                this.ids.addMapping(state, i);
+             }
+ 
+-            return id;
++            return i;
+         }
+ 
+         @Nullable
+-        public BlockState stateFor(int id) {
+-            BlockState blockState = this.ids.byId(id);
+-            return blockState == null ? DEFAULT_BLOCK_STATE : blockState;
++        public IBlockData stateFor(int id) {
++            IBlockData iblockdata = (IBlockData) this.ids.byId(id);
++
++            return iblockdata == null ? DEFAULT_BLOCK_STATE : iblockdata; // CraftBukkit - decompile error
+         }
+ 
+-        @Override
+-        public Iterator<BlockState> iterator() {
++        public Iterator<IBlockData> iterator() {
+             return this.ids.iterator();
+         }
+ 
+-        public void addMapping(BlockState state, int id) {
++        public void addMapping(IBlockData state, int id) {
+             this.ids.addMapping(state, id);
+         }
+     }
+-
+-    public static record StructureBlockInfo(BlockPos pos, BlockState state, @Nullable CompoundTag nbt) {
+-        @Override
+-        public String toString() {
+-            return String.format(Locale.ROOT, "<StructureBlockInfo | %s | %s | %s>", this.pos, this.state, this.nbt);
+-        }
+-    }
+-
+-    public static class StructureEntityInfo {
+-        public final Vec3 pos;
+-        public final BlockPos blockPos;
+-        public final CompoundTag nbt;
+-
+-        public StructureEntityInfo(Vec3 pos, BlockPos blockPos, CompoundTag nbt) {
+-            this.pos = pos;
+-            this.blockPos = blockPos;
+-            this.nbt = nbt;
+-        }
+-    }
+ }

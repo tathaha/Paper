@@ -1,0 +1,209 @@
+--- a/net/minecraft/world/level/block/RedStoneOreBlock.java
++++ b/net/minecraft/world/level/block/RedStoneOreBlock.java
+@@ -3,10 +3,10 @@
+ import com.mojang.serialization.MapCodec;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.particles.DustParticleOptions;
++import net.minecraft.core.particles.ParticleParamRedstone;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.util.RandomSource;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.player.Player;
+@@ -17,107 +17,153 @@
+ import net.minecraft.world.item.enchantment.Enchantments;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+ import net.minecraft.world.phys.BlockHitResult;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityInteractEvent;
++// CraftBukkit end
+ 
+ public class RedStoneOreBlock extends Block {
++
+     public static final MapCodec<RedStoneOreBlock> CODEC = simpleCodec(RedStoneOreBlock::new);
+     public static final BooleanProperty LIT = RedstoneTorchBlock.LIT;
+ 
+     @Override
+     public MapCodec<RedStoneOreBlock> codec() {
+-        return CODEC;
++        return RedStoneOreBlock.CODEC;
+     }
+ 
+     public RedStoneOreBlock(BlockBehaviour.Properties properties) {
+         super(properties);
+-        this.registerDefaultState(this.defaultBlockState().setValue(LIT, Boolean.valueOf(false)));
++        this.registerDefaultState((IBlockData) this.defaultBlockState().setValue(RedStoneOreBlock.LIT, false));
+     }
+ 
+     @Override
+-    public void attack(BlockState state, Level level, BlockPos pos, Player player) {
+-        interact(state, level, pos);
++    public void attack(IBlockData state, Level level, BlockPos pos, Player player) {
++        interact(state, level, pos, player); // CraftBukkit - add entityhuman
+         super.attack(state, level, pos, player);
+     }
+ 
+     @Override
+-    public void stepOn(Level level, BlockPos pos, BlockState state, Entity entity) {
++    public void stepOn(Level level, BlockPos pos, IBlockData state, Entity entity) {
+         if (!entity.isSteppingCarefully()) {
+-            interact(state, level, pos);
++            // CraftBukkit start
++            if (entity instanceof Player) {
++                org.bukkit.event.player.PlayerInteractEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callPlayerInteractEvent((Player) entity, org.bukkit.event.block.Action.PHYSICAL, pos, null, null, null);
++                if (!event.isCancelled()) {
++                    interact(level.getBlockState(pos), level, pos, entity); // add entity
++                }
++            } else {
++                EntityInteractEvent event = new EntityInteractEvent(entity.getBukkitEntity(), level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ()));
++                level.getCraftServer().getPluginManager().callEvent(event);
++                if (!event.isCancelled()) {
++                    interact(level.getBlockState(pos), level, pos, entity); // add entity
++                }
++            }
++            // CraftBukkit end
+         }
+ 
+         super.stepOn(level, pos, state, entity);
+     }
+ 
+     @Override
+-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
+         if (level.isClientSide) {
+             spawnParticles(level, pos);
+         } else {
+-            interact(state, level, pos);
++            interact(state, level, pos, player); // CraftBukkit - add entityhuman
+         }
+ 
+-        ItemStack itemInHand = player.getItemInHand(hand);
+-        return itemInHand.getItem() instanceof BlockItem && new BlockPlaceContext(player, hand, itemInHand, hit).canPlace()
+-            ? InteractionResult.PASS
+-            : InteractionResult.SUCCESS;
++        ItemStack itemstack = player.getItemInHand(hand);
++
++        return itemstack.getItem() instanceof BlockItem && (new BlockPlaceContext(player, hand, itemstack, hit)).canPlace() ? InteractionResult.PASS : InteractionResult.SUCCESS;
+     }
+ 
+-    private static void interact(BlockState state, Level level, BlockPos pos) {
+-        spawnParticles(level, pos);
+-        if (!state.getValue(LIT)) {
+-            level.setBlock(pos, state.setValue(LIT, Boolean.valueOf(true)), 3);
++    private static void interact(IBlockData iblockdata, Level world, BlockPos blockposition, Entity entity) { // CraftBukkit - add Entity
++        spawnParticles(world, blockposition);
++        if (!(Boolean) iblockdata.getValue(RedStoneOreBlock.LIT)) {
++            // CraftBukkit start
++            if (!CraftEventFactory.callEntityChangeBlockEvent(entity, blockposition, iblockdata.setValue(RedStoneOreBlock.LIT, true))) {
++                return;
++            }
++            // CraftBukkit end
++            world.setBlock(blockposition, (IBlockData) iblockdata.setValue(RedStoneOreBlock.LIT, true), 3);
+         }
++
+     }
+ 
+     @Override
+-    public boolean isRandomlyTicking(BlockState state) {
+-        return state.getValue(LIT);
++    public boolean isRandomlyTicking(IBlockData state) {
++        return (Boolean) state.getValue(RedStoneOreBlock.LIT);
+     }
+ 
+     @Override
+-    public void randomTick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+-        if (state.getValue(LIT)) {
+-            level.setBlock(pos, state.setValue(LIT, Boolean.valueOf(false)), 3);
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(RedStoneOreBlock.LIT)) {
++            // CraftBukkit start
++            if (CraftEventFactory.callBlockFadeEvent(level, pos, state.setValue(RedStoneOreBlock.LIT, false)).isCancelled()) {
++                return;
++            }
++            // CraftBukkit end
++            level.setBlock(pos, (IBlockData) state.setValue(RedStoneOreBlock.LIT, false), 3);
+         }
++
+     }
+ 
+     @Override
+-    public void spawnAfterBreak(BlockState state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
++    public void spawnAfterBreak(IBlockData state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
+         super.spawnAfterBreak(state, level, pos, stack, dropExperience);
+-        if (dropExperience && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, stack) == 0) {
+-            int i = 1 + level.random.nextInt(5);
+-            this.popExperience(level, pos, i);
++        // CraftBukkit start - Delegated to getExpDrop
++    }
++
++    @Override
++    public int getExpDrop(IBlockData iblockdata, ServerLevel worldserver, BlockPos blockposition, ItemStack itemstack, boolean flag) {
++        if (flag && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, itemstack) == 0) {
++            int i = 1 + worldserver.random.nextInt(5);
++
++            // this.popExperience(worldserver, blockposition, i);
++            return i;
+         }
++
++        return 0;
++        // CraftBukkit end
+     }
+ 
+     @Override
+-    public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
+-        if (state.getValue(LIT)) {
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(RedStoneOreBlock.LIT)) {
+             spawnParticles(level, pos);
+         }
++
+     }
+ 
+     private static void spawnParticles(Level level, BlockPos pos) {
+-        double d = 0.5625;
+-        RandomSource randomSource = level.random;
++        double d0 = 0.5625D;
++        RandomSource randomsource = level.random;
++        Direction[] aenumdirection = Direction.values();
++        int i = aenumdirection.length;
+ 
+-        for (Direction direction : Direction.values()) {
+-            BlockPos blockPos = pos.relative(direction);
+-            if (!level.getBlockState(blockPos).isSolidRender(level, blockPos)) {
+-                Direction.Axis axis = direction.getAxis();
+-                double d1 = axis == Direction.Axis.X ? 0.5 + 0.5625 * (double)direction.getStepX() : (double)randomSource.nextFloat();
+-                double d2 = axis == Direction.Axis.Y ? 0.5 + 0.5625 * (double)direction.getStepY() : (double)randomSource.nextFloat();
+-                double d3 = axis == Direction.Axis.Z ? 0.5 + 0.5625 * (double)direction.getStepZ() : (double)randomSource.nextFloat();
+-                level.addParticle(DustParticleOptions.REDSTONE, (double)pos.getX() + d1, (double)pos.getY() + d2, (double)pos.getZ() + d3, 0.0, 0.0, 0.0);
++        for (int j = 0; j < i; ++j) {
++            Direction enumdirection = aenumdirection[j];
++            BlockPos blockposition1 = pos.relative(enumdirection);
++
++            if (!level.getBlockState(blockposition1).isSolidRender(level, blockposition1)) {
++                Direction.Axis enumdirection_enumaxis = enumdirection.getAxis();
++                double d1 = enumdirection_enumaxis == Direction.Axis.X ? 0.5D + 0.5625D * (double) enumdirection.getStepX() : (double) randomsource.nextFloat();
++                double d2 = enumdirection_enumaxis == Direction.Axis.Y ? 0.5D + 0.5625D * (double) enumdirection.getStepY() : (double) randomsource.nextFloat();
++                double d3 = enumdirection_enumaxis == Direction.Axis.Z ? 0.5D + 0.5625D * (double) enumdirection.getStepZ() : (double) randomsource.nextFloat();
++
++                level.addParticle(ParticleParamRedstone.REDSTONE, (double) pos.getX() + d1, (double) pos.getY() + d2, (double) pos.getZ() + d3, 0.0D, 0.0D, 0.0D);
+             }
+         }
++
+     }
+ 
+     @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+-        builder.add(LIT);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(RedStoneOreBlock.LIT);
+     }
+ }

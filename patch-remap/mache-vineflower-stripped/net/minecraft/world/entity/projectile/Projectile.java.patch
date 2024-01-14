@@ -1,0 +1,73 @@
+--- a/net/minecraft/world/entity/projectile/Projectile.java
++++ b/net/minecraft/world/entity/projectile/Projectile.java
+@@ -23,6 +24,9 @@
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.projectiles.ProjectileSource;
++// CraftBukkit end
+ 
+ public abstract class Projectile extends Entity implements TraceableEntity {
+     @Nullable
+@@ -32,6 +37,10 @@
+     private boolean leftOwner;
+     private boolean hasBeenShot;
+ 
++    // CraftBukkit start
++    private boolean hitCancelled = false;
++    // CraftBukkit end
++
+     Projectile(EntityType<? extends Projectile> entityType, Level level) {
+         super(entityType, level);
+     }
+@@ -41,6 +50,8 @@
+             this.ownerUUID = owner.getUUID();
+             this.cachedOwner = owner;
+         }
++        this.projectileSource = (owner != null && owner.getBukkitEntity() instanceof ProjectileSource) ? (ProjectileSource) owner.getBukkitEntity() : null; // CraftBukkit
++
+     }
+ 
+     @Nullable
+@@ -152,25 +175,28 @@
+         this.setDeltaMovement(this.getDeltaMovement().add(deltaMovement.x, shooter.onGround() ? 0.0 : deltaMovement.y, deltaMovement.z));
+     }
+ 
+-    protected void onHit(HitResult result) {
+-        HitResult.Type type = result.getType();
+-        if (type == HitResult.Type.ENTITY) {
+-            this.onHitEntity((EntityHitResult)result);
+-            this.level().gameEvent(GameEvent.PROJECTILE_LAND, result.getLocation(), GameEvent.Context.of(this, null));
+-        } else if (type == HitResult.Type.BLOCK) {
+-            BlockHitResult blockHitResult = (BlockHitResult)result;
+-            this.onHitBlock(blockHitResult);
+-            BlockPos blockPos = blockHitResult.getBlockPos();
+-            this.level().gameEvent(GameEvent.PROJECTILE_LAND, blockPos, GameEvent.Context.of(this, this.level().getBlockState(blockPos)));
++    // CraftBukkit start - call projectile hit event
++    protected void preOnHit(HitResult movingobjectposition) {
++        org.bukkit.event.entity.ProjectileHitEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callProjectileHitEvent(this, movingobjectposition);
++        this.hitCancelled = event != null && event.isCancelled();
++        if (movingobjectposition.getType() == HitResult.EnumMovingObjectType.BLOCK || !this.hitCancelled) {
++            this.onHit(movingobjectposition);
+         }
+     }
++    // CraftBukkit end
+ 
+     protected void onHitEntity(EntityHitResult result) {
+     }
+ 
+     protected void onHitBlock(BlockHitResult result) {
+-        BlockState blockState = this.level().getBlockState(result.getBlockPos());
+-        blockState.onProjectileHit(this.level(), blockState, result, this);
++        // CraftBukkit start - cancellable hit event
++        if (hitCancelled) {
++            return;
++        }
++        // CraftBukkit end
++        IBlockData iblockdata = this.level().getBlockState(result.getBlockPos());
++
++        iblockdata.onProjectileHit(this.level(), iblockdata, result, this);
+     }
+ 
+     @Override

@@ -1,0 +1,698 @@
+--- a/net/minecraft/world/entity/projectile/AbstractArrow.java
++++ b/net/minecraft/world/entity/projectile/AbstractArrow.java
+@@ -27,11 +27,12 @@
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.LivingEntity;
+-import net.minecraft.world.entity.MoverType;
+-import net.minecraft.world.entity.Pose;
+ import net.minecraft.world.entity.ai.attributes.Attributes;
++import net.minecraft.world.entity.item.ItemEntity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.enchantment.EnchantmentHelper;
+@@ -39,13 +40,16 @@
+ import net.minecraft.world.level.ClipContext;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.event.entity.EntityCombustByEntityEvent;
++import org.bukkit.event.player.PlayerPickupArrowEvent;
++// CraftBukkit end
+ 
+ public abstract class AbstractArrow extends Projectile {
+ 
+@@ -56,23 +60,23 @@
+     private static final int FLAG_NOPHYSICS = 2;
+     private static final int FLAG_CROSSBOW = 4;
+     @Nullable
+-    private BlockState lastState;
+-    protected boolean inGround;
++    private IBlockData lastState;
++    public boolean inGround;
+     protected int inGroundTime;
+     public AbstractArrow.Pickup pickup;
+     public int shakeTime;
+-    private int life;
++    public int life;
+     private double baseDamage;
+-    private int knockback;
++    public int knockback;
+     private SoundEvent soundEvent;
+     @Nullable
+     private IntOpenHashSet piercingIgnoreEntityIds;
+     @Nullable
+     private List<Entity> piercedAndKilledEntities;
+-    private ItemStack pickupItemStack;
++    public ItemStack pickupItemStack;
+ 
+-    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytype, Level level, ItemStack itemstack) {
+-        super(entitytype, level);
++    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytypes, Level world, ItemStack itemstack) {
++        super(entitytypes, world);
+         this.pickup = AbstractArrow.Pickup.DISALLOWED;
+         this.baseDamage = 2.0D;
+         this.soundEvent = this.getDefaultHitGroundSoundEvent();
+@@ -83,27 +87,26 @@
+ 
+     }
+ 
+-    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytype, double d0, double d1, double d2, Level level, ItemStack itemstack) {
+-        this(entitytype, level, itemstack);
++    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytypes, double d0, double d1, double d2, Level world, ItemStack itemstack) {
++        this(entitytypes, world, itemstack);
+         this.setPos(d0, d1, d2);
+     }
+ 
+-    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytype, LivingEntity livingentity, Level level, ItemStack itemstack) {
+-        this(entitytype, livingentity.getX(), livingentity.getEyeY() - 0.10000000149011612D, livingentity.getZ(), level, itemstack);
+-        this.setOwner(livingentity);
+-        if (livingentity instanceof Player) {
++    protected AbstractArrow(EntityType<? extends AbstractArrow> entitytypes, LivingEntity entityliving, Level world, ItemStack itemstack) {
++        this(entitytypes, entityliving.getX(), entityliving.getEyeY() - 0.10000000149011612D, entityliving.getZ(), world, itemstack);
++        this.setOwner(entityliving);
++        if (entityliving instanceof Player) {
+             this.pickup = AbstractArrow.Pickup.ALLOWED;
+         }
+ 
+     }
+ 
+-    public void setSoundEvent(SoundEvent soundevent) {
+-        this.soundEvent = soundevent;
++    public void setSoundEvent(SoundEvent soundEvent) {
++        this.soundEvent = soundEvent;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean shouldRenderAtSqrDistance(double d0) {
++    public boolean shouldRenderAtSqrDistance(double distance) {
+         double d1 = this.getBoundingBox().getSize() * 10.0D;
+ 
+         if (Double.isNaN(d1)) {
+@@ -111,68 +114,63 @@
+         }
+ 
+         d1 *= 64.0D * getViewScale();
+-        return d0 < d1 * d1;
++        return distance < d1 * d1;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.entityData.define(AbstractArrow.ID_FLAGS, (byte) 0);
+         this.entityData.define(AbstractArrow.PIERCE_LEVEL, (byte) 0);
+     }
+ 
+     @Override
+-    @Override
+-    public void shoot(double d0, double d1, double d2, float f, float f1) {
+-        super.shoot(d0, d1, d2, f, f1);
++    public void shoot(double x, double d1, double y, float f, float z) {
++        super.shoot(x, d1, y, f, z);
+         this.life = 0;
+     }
+ 
+     @Override
+-    @Override
+     public void lerpTo(double d0, double d1, double d2, float f, float f1, int i) {
+         this.setPos(d0, d1, d2);
+         this.setRot(f, f1);
+     }
+ 
+     @Override
+-    @Override
+-    public void lerpMotion(double d0, double d1, double d2) {
+-        super.lerpMotion(d0, d1, d2);
++    public void lerpMotion(double x, double d1, double y) {
++        super.lerpMotion(x, d1, y);
+         this.life = 0;
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         super.tick();
+         boolean flag = this.isNoPhysics();
+-        Vec3 vec3 = this.getDeltaMovement();
++        Vec3 vec3d = this.getDeltaMovement();
+ 
+         if (this.xRotO == 0.0F && this.yRotO == 0.0F) {
+-            double d0 = vec3.horizontalDistance();
++            double d0 = vec3d.horizontalDistance();
+ 
+-            this.setYRot((float) (Mth.atan2(vec3.x, vec3.z) * 57.2957763671875D));
+-            this.setXRot((float) (Mth.atan2(vec3.y, d0) * 57.2957763671875D));
++            this.setYRot((float) (Mth.atan2(vec3d.x, vec3d.z) * 57.2957763671875D));
++            this.setXRot((float) (Mth.atan2(vec3d.y, d0) * 57.2957763671875D));
+             this.yRotO = this.getYRot();
+             this.xRotO = this.getXRot();
+         }
+ 
+-        BlockPos blockpos = this.blockPosition();
+-        BlockState blockstate = this.level().getBlockState(blockpos);
+-        Vec3 vec31;
++        BlockPos blockposition = this.blockPosition();
++        IBlockData iblockdata = this.level().getBlockState(blockposition);
++        Vec3 vec3d1;
+ 
+-        if (!blockstate.isAir() && !flag) {
+-            VoxelShape voxelshape = blockstate.getCollisionShape(this.level(), blockpos);
++        if (!iblockdata.isAir() && !flag) {
++            VoxelShape voxelshape = iblockdata.getCollisionShape(this.level(), blockposition);
+ 
+             if (!voxelshape.isEmpty()) {
+-                vec31 = this.position();
++                vec3d1 = this.position();
+                 Iterator iterator = voxelshape.toAabbs().iterator();
+ 
+                 while (iterator.hasNext()) {
+-                    AABB aabb = (AABB) iterator.next();
++                    AABB axisalignedbb = (AABB) iterator.next();
+ 
+-                    if (aabb.move(blockpos).contains(vec31)) {
++                    if (axisalignedbb.move(blockposition).contains(vec3d1)) {
+                         this.inGround = true;
+                         break;
+                     }
+@@ -184,12 +182,12 @@
+             --this.shakeTime;
+         }
+ 
+-        if (this.isInWaterOrRain() || blockstate.is(Blocks.POWDER_SNOW)) {
++        if (this.isInWaterOrRain() || iblockdata.is(Blocks.POWDER_SNOW)) {
+             this.clearFire();
+         }
+ 
+         if (this.inGround && !flag) {
+-            if (this.lastState != blockstate && this.shouldFall()) {
++            if (this.lastState != iblockdata && this.shouldFall()) {
+                 this.startFalling();
+             } else if (!this.level().isClientSide) {
+                 this.tickDespawn();
+@@ -198,48 +196,48 @@
+             ++this.inGroundTime;
+         } else {
+             this.inGroundTime = 0;
+-            Vec3 vec32 = this.position();
++            Vec3 vec3d2 = this.position();
+ 
+-            vec31 = vec32.add(vec3);
+-            Object object = this.level().clip(new ClipContext(vec32, vec31, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
++            vec3d1 = vec3d2.add(vec3d);
++            Object object = this.level().clip(new ClipContext(vec3d2, vec3d1, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
+ 
+-            if (((HitResult) object).getType() != HitResult.Type.MISS) {
+-                vec31 = ((HitResult) object).getLocation();
++            if (((HitResult) object).getType() != HitResult.EnumMovingObjectType.MISS) {
++                vec3d1 = ((HitResult) object).getLocation();
+             }
+ 
+             while (!this.isRemoved()) {
+-                EntityHitResult entityhitresult = this.findHitEntity(vec32, vec31);
++                EntityHitResult movingobjectpositionentity = this.findHitEntity(vec3d2, vec3d1);
+ 
+-                if (entityhitresult != null) {
+-                    object = entityhitresult;
++                if (movingobjectpositionentity != null) {
++                    object = movingobjectpositionentity;
+                 }
+ 
+-                if (object != null && ((HitResult) object).getType() == HitResult.Type.ENTITY) {
++                if (object != null && ((HitResult) object).getType() == HitResult.EnumMovingObjectType.ENTITY) {
+                     Entity entity = ((EntityHitResult) object).getEntity();
+                     Entity entity1 = this.getOwner();
+ 
+                     if (entity instanceof Player && entity1 instanceof Player && !((Player) entity1).canHarmPlayer((Player) entity)) {
+                         object = null;
+-                        entityhitresult = null;
++                        movingobjectpositionentity = null;
+                     }
+                 }
+ 
+                 if (object != null && !flag) {
+-                    this.onHit((HitResult) object);
++                    this.preOnHit((HitResult) object); // CraftBukkit - projectile hit event
+                     this.hasImpulse = true;
+                 }
+ 
+-                if (entityhitresult == null || this.getPierceLevel() <= 0) {
++                if (movingobjectpositionentity == null || this.getPierceLevel() <= 0) {
+                     break;
+                 }
+ 
+                 object = null;
+             }
+ 
+-            vec3 = this.getDeltaMovement();
+-            double d1 = vec3.x;
+-            double d2 = vec3.y;
+-            double d3 = vec3.z;
++            vec3d = this.getDeltaMovement();
++            double d1 = vec3d.x;
++            double d2 = vec3d.y;
++            double d3 = vec3d.z;
+ 
+             if (this.isCritArrow()) {
+                 for (int i = 0; i < 4; ++i) {
+@@ -250,7 +248,7 @@
+             double d4 = this.getX() + d1;
+             double d5 = this.getY() + d2;
+             double d6 = this.getZ() + d3;
+-            double d7 = vec3.horizontalDistance();
++            double d7 = vec3d.horizontalDistance();
+ 
+             if (flag) {
+                 this.setYRot((float) (Mth.atan2(-d1, -d3) * 57.2957763671875D));
+@@ -274,11 +272,11 @@
+                 f = this.getWaterInertia();
+             }
+ 
+-            this.setDeltaMovement(vec3.scale((double) f));
++            this.setDeltaMovement(vec3d.scale((double) f));
+             if (!this.isNoGravity() && !flag) {
+-                Vec3 vec33 = this.getDeltaMovement();
++                Vec3 vec3d3 = this.getDeltaMovement();
+ 
+-                this.setDeltaMovement(vec33.x, vec33.y - 0.05000000074505806D, vec33.z);
++                this.setDeltaMovement(vec3d3.x, vec3d3.y - 0.05000000074505806D, vec3d3.z);
+             }
+ 
+             this.setPos(d4, d5, d6);
+@@ -292,17 +290,16 @@
+ 
+     private void startFalling() {
+         this.inGround = false;
+-        Vec3 vec3 = this.getDeltaMovement();
++        Vec3 vec3d = this.getDeltaMovement();
+ 
+-        this.setDeltaMovement(vec3.multiply((double) (this.random.nextFloat() * 0.2F), (double) (this.random.nextFloat() * 0.2F), (double) (this.random.nextFloat() * 0.2F)));
++        this.setDeltaMovement(vec3d.multiply((double) (this.random.nextFloat() * 0.2F), (double) (this.random.nextFloat() * 0.2F), (double) (this.random.nextFloat() * 0.2F)));
+         this.life = 0;
+     }
+ 
+     @Override
+-    @Override
+-    public void move(MoverType movertype, Vec3 vec3) {
+-        super.move(movertype, vec3);
+-        if (movertype != MoverType.SELF && this.shouldFall()) {
++    public void move(EnumMoveType type, Vec3 pos) {
++        super.move(type, pos);
++        if (type != EnumMoveType.SELF && this.shouldFall()) {
+             this.startFalling();
+         }
+ 
+@@ -328,10 +325,9 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitEntity(EntityHitResult entityhitresult) {
+-        super.onHitEntity(entityhitresult);
+-        Entity entity = entityhitresult.getEntity();
++    protected void onHitEntity(EntityHitResult result) {
++        super.onHitEntity(result);
++        Entity entity = result.getEntity();
+         float f = (float) this.getDeltaMovement().length();
+         int i = Mth.ceil(Mth.clamp((double) f * this.baseDamage, 0.0D, 2.147483647E9D));
+ 
+@@ -375,7 +371,13 @@
+         boolean flag1 = entity.getType().is(EntityTypeTags.DEFLECTS_ARROWS);
+ 
+         if (this.isOnFire() && !flag && !flag1) {
+-            entity.setSecondsOnFire(5);
++            // CraftBukkit start
++            EntityCombustByEntityEvent combustEvent = new EntityCombustByEntityEvent(this.getBukkitEntity(), entity.getBukkitEntity(), 5);
++            org.bukkit.Bukkit.getPluginManager().callEvent(combustEvent);
++            if (!combustEvent.isCancelled()) {
++                entity.setSecondsOnFire(combustEvent.getDuration(), false);
++            }
++            // CraftBukkit end
+         }
+ 
+         if (entity.hurt(damagesource, (float) i)) {
+@@ -384,42 +386,42 @@
+             }
+ 
+             if (entity instanceof LivingEntity) {
+-                LivingEntity livingentity = (LivingEntity) entity;
++                LivingEntity entityliving = (LivingEntity) entity;
+ 
+                 if (!this.level().isClientSide && this.getPierceLevel() <= 0) {
+-                    livingentity.setArrowCount(livingentity.getArrowCount() + 1);
++                    entityliving.setArrowCount(entityliving.getArrowCount() + 1);
+                 }
+ 
+                 if (this.knockback > 0) {
+-                    double d0 = Math.max(0.0D, 1.0D - livingentity.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE));
+-                    Vec3 vec3 = this.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D).normalize().scale((double) this.knockback * 0.6D * d0);
++                    double d0 = Math.max(0.0D, 1.0D - entityliving.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE));
++                    Vec3 vec3d = this.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D).normalize().scale((double) this.knockback * 0.6D * d0);
+ 
+-                    if (vec3.lengthSqr() > 0.0D) {
+-                        livingentity.push(vec3.x, 0.1D, vec3.z);
++                    if (vec3d.lengthSqr() > 0.0D) {
++                        entityliving.push(vec3d.x, 0.1D, vec3d.z);
+                     }
+                 }
+ 
+                 if (!this.level().isClientSide && entity1 instanceof LivingEntity) {
+-                    EnchantmentHelper.doPostHurtEffects(livingentity, entity1);
+-                    EnchantmentHelper.doPostDamageEffects((LivingEntity) entity1, livingentity);
++                    EnchantmentHelper.doPostHurtEffects(entityliving, entity1);
++                    EnchantmentHelper.doPostDamageEffects((LivingEntity) entity1, entityliving);
+                 }
+ 
+-                this.doPostHurtEffects(livingentity);
+-                if (entity1 != null && livingentity != entity1 && livingentity instanceof Player && entity1 instanceof ServerPlayer && !this.isSilent()) {
++                this.doPostHurtEffects(entityliving);
++                if (entity1 != null && entityliving != entity1 && entityliving instanceof Player && entity1 instanceof ServerPlayer && !this.isSilent()) {
+                     ((ServerPlayer) entity1).connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.ARROW_HIT_PLAYER, 0.0F));
+                 }
+ 
+                 if (!entity.isAlive() && this.piercedAndKilledEntities != null) {
+-                    this.piercedAndKilledEntities.add(livingentity);
++                    this.piercedAndKilledEntities.add(entityliving);
+                 }
+ 
+                 if (!this.level().isClientSide && entity1 instanceof ServerPlayer) {
+-                    ServerPlayer serverplayer = (ServerPlayer) entity1;
++                    ServerPlayer entityplayer = (ServerPlayer) entity1;
+ 
+                     if (this.piercedAndKilledEntities != null && this.shotFromCrossbow()) {
+-                        CriteriaTriggers.KILLED_BY_CROSSBOW.trigger(serverplayer, (Collection) this.piercedAndKilledEntities);
++                        CriteriaTriggers.KILLED_BY_CROSSBOW.trigger(entityplayer, (Collection) this.piercedAndKilledEntities);
+                     } else if (!entity.isAlive() && this.shotFromCrossbow()) {
+-                        CriteriaTriggers.KILLED_BY_CROSSBOW.trigger(serverplayer, (Collection) Arrays.asList(entity));
++                        CriteriaTriggers.KILLED_BY_CROSSBOW.trigger(entityplayer, (Collection) Arrays.asList(entity));
+                     }
+                 }
+             }
+@@ -455,16 +457,15 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitBlock(BlockHitResult blockhitresult) {
+-        this.lastState = this.level().getBlockState(blockhitresult.getBlockPos());
+-        super.onHitBlock(blockhitresult);
+-        Vec3 vec3 = blockhitresult.getLocation().subtract(this.getX(), this.getY(), this.getZ());
++    protected void onHitBlock(BlockHitResult result) {
++        this.lastState = this.level().getBlockState(result.getBlockPos());
++        super.onHitBlock(result);
++        Vec3 vec3d = result.getLocation().subtract(this.getX(), this.getY(), this.getZ());
+ 
+-        this.setDeltaMovement(vec3);
+-        Vec3 vec31 = vec3.normalize().scale(0.05000000074505806D);
++        this.setDeltaMovement(vec3d);
++        Vec3 vec3d1 = vec3d.normalize().scale(0.05000000074505806D);
+ 
+-        this.setPosRaw(this.getX() - vec31.x, this.getY() - vec31.y, this.getZ() - vec31.z);
++        this.setPosRaw(this.getX() - vec3d1.x, this.getY() - vec3d1.y, this.getZ() - vec3d1.z);
+         this.playSound(this.getHitGroundSoundEvent(), 1.0F, 1.2F / (this.random.nextFloat() * 0.2F + 0.9F));
+         this.inGround = true;
+         this.shakeTime = 7;
+@@ -483,70 +484,66 @@
+         return this.soundEvent;
+     }
+ 
+-    protected void doPostHurtEffects(LivingEntity livingentity) {}
++    protected void doPostHurtEffects(LivingEntity target) {}
+ 
+     @Nullable
+-    protected EntityHitResult findHitEntity(Vec3 vec3, Vec3 vec31) {
+-        return ProjectileUtil.getEntityHitResult(this.level(), this, vec3, vec31, this.getBoundingBox().expandTowards(this.getDeltaMovement()).inflate(1.0D), this::canHitEntity);
++    protected EntityHitResult findHitEntity(Vec3 startVec, Vec3 endVec) {
++        return ProjectileUtil.getEntityHitResult(this.level(), this, startVec, endVec, this.getBoundingBox().expandTowards(this.getDeltaMovement()).inflate(1.0D), this::canHitEntity);
+     }
+ 
+     @Override
+-    @Override
+-    protected boolean canHitEntity(Entity entity) {
+-        return super.canHitEntity(entity) && (this.piercingIgnoreEntityIds == null || !this.piercingIgnoreEntityIds.contains(entity.getId()));
++    protected boolean canHitEntity(Entity target) {
++        return super.canHitEntity(target) && (this.piercingIgnoreEntityIds == null || !this.piercingIgnoreEntityIds.contains(target.getId()));
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putShort("life", (short) this.life);
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putShort("life", (short) this.life);
+         if (this.lastState != null) {
+-            compoundtag.put("inBlockState", NbtUtils.writeBlockState(this.lastState));
++            compound.put("inBlockState", NbtUtils.writeBlockState(this.lastState));
+         }
+ 
+-        compoundtag.putByte("shake", (byte) this.shakeTime);
+-        compoundtag.putBoolean("inGround", this.inGround);
+-        compoundtag.putByte("pickup", (byte) this.pickup.ordinal());
+-        compoundtag.putDouble("damage", this.baseDamage);
+-        compoundtag.putBoolean("crit", this.isCritArrow());
+-        compoundtag.putByte("PierceLevel", this.getPierceLevel());
+-        compoundtag.putString("SoundEvent", BuiltInRegistries.SOUND_EVENT.getKey(this.soundEvent).toString());
+-        compoundtag.putBoolean("ShotFromCrossbow", this.shotFromCrossbow());
+-        compoundtag.put("item", this.pickupItemStack.save(new CompoundTag()));
++        compound.putByte("shake", (byte) this.shakeTime);
++        compound.putBoolean("inGround", this.inGround);
++        compound.putByte("pickup", (byte) this.pickup.ordinal());
++        compound.putDouble("damage", this.baseDamage);
++        compound.putBoolean("crit", this.isCritArrow());
++        compound.putByte("PierceLevel", this.getPierceLevel());
++        compound.putString("SoundEvent", BuiltInRegistries.SOUND_EVENT.getKey(this.soundEvent).toString());
++        compound.putBoolean("ShotFromCrossbow", this.shotFromCrossbow());
++        compound.put("item", this.pickupItemStack.save(new CompoundTag()));
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.life = compoundtag.getShort("life");
+-        if (compoundtag.contains("inBlockState", 10)) {
+-            this.lastState = NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compoundtag.getCompound("inBlockState"));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.life = compound.getShort("life");
++        if (compound.contains("inBlockState", 10)) {
++            this.lastState = NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compound.getCompound("inBlockState"));
+         }
+ 
+-        this.shakeTime = compoundtag.getByte("shake") & 255;
+-        this.inGround = compoundtag.getBoolean("inGround");
+-        if (compoundtag.contains("damage", 99)) {
+-            this.baseDamage = compoundtag.getDouble("damage");
++        this.shakeTime = compound.getByte("shake") & 255;
++        this.inGround = compound.getBoolean("inGround");
++        if (compound.contains("damage", 99)) {
++            this.baseDamage = compound.getDouble("damage");
+         }
+ 
+-        this.pickup = AbstractArrow.Pickup.byOrdinal(compoundtag.getByte("pickup"));
+-        this.setCritArrow(compoundtag.getBoolean("crit"));
+-        this.setPierceLevel(compoundtag.getByte("PierceLevel"));
+-        if (compoundtag.contains("SoundEvent", 8)) {
+-            this.soundEvent = (SoundEvent) BuiltInRegistries.SOUND_EVENT.getOptional(new ResourceLocation(compoundtag.getString("SoundEvent"))).orElse(this.getDefaultHitGroundSoundEvent());
++        this.pickup = AbstractArrow.Pickup.byOrdinal(compound.getByte("pickup"));
++        this.setCritArrow(compound.getBoolean("crit"));
++        this.setPierceLevel(compound.getByte("PierceLevel"));
++        if (compound.contains("SoundEvent", 8)) {
++            this.soundEvent = (SoundEvent) BuiltInRegistries.SOUND_EVENT.getOptional(new ResourceLocation(compound.getString("SoundEvent"))).orElse(this.getDefaultHitGroundSoundEvent());
+         }
+ 
+-        this.setShotFromCrossbow(compoundtag.getBoolean("ShotFromCrossbow"));
+-        if (compoundtag.contains("item", 10)) {
+-            this.pickupItemStack = ItemStack.of(compoundtag.getCompound("item"));
++        this.setShotFromCrossbow(compound.getBoolean("ShotFromCrossbow"));
++        if (compound.contains("item", 10)) {
++            this.pickupItemStack = ItemStack.of(compound.getCompound("item"));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public void setOwner(@Nullable Entity entity) {
+         super.setOwner(entity);
+         if (entity instanceof Player) {
+@@ -556,11 +553,25 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void playerTouch(Player player) {
++    public void playerTouch(Player entity) {
+         if (!this.level().isClientSide && (this.inGround || this.isNoPhysics()) && this.shakeTime <= 0) {
+-            if (this.tryPickup(player)) {
+-                player.take(this, 1);
++            // CraftBukkit start
++            ItemStack itemstack = this.getPickupItem();
++            if (this.pickup == Pickup.ALLOWED && !itemstack.isEmpty() && entity.getInventory().canHold(itemstack) > 0) {
++                ItemEntity item = new ItemEntity(this.level(), this.getX(), this.getY(), this.getZ(), itemstack);
++                PlayerPickupArrowEvent event = new PlayerPickupArrowEvent((org.bukkit.entity.Player) entity.getBukkitEntity(), new org.bukkit.craftbukkit.entity.CraftItem(this.level().getCraftServer(), item), (org.bukkit.entity.AbstractArrow) this.getBukkitEntity());
++                // event.setCancelled(!entityhuman.canPickUpLoot); TODO
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (event.isCancelled()) {
++                    return;
++                }
++                itemstack = item.getItem();
++            }
++
++            if ((this.pickup == AbstractArrow.Pickup.ALLOWED && entity.getInventory().add(itemstack)) || (this.pickup == AbstractArrow.Pickup.CREATIVE_ONLY && entity.getAbilities().instabuild)) {
++                // CraftBukkit end
++                entity.take(this, 1);
+                 this.discard();
+             }
+ 
+@@ -583,7 +594,6 @@
+     }
+ 
+     @Override
+-    @Override
+     protected Entity.MovementEmission getMovementEmission() {
+         return Entity.MovementEmission.NONE;
+     }
+@@ -592,16 +602,16 @@
+         return this.pickupItemStack;
+     }
+ 
+-    public void setBaseDamage(double d0) {
+-        this.baseDamage = d0;
++    public void setBaseDamage(double baseDamage) {
++        this.baseDamage = baseDamage;
+     }
+ 
+     public double getBaseDamage() {
+         return this.baseDamage;
+     }
+ 
+-    public void setKnockback(int i) {
+-        this.knockback = i;
++    public void setKnockback(int knockback) {
++        this.knockback = knockback;
+     }
+ 
+     public int getKnockback() {
+@@ -609,32 +619,30 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean isAttackable() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    protected float getEyeHeight(Pose pose, EntityDimensions entitydimensions) {
++    protected float getEyeHeight(EntityPose pose, EntityDimensions size) {
+         return 0.13F;
+     }
+ 
+-    public void setCritArrow(boolean flag) {
+-        this.setFlag(1, flag);
++    public void setCritArrow(boolean critArrow) {
++        this.setFlag(1, critArrow);
+     }
+ 
+-    public void setPierceLevel(byte b0) {
+-        this.entityData.set(AbstractArrow.PIERCE_LEVEL, b0);
++    public void setPierceLevel(byte pierceLevel) {
++        this.entityData.set(AbstractArrow.PIERCE_LEVEL, pierceLevel);
+     }
+ 
+-    private void setFlag(int i, boolean flag) {
++    private void setFlag(int id, boolean value) {
+         byte b0 = (Byte) this.entityData.get(AbstractArrow.ID_FLAGS);
+ 
+-        if (flag) {
+-            this.entityData.set(AbstractArrow.ID_FLAGS, (byte) (b0 | i));
++        if (value) {
++            this.entityData.set(AbstractArrow.ID_FLAGS, (byte) (b0 | id));
+         } else {
+-            this.entityData.set(AbstractArrow.ID_FLAGS, (byte) (b0 & ~i));
++            this.entityData.set(AbstractArrow.ID_FLAGS, (byte) (b0 & ~id));
+         }
+ 
+     }
+@@ -655,11 +663,11 @@
+         return (Byte) this.entityData.get(AbstractArrow.PIERCE_LEVEL);
+     }
+ 
+-    public void setEnchantmentEffectsFromEntity(LivingEntity livingentity, float f) {
+-        int i = EnchantmentHelper.getEnchantmentLevel(Enchantments.POWER_ARROWS, livingentity);
+-        int j = EnchantmentHelper.getEnchantmentLevel(Enchantments.PUNCH_ARROWS, livingentity);
++    public void setEnchantmentEffectsFromEntity(LivingEntity shooter, float velocity) {
++        int i = EnchantmentHelper.getEnchantmentLevel(Enchantments.POWER_ARROWS, shooter);
++        int j = EnchantmentHelper.getEnchantmentLevel(Enchantments.PUNCH_ARROWS, shooter);
+ 
+-        this.setBaseDamage((double) (f * 2.0F) + this.random.triangle((double) this.level().getDifficulty().getId() * 0.11D, 0.57425D));
++        this.setBaseDamage((double) (velocity * 2.0F) + this.random.triangle((double) this.level().getDifficulty().getId() * 0.11D, 0.57425D));
+         if (i > 0) {
+             this.setBaseDamage(this.getBaseDamage() + (double) i * 0.5D + 0.5D);
+         }
+@@ -668,7 +676,7 @@
+             this.setKnockback(j);
+         }
+ 
+-        if (EnchantmentHelper.getEnchantmentLevel(Enchantments.FLAMING_ARROWS, livingentity) > 0) {
++        if (EnchantmentHelper.getEnchantmentLevel(Enchantments.FLAMING_ARROWS, shooter) > 0) {
+             this.setSecondsOnFire(100);
+         }
+ 
+@@ -678,17 +686,17 @@
+         return 0.6F;
+     }
+ 
+-    public void setNoPhysics(boolean flag) {
+-        this.noPhysics = flag;
+-        this.setFlag(2, flag);
++    public void setNoPhysics(boolean noPhysics) {
++        this.noPhysics = noPhysics;
++        this.setFlag(2, noPhysics);
+     }
+ 
+     public boolean isNoPhysics() {
+         return !this.level().isClientSide ? this.noPhysics : ((Byte) this.entityData.get(AbstractArrow.ID_FLAGS) & 2) != 0;
+     }
+ 
+-    public void setShotFromCrossbow(boolean flag) {
+-        this.setFlag(4, flag);
++    public void setShotFromCrossbow(boolean shotFromCrossbow) {
++        this.setFlag(4, shotFromCrossbow);
+     }
+ 
+     public static enum Pickup {
+@@ -697,12 +705,12 @@
+ 
+         private Pickup() {}
+ 
+-        public static AbstractArrow.Pickup byOrdinal(int i) {
+-            if (i < 0 || i > values().length) {
+-                i = 0;
++        public static AbstractArrow.Pickup byOrdinal(int ordinal) {
++            if (ordinal < 0 || ordinal > values().length) {
++                ordinal = 0;
+             }
+ 
+-            return values()[i];
++            return values()[ordinal];
+         }
+     }
+ }

@@ -1,0 +1,52 @@
+--- a/net/minecraft/world/entity/animal/Bucketable.java
++++ b/net/minecraft/world/entity/animal/Bucketable.java
+@@ -14,6 +15,10 @@
+ import net.minecraft.world.item.ItemUtils;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.level.Level;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.player.PlayerBucketEntityEvent;
++// CraftBukkit end
+ 
+ public interface Bucketable {
+     boolean fromBucket();
+@@ -85,18 +95,27 @@
+         }
+     }
+ 
+-    static <T extends LivingEntity & Bucketable> Optional<InteractionResult> bucketMobPickup(Player player, InteractionHand hand, T entity) {
+-        ItemStack itemInHand = player.getItemInHand(hand);
+-        if (itemInHand.getItem() == Items.WATER_BUCKET && entity.isAlive()) {
+-            entity.playSound(entity.getPickupSound(), 1.0F, 1.0F);
+-            ItemStack bucketItemStack = entity.getBucketItemStack();
+-            entity.saveToBucketTag(bucketItemStack);
+-            ItemStack itemStack = ItemUtils.createFilledResult(itemInHand, player, bucketItemStack, false);
+-            player.setItemInHand(hand, itemStack);
+-            Level level = entity.level();
+-            if (!level.isClientSide) {
+-                CriteriaTriggers.FILLED_BUCKET.trigger((ServerPlayer)player, bucketItemStack);
++    static <T extends LivingEntity & Bucketable> Optional<InteractionResult> bucketMobPickup(Player player, EnumHand hand, T entity) {
++        ItemStack itemstack = player.getItemInHand(hand);
++
++        if (itemstack.getItem() == Items.WATER_BUCKET && entity.isAlive()) {
++            // CraftBukkit start
++            // t0.playSound(((Bucketable) t0).getPickupSound(), 1.0F, 1.0F); // CraftBukkit - moved down
++            ItemStack itemstack1 = ((Bucketable) entity).getBucketItemStack();
++
++            ((Bucketable) entity).saveToBucketTag(itemstack1);
++
++            PlayerBucketEntityEvent playerBucketFishEvent = CraftEventFactory.callPlayerFishBucketEvent(entity, player, itemstack, itemstack1, hand);
++            itemstack1 = CraftItemStack.asNMSCopy(playerBucketFishEvent.getEntityBucket());
++            if (playerBucketFishEvent.isCancelled()) {
++                ((ServerPlayer) player).containerMenu.sendAllDataToRemote(); // We need to update inventory to resync client's bucket
++                ((ServerPlayer) player).connection.send(new ClientboundAddEntityPacket(entity)); // We need to play out these packets as the client assumes the fish is gone
++                entity.getEntityData().refresh((ServerPlayer) player); // Need to send data such as the display name to client
++                return Optional.of(InteractionResult.FAIL);
+             }
++            entity.playSound(((Bucketable) entity).getPickupSound(), 1.0F, 1.0F);
++            // CraftBukkit end
++            ItemStack itemstack2 = ItemUtils.createFilledResult(itemstack, player, itemstack1, false);
+ 
+             entity.discard();
+             return Optional.of(InteractionResult.sidedSuccess(level.isClientSide));

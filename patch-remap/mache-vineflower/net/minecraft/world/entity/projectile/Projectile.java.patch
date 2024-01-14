@@ -1,0 +1,300 @@
+--- a/net/minecraft/world/entity/projectile/Projectile.java
++++ b/net/minecraft/world/entity/projectile/Projectile.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.world.entity.projectile;
+ 
+ import com.google.common.base.MoreObjects;
++import java.util.Iterator;
+ import java.util.UUID;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+@@ -17,14 +18,18 @@
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.projectiles.ProjectileSource;
++// CraftBukkit end
+ 
+ public abstract class Projectile extends Entity implements TraceableEntity {
++
+     @Nullable
+     private UUID ownerUUID;
+     @Nullable
+@@ -32,6 +37,10 @@
+     private boolean leftOwner;
+     private boolean hasBeenShot;
+ 
++    // CraftBukkit start
++    private boolean hitCancelled = false;
++    // CraftBukkit end
++
+     Projectile(EntityType<? extends Projectile> entityType, Level level) {
+         super(entityType, level);
+     }
+@@ -41,6 +50,8 @@
+             this.ownerUUID = owner.getUUID();
+             this.cachedOwner = owner;
+         }
++        this.projectileSource = (owner != null && owner.getBukkitEntity() instanceof ProjectileSource) ? (ProjectileSource) owner.getBukkitEntity() : null; // CraftBukkit
++
+     }
+ 
+     @Nullable
+@@ -48,16 +59,24 @@
+     public Entity getOwner() {
+         if (this.cachedOwner != null && !this.cachedOwner.isRemoved()) {
+             return this.cachedOwner;
+-        } else if (this.ownerUUID != null && this.level() instanceof ServerLevel serverLevel) {
+-            this.cachedOwner = serverLevel.getEntity(this.ownerUUID);
+-            return this.cachedOwner;
+         } else {
++            if (this.ownerUUID != null) {
++                Level world = this.level();
++
++                if (world instanceof ServerLevel) {
++                    ServerLevel worldserver = (ServerLevel) world;
++
++                    this.cachedOwner = worldserver.getEntity(this.ownerUUID);
++                    return this.cachedOwner;
++                }
++            }
++
+             return null;
+         }
+     }
+ 
+     public Entity getEffectSource() {
+-        return MoreObjects.firstNonNull(this.getOwner(), this);
++        return (Entity) MoreObjects.firstNonNull(this.getOwner(), this);
+     }
+ 
+     @Override
+@@ -91,9 +110,12 @@
+     @Override
+     public void restoreFrom(Entity entity) {
+         super.restoreFrom(entity);
+-        if (entity instanceof Projectile projectile) {
+-            this.cachedOwner = projectile.cachedOwner;
++        if (entity instanceof Projectile) {
++            Projectile iprojectile = (Projectile) entity;
++
++            this.cachedOwner = iprojectile.cachedOwner;
+         }
++
+     }
+ 
+     @Override
+@@ -111,13 +133,17 @@
+     }
+ 
+     private boolean checkLeftOwner() {
+-        Entity owner = this.getOwner();
+-        if (owner != null) {
+-            for (Entity entity : this.level()
+-                .getEntities(
+-                    this, this.getBoundingBox().expandTowards(this.getDeltaMovement()).inflate(1.0), entity1 -> !entity1.isSpectator() && entity1.isPickable()
+-                )) {
+-                if (entity.getRootVehicle() == owner.getRootVehicle()) {
++        Entity entity = this.getOwner();
++
++        if (entity != null) {
++            Iterator iterator = this.level().getEntities((Entity) this, this.getBoundingBox().expandTowards(this.getDeltaMovement()).inflate(1.0D), (entity1) -> {
++                return !entity1.isSpectator() && entity1.isPickable();
++            }).iterator();
++
++            while (iterator.hasNext()) {
++                Entity entity1 = (Entity) iterator.next();
++
++                if (entity1.getRootVehicle() == entity.getRootVehicle()) {
+                     return false;
+                 }
+             }
+@@ -126,80 +152,100 @@
+         return true;
+     }
+ 
+-    public void shoot(double x, double y, double z, float velocity, float inaccuracy) {
+-        Vec3 vec3 = new Vec3(x, y, z)
+-            .normalize()
+-            .add(
+-                this.random.triangle(0.0, 0.0172275 * (double)inaccuracy),
+-                this.random.triangle(0.0, 0.0172275 * (double)inaccuracy),
+-                this.random.triangle(0.0, 0.0172275 * (double)inaccuracy)
+-            )
+-            .scale((double)velocity);
+-        this.setDeltaMovement(vec3);
+-        double d = vec3.horizontalDistance();
+-        this.setYRot((float)(Mth.atan2(vec3.x, vec3.z) * 180.0F / (float)Math.PI));
+-        this.setXRot((float)(Mth.atan2(vec3.y, d) * 180.0F / (float)Math.PI));
++    public void shoot(double x, double d1, double y, float f, float z) {
++        Vec3 vec3d = (new Vec3(x, d1, y)).normalize().add(this.random.triangle(0.0D, 0.0172275D * (double) z), this.random.triangle(0.0D, 0.0172275D * (double) z), this.random.triangle(0.0D, 0.0172275D * (double) z)).scale((double) f);
++
++        this.setDeltaMovement(vec3d);
++        double d3 = vec3d.horizontalDistance();
++
++        this.setYRot((float) (Mth.atan2(vec3d.x, vec3d.z) * 57.2957763671875D));
++        this.setXRot((float) (Mth.atan2(vec3d.y, d3) * 57.2957763671875D));
+         this.yRotO = this.getYRot();
+         this.xRotO = this.getXRot();
+     }
+ 
+     public void shootFromRotation(Entity shooter, float x, float y, float z, float velocity, float inaccuracy) {
+-        float f = -Mth.sin(y * (float) (Math.PI / 180.0)) * Mth.cos(x * (float) (Math.PI / 180.0));
+-        float f1 = -Mth.sin((x + z) * (float) (Math.PI / 180.0));
+-        float f2 = Mth.cos(y * (float) (Math.PI / 180.0)) * Mth.cos(x * (float) (Math.PI / 180.0));
+-        this.shoot((double)f, (double)f1, (double)f2, velocity, inaccuracy);
+-        Vec3 deltaMovement = shooter.getDeltaMovement();
+-        this.setDeltaMovement(this.getDeltaMovement().add(deltaMovement.x, shooter.onGround() ? 0.0 : deltaMovement.y, deltaMovement.z));
++        float f5 = -Mth.sin(y * 0.017453292F) * Mth.cos(x * 0.017453292F);
++        float f6 = -Mth.sin((x + z) * 0.017453292F);
++        float f7 = Mth.cos(y * 0.017453292F) * Mth.cos(x * 0.017453292F);
++
++        this.shoot((double) f5, (double) f6, (double) f7, velocity, inaccuracy);
++        Vec3 vec3d = shooter.getDeltaMovement();
++
++        this.setDeltaMovement(this.getDeltaMovement().add(vec3d.x, shooter.onGround() ? 0.0D : vec3d.y, vec3d.z));
+     }
+ 
+-    protected void onHit(HitResult result) {
+-        HitResult.Type type = result.getType();
+-        if (type == HitResult.Type.ENTITY) {
+-            this.onHitEntity((EntityHitResult)result);
+-            this.level().gameEvent(GameEvent.PROJECTILE_LAND, result.getLocation(), GameEvent.Context.of(this, null));
+-        } else if (type == HitResult.Type.BLOCK) {
+-            BlockHitResult blockHitResult = (BlockHitResult)result;
+-            this.onHitBlock(blockHitResult);
+-            BlockPos blockPos = blockHitResult.getBlockPos();
+-            this.level().gameEvent(GameEvent.PROJECTILE_LAND, blockPos, GameEvent.Context.of(this, this.level().getBlockState(blockPos)));
++    // CraftBukkit start - call projectile hit event
++    protected void preOnHit(HitResult movingobjectposition) {
++        org.bukkit.event.entity.ProjectileHitEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callProjectileHitEvent(this, movingobjectposition);
++        this.hitCancelled = event != null && event.isCancelled();
++        if (movingobjectposition.getType() == HitResult.EnumMovingObjectType.BLOCK || !this.hitCancelled) {
++            this.onHit(movingobjectposition);
+         }
+     }
++    // CraftBukkit end
+ 
+-    protected void onHitEntity(EntityHitResult result) {
++    protected void onHit(HitResult result) {
++        HitResult.EnumMovingObjectType movingobjectposition_enummovingobjecttype = result.getType();
++
++        if (movingobjectposition_enummovingobjecttype == HitResult.EnumMovingObjectType.ENTITY) {
++            this.onHitEntity((EntityHitResult) result);
++            this.level().gameEvent(GameEvent.PROJECTILE_LAND, result.getLocation(), GameEvent.Context.of(this, (IBlockData) null));
++        } else if (movingobjectposition_enummovingobjecttype == HitResult.EnumMovingObjectType.BLOCK) {
++            BlockHitResult movingobjectpositionblock = (BlockHitResult) result;
++
++            this.onHitBlock(movingobjectpositionblock);
++            BlockPos blockposition = movingobjectpositionblock.getBlockPos();
++
++            this.level().gameEvent(GameEvent.PROJECTILE_LAND, blockposition, GameEvent.Context.of(this, this.level().getBlockState(blockposition)));
++        }
++
+     }
+ 
++    protected void onHitEntity(EntityHitResult result) {}
++
+     protected void onHitBlock(BlockHitResult result) {
+-        BlockState blockState = this.level().getBlockState(result.getBlockPos());
+-        blockState.onProjectileHit(this.level(), blockState, result, this);
++        // CraftBukkit start - cancellable hit event
++        if (hitCancelled) {
++            return;
++        }
++        // CraftBukkit end
++        IBlockData iblockdata = this.level().getBlockState(result.getBlockPos());
++
++        iblockdata.onProjectileHit(this.level(), iblockdata, result, this);
+     }
+ 
+     @Override
+-    public void lerpMotion(double x, double y, double z) {
+-        this.setDeltaMovement(x, y, z);
++    public void lerpMotion(double x, double d1, double y) {
++        this.setDeltaMovement(x, d1, y);
+         if (this.xRotO == 0.0F && this.yRotO == 0.0F) {
+-            double squareRoot = Math.sqrt(x * x + z * z);
+-            this.setXRot((float)(Mth.atan2(y, squareRoot) * 180.0F / (float)Math.PI));
+-            this.setYRot((float)(Mth.atan2(x, z) * 180.0F / (float)Math.PI));
++            double d3 = Math.sqrt(x * x + y * y);
++
++            this.setXRot((float) (Mth.atan2(d1, d3) * 57.2957763671875D));
++            this.setYRot((float) (Mth.atan2(x, y) * 57.2957763671875D));
+             this.xRotO = this.getXRot();
+             this.yRotO = this.getYRot();
+             this.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+         }
++
+     }
+ 
+     protected boolean canHitEntity(Entity target) {
+         if (!target.canBeHitByProjectile()) {
+             return false;
+         } else {
+-            Entity owner = this.getOwner();
+-            return owner == null || this.leftOwner || !owner.isPassengerOfSameVehicle(target);
++            Entity entity1 = this.getOwner();
++
++            return entity1 == null || this.leftOwner || !entity1.isPassengerOfSameVehicle(target);
+         }
+     }
+ 
+     protected void updateRotation() {
+-        Vec3 deltaMovement = this.getDeltaMovement();
+-        double d = deltaMovement.horizontalDistance();
+-        this.setXRot(lerpRotation(this.xRotO, (float)(Mth.atan2(deltaMovement.y, d) * 180.0F / (float)Math.PI)));
+-        this.setYRot(lerpRotation(this.yRotO, (float)(Mth.atan2(deltaMovement.x, deltaMovement.z) * 180.0F / (float)Math.PI)));
++        Vec3 vec3d = this.getDeltaMovement();
++        double d0 = vec3d.horizontalDistance();
++
++        this.setXRot(lerpRotation(this.xRotO, (float) (Mth.atan2(vec3d.y, d0) * 57.2957763671875D)));
++        this.setYRot(lerpRotation(this.yRotO, (float) (Mth.atan2(vec3d.x, vec3d.z) * 57.2957763671875D)));
+     }
+ 
+     protected static float lerpRotation(float currentRotation, float targetRotation) {
+@@ -216,26 +262,30 @@
+ 
+     @Override
+     public Packet<ClientGamePacketListener> getAddEntityPacket() {
+-        Entity owner = this.getOwner();
+-        return new ClientboundAddEntityPacket(this, owner == null ? 0 : owner.getId());
++        Entity entity = this.getOwner();
++
++        return new ClientboundAddEntityPacket(this, entity == null ? 0 : entity.getId());
+     }
+ 
+     @Override
+     public void recreateFromPacket(ClientboundAddEntityPacket packet) {
+         super.recreateFromPacket(packet);
+         Entity entity = this.level().getEntity(packet.getData());
++
+         if (entity != null) {
+             this.setOwner(entity);
+         }
++
+     }
+ 
+     @Override
+     public boolean mayInteract(Level level, BlockPos pos) {
+-        Entity owner = this.getOwner();
+-        return owner instanceof Player ? owner.mayInteract(level, pos) : owner == null || level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING);
++        Entity entity = this.getOwner();
++
++        return entity instanceof Player ? entity.mayInteract(level, pos) : entity == null || level.getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING);
+     }
+ 
+-    public boolean mayBreak(Level level) {
+-        return this.getType().is(EntityTypeTags.IMPACT_PROJECTILES) && level.getGameRules().getBoolean(GameRules.RULE_PROJECTILESCANBREAKBLOCKS);
++    public boolean mayBreak(Level world) {
++        return this.getType().is(EntityTypeTags.IMPACT_PROJECTILES) && world.getGameRules().getBoolean(GameRules.RULE_PROJECTILESCANBREAKBLOCKS);
+     }
+ }

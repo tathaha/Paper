@@ -1,0 +1,256 @@
+--- a/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java
++++ b/net/minecraft/world/entity/ai/behavior/BehaviorUtils.java
+@@ -1,9 +1,11 @@
+ package net.minecraft.world.entity.ai.behavior;
+ 
+ import java.util.Comparator;
++import java.util.Objects;
+ import java.util.Optional;
+ import java.util.UUID;
+ import java.util.function.Predicate;
++import java.util.stream.Stream;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.SectionPos;
+@@ -19,31 +21,37 @@
+ import net.minecraft.world.entity.ai.memory.WalkTarget;
+ import net.minecraft.world.entity.ai.util.DefaultRandomPos;
+ import net.minecraft.world.entity.item.ItemEntity;
++import net.minecraft.world.item.Item;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.ProjectileWeaponItem;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.Vec3;
+ 
+ public class BehaviorUtils {
+-    private BehaviorUtils() {
+-    }
+ 
++    private BehaviorUtils() {}
++
+     public static void lockGazeAndWalkToEachOther(LivingEntity firstEntity, LivingEntity secondEntity, float speed) {
+         lookAtEachOther(firstEntity, secondEntity);
+         setWalkAndLookTargetMemoriesToEachOther(firstEntity, secondEntity, speed);
+     }
+ 
+     public static boolean entityIsVisible(Brain<?> brain, LivingEntity target) {
+-        Optional<NearestVisibleLivingEntities> memory = brain.getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
+-        return memory.isPresent() && memory.get().contains(target);
++        Optional<NearestVisibleLivingEntities> optional = brain.getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES);
++
++        return optional.isPresent() && ((NearestVisibleLivingEntities) optional.get()).contains(target);
+     }
+ 
+     public static boolean targetIsValid(Brain<?> brains, MemoryModuleType<? extends LivingEntity> memorymodule, EntityType<?> entityType) {
+-        return targetIsValid(brains, memorymodule, entity -> entity.getType() == entityType);
++        return targetIsValid(brains, memorymodule, (entityliving) -> {
++            return entityliving.getType() == entityType;
++        });
+     }
+ 
+     private static boolean targetIsValid(Brain<?> brain, MemoryModuleType<? extends LivingEntity> memoryType, Predicate<LivingEntity> livingPredicate) {
+-        return brain.getMemory(memoryType).filter(livingPredicate).filter(LivingEntity::isAlive).filter(entity -> entityIsVisible(brain, entity)).isPresent();
++        return brain.getMemory(memoryType).filter(livingPredicate).filter(LivingEntity::isAlive).filter((entityliving) -> {
++            return entityIsVisible(brain, entityliving);
++        }).isPresent();
+     }
+ 
+     private static void lookAtEachOther(LivingEntity firstEntity, LivingEntity secondEntity) {
+@@ -52,111 +60,143 @@
+     }
+ 
+     public static void lookAtEntity(LivingEntity entity, LivingEntity target) {
+-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
++        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, (new EntityTracker(target, true))); // CraftBukkit - decompile error
+     }
+ 
+     private static void setWalkAndLookTargetMemoriesToEachOther(LivingEntity firstEntity, LivingEntity secondEntity, float speed) {
+-        int i = 2;
+-        setWalkAndLookTargetMemories(firstEntity, secondEntity, speed, 2);
+-        setWalkAndLookTargetMemories(secondEntity, firstEntity, speed, 2);
++        boolean flag = true;
++
++        setWalkAndLookTargetMemories(firstEntity, (Entity) secondEntity, speed, 2);
++        setWalkAndLookTargetMemories(secondEntity, (Entity) firstEntity, speed, 2);
+     }
+ 
+     public static void setWalkAndLookTargetMemories(LivingEntity livingEntity, Entity target, float speed, int distance) {
+-        setWalkAndLookTargetMemories(livingEntity, new EntityTracker(target, true), speed, distance);
++        setWalkAndLookTargetMemories(livingEntity, (PositionTracker) (new EntityTracker(target, true)), speed, distance);
+     }
+ 
+     public static void setWalkAndLookTargetMemories(LivingEntity livingEntity, BlockPos pos, float speed, int distance) {
+-        setWalkAndLookTargetMemories(livingEntity, new BlockPosTracker(pos), speed, distance);
++        setWalkAndLookTargetMemories(livingEntity, (PositionTracker) (new BlockPosTracker(pos)), speed, distance);
+     }
+ 
+     public static void setWalkAndLookTargetMemories(LivingEntity entity, PositionTracker positionTracker, float speedModifier, int closeEnoughDist) {
+-        WalkTarget walkTarget = new WalkTarget(positionTracker, speedModifier, closeEnoughDist);
+-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, positionTracker);
+-        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
++        WalkTarget memorytarget = new WalkTarget(positionTracker, speedModifier, closeEnoughDist);
++
++        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, positionTracker); // CraftBukkit - decompile error
++        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, memorytarget); // CraftBukkit - decompile error
+     }
+ 
+     public static void throwItem(LivingEntity livingEntity, ItemStack stack, Vec3 offset) {
+-        Vec3 vec3 = new Vec3(0.3F, 0.3F, 0.3F);
+-        throwItem(livingEntity, stack, offset, vec3, 0.3F);
++        Vec3 vec3d1 = new Vec3(0.30000001192092896D, 0.30000001192092896D, 0.30000001192092896D);
++
++        throwItem(livingEntity, stack, offset, vec3d1, 0.3F);
+     }
+ 
+     public static void throwItem(LivingEntity entity, ItemStack stack, Vec3 offset, Vec3 speedMultiplier, float yOffset) {
+-        double d = entity.getEyeY() - (double)yOffset;
+-        ItemEntity itemEntity = new ItemEntity(entity.level(), entity.getX(), d, entity.getZ(), stack);
+-        itemEntity.setThrower(entity);
+-        Vec3 vec3 = offset.subtract(entity.position());
+-        vec3 = vec3.normalize().multiply(speedMultiplier.x, speedMultiplier.y, speedMultiplier.z);
+-        itemEntity.setDeltaMovement(vec3);
+-        itemEntity.setDefaultPickUpDelay();
+-        entity.level().addFreshEntity(itemEntity);
++        if (stack.isEmpty()) return; // CraftBukkit - SPIGOT-4940: no empty loot
++        double d0 = entity.getEyeY() - (double) yOffset;
++        ItemEntity entityitem = new ItemEntity(entity.level(), entity.getX(), d0, entity.getZ(), stack);
++
++        entityitem.setThrower(entity);
++        Vec3 vec3d2 = offset.subtract(entity.position());
++
++        vec3d2 = vec3d2.normalize().multiply(speedMultiplier.x, speedMultiplier.y, speedMultiplier.z);
++        entityitem.setDeltaMovement(vec3d2);
++        entityitem.setDefaultPickUpDelay();
++        // CraftBukkit start
++        org.bukkit.event.entity.EntityDropItemEvent event = new org.bukkit.event.entity.EntityDropItemEvent(entity.getBukkitEntity(), (org.bukkit.entity.Item) entityitem.getBukkitEntity());
++        entityitem.level().getCraftServer().getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            return;
++        }
++        // CraftBukkit end
++        entity.level().addFreshEntity(entityitem);
+     }
+ 
+     public static SectionPos findSectionClosestToVillage(ServerLevel serverLevel, SectionPos sectionPos, int radius) {
+-        int i = serverLevel.sectionsToVillage(sectionPos);
+-        return SectionPos.cube(sectionPos, radius)
+-            .filter(pos -> serverLevel.sectionsToVillage(pos) < i)
+-            .min(Comparator.comparingInt(serverLevel::sectionsToVillage))
+-            .orElse(sectionPos);
++        int j = serverLevel.sectionsToVillage(sectionPos);
++        Stream<SectionPos> stream = SectionPos.cube(sectionPos, radius).filter((sectionposition1) -> { // CraftBukkit - decompile error
++            return serverLevel.sectionsToVillage(sectionposition1) < j;
++        });
++
++        Objects.requireNonNull(serverLevel);
++        return (SectionPos) stream.min(Comparator.comparingInt(serverLevel::sectionsToVillage)).orElse(sectionPos);
+     }
+ 
+     public static boolean isWithinAttackRange(Mob mob, LivingEntity target, int cooldown) {
+-        if (mob.getMainHandItem().getItem() instanceof ProjectileWeaponItem projectileWeaponItem && mob.canFireProjectileWeapon(projectileWeaponItem)) {
+-            int i = projectileWeaponItem.getDefaultProjectileRange() - cooldown;
+-            return mob.closerThan(target, (double)i);
++        Item item = mob.getMainHandItem().getItem();
++
++        if (item instanceof ProjectileWeaponItem) {
++            ProjectileWeaponItem itemprojectileweapon = (ProjectileWeaponItem) item;
++
++            if (mob.canFireProjectileWeapon(itemprojectileweapon)) {
++                int j = itemprojectileweapon.getDefaultProjectileRange() - cooldown;
++
++                return mob.closerThan(target, (double) j);
++            }
+         }
+ 
+         return mob.isWithinMeleeAttackRange(target);
+     }
+ 
+     public static boolean isOtherTargetMuchFurtherAwayThanCurrentAttackTarget(LivingEntity livingEntity, LivingEntity target, double distance) {
+-        Optional<LivingEntity> memory = livingEntity.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET);
+-        if (memory.isEmpty()) {
++        Optional<LivingEntity> optional = livingEntity.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET);
++
++        if (optional.isEmpty()) {
+             return false;
+         } else {
+-            double d = livingEntity.distanceToSqr(memory.get().position());
+-            double d1 = livingEntity.distanceToSqr(target.position());
+-            return d1 > d + distance * distance;
++            double d1 = livingEntity.distanceToSqr(((LivingEntity) optional.get()).position());
++            double d2 = livingEntity.distanceToSqr(target.position());
++
++            return d2 > d1 + distance * distance;
+         }
+     }
+ 
+     public static boolean canSee(LivingEntity livingEntity, LivingEntity target) {
+-        Brain<?> brain = livingEntity.getBrain();
+-        return brain.hasMemoryValue(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+-            && brain.getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES).get().contains(target);
++        Brain<?> behaviorcontroller = livingEntity.getBrain();
++
++        return !behaviorcontroller.hasMemoryValue(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES) ? false : ((NearestVisibleLivingEntities) behaviorcontroller.getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES).get()).contains(target);
+     }
+ 
+     public static LivingEntity getNearestTarget(LivingEntity centerEntity, Optional<LivingEntity> optionalEntity, LivingEntity livingEntity) {
+-        return optionalEntity.isEmpty() ? livingEntity : getTargetNearestMe(centerEntity, optionalEntity.get(), livingEntity);
++        return optionalEntity.isEmpty() ? livingEntity : getTargetNearestMe(centerEntity, (LivingEntity) optionalEntity.get(), livingEntity);
+     }
+ 
+     public static LivingEntity getTargetNearestMe(LivingEntity centerEntity, LivingEntity livingEntity1, LivingEntity livingEntity2) {
+-        Vec3 vec3 = livingEntity1.position();
+-        Vec3 vec31 = livingEntity2.position();
+-        return centerEntity.distanceToSqr(vec3) < centerEntity.distanceToSqr(vec31) ? livingEntity1 : livingEntity2;
++        Vec3 vec3d = livingEntity1.position();
++        Vec3 vec3d1 = livingEntity2.position();
++
++        return centerEntity.distanceToSqr(vec3d) < centerEntity.distanceToSqr(vec3d1) ? livingEntity1 : livingEntity2;
+     }
+ 
+     public static Optional<LivingEntity> getLivingEntityFromUUIDMemory(LivingEntity livingEntity, MemoryModuleType<UUID> targetMemory) {
+-        Optional<UUID> memory = livingEntity.getBrain().getMemory(targetMemory);
+-        return memory.<Entity>map(identifier -> ((ServerLevel)livingEntity.level()).getEntity(identifier))
+-            .map(entity -> entity instanceof LivingEntity livingEntity1 ? livingEntity1 : null);
++        Optional<UUID> optional = livingEntity.getBrain().getMemory(targetMemory);
++
++        return optional.map((uuid) -> {
++            return ((ServerLevel) livingEntity.level()).getEntity(uuid);
++        }).map((entity) -> {
++            LivingEntity entityliving1;
++
++            if (entity instanceof LivingEntity) {
++                LivingEntity entityliving2 = (LivingEntity) entity;
++
++                entityliving1 = entityliving2;
++            } else {
++                entityliving1 = null;
++            }
++
++            return entityliving1;
++        });
+     }
+ 
+     @Nullable
+     public static Vec3 getRandomSwimmablePos(PathfinderMob pathfinder, int radius, int verticalDistance) {
+-        Vec3 pos = DefaultRandomPos.getPos(pathfinder, radius, verticalDistance);
+-        int i = 0;
++        Vec3 vec3d = DefaultRandomPos.getPos(pathfinder, radius, verticalDistance);
+ 
+-        while (
+-            pos != null
+-                && !pathfinder.level()
+-                    .getBlockState(BlockPos.containing(pos))
+-                    .isPathfindable(pathfinder.level(), BlockPos.containing(pos), PathComputationType.WATER)
+-                && i++ < 10
+-        ) {
+-            pos = DefaultRandomPos.getPos(pathfinder, radius, verticalDistance);
++        for (int k = 0; vec3d != null && !pathfinder.level().getBlockState(BlockPos.containing(vec3d)).isPathfindable(pathfinder.level(), BlockPos.containing(vec3d), PathMode.WATER) && k++ < 10; vec3d = DefaultRandomPos.getPos(pathfinder, radius, verticalDistance)) {
++            ;
+         }
+ 
+-        return pos;
++        return vec3d;
+     }
+ 
+     public static boolean isBreeding(LivingEntity entity) {

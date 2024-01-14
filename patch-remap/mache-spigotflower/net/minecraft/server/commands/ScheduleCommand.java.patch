@@ -1,0 +1,108 @@
+--- a/net/minecraft/server/commands/ScheduleCommand.java
++++ b/net/minecraft/server/commands/ScheduleCommand.java
+@@ -13,11 +13,9 @@
+ import com.mojang.datafixers.util.Pair;
+ import java.util.Collection;
+ import net.minecraft.commands.CommandSourceStack;
+-import net.minecraft.commands.Commands;
+ import net.minecraft.commands.SharedSuggestionProvider;
+ import net.minecraft.commands.arguments.TimeArgument;
+ import net.minecraft.commands.arguments.item.FunctionArgument;
+-import net.minecraft.commands.functions.CommandFunction;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.MinecraftServer;
+@@ -37,63 +35,63 @@
+ 
+     public ScheduleCommand() {}
+ 
+-    public static void register(CommandDispatcher<CommandSourceStack> commanddispatcher) {
+-        commanddispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) ((LiteralArgumentBuilder) Commands.literal("schedule").requires((commandsourcestack) -> {
+-            return commandsourcestack.hasPermission(2);
+-        })).then(Commands.literal("function").then(Commands.argument("function", FunctionArgument.functions()).suggests(FunctionCommand.SUGGEST_FUNCTION).then(((RequiredArgumentBuilder) ((RequiredArgumentBuilder) Commands.argument("time", TimeArgument.time()).executes((commandcontext) -> {
++    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
++        dispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) ((LiteralArgumentBuilder) net.minecraft.commands.Commands.literal("schedule").requires((commandlistenerwrapper) -> {
++            return commandlistenerwrapper.hasPermission(2);
++        })).then(net.minecraft.commands.Commands.literal("function").then(net.minecraft.commands.Commands.argument("function", FunctionArgument.functions()).suggests(FunctionCommand.SUGGEST_FUNCTION).then(((RequiredArgumentBuilder) ((RequiredArgumentBuilder) net.minecraft.commands.Commands.argument("time", TimeArgument.time()).executes((commandcontext) -> {
+             return schedule((CommandSourceStack) commandcontext.getSource(), FunctionArgument.getFunctionOrTag(commandcontext, "function"), IntegerArgumentType.getInteger(commandcontext, "time"), true);
+-        })).then(Commands.literal("append").executes((commandcontext) -> {
++        })).then(net.minecraft.commands.Commands.literal("append").executes((commandcontext) -> {
+             return schedule((CommandSourceStack) commandcontext.getSource(), FunctionArgument.getFunctionOrTag(commandcontext, "function"), IntegerArgumentType.getInteger(commandcontext, "time"), false);
+-        }))).then(Commands.literal("replace").executes((commandcontext) -> {
++        }))).then(net.minecraft.commands.Commands.literal("replace").executes((commandcontext) -> {
+             return schedule((CommandSourceStack) commandcontext.getSource(), FunctionArgument.getFunctionOrTag(commandcontext, "function"), IntegerArgumentType.getInteger(commandcontext, "time"), true);
+-        })))))).then(Commands.literal("clear").then(Commands.argument("function", StringArgumentType.greedyString()).suggests(ScheduleCommand.SUGGEST_SCHEDULE).executes((commandcontext) -> {
++        })))))).then(net.minecraft.commands.Commands.literal("clear").then(net.minecraft.commands.Commands.argument("function", StringArgumentType.greedyString()).suggests(ScheduleCommand.SUGGEST_SCHEDULE).executes((commandcontext) -> {
+             return remove((CommandSourceStack) commandcontext.getSource(), StringArgumentType.getString(commandcontext, "function"));
+         }))));
+     }
+ 
+-    private static int schedule(CommandSourceStack commandsourcestack, Pair<ResourceLocation, Either<CommandFunction<CommandSourceStack>, Collection<CommandFunction<CommandSourceStack>>>> pair, int i, boolean flag) throws CommandSyntaxException {
+-        if (i == 0) {
++    private static int schedule(CommandSourceStack source, Pair<ResourceLocation, Either<net.minecraft.commands.functions.CommandFunction<CommandSourceStack>, Collection<net.minecraft.commands.functions.CommandFunction<CommandSourceStack>>>> function, int time, boolean append) throws CommandSyntaxException {
++        if (time == 0) {
+             throw ScheduleCommand.ERROR_SAME_TICK.create();
+         } else {
+-            long j = commandsourcestack.getLevel().getGameTime() + (long) i;
+-            ResourceLocation resourcelocation = (ResourceLocation) pair.getFirst();
+-            TimerQueue<MinecraftServer> timerqueue = commandsourcestack.getServer().getWorldData().overworldData().getScheduledEvents();
++            long j = source.getLevel().getGameTime() + (long) time;
++            ResourceLocation minecraftkey = (ResourceLocation) function.getFirst();
++            TimerQueue<MinecraftServer> customfunctioncallbacktimerqueue = source.getLevel().serverLevelData.overworldData().getScheduledEvents(); // CraftBukkit - SPIGOT-6667: Use world specific function timer
+ 
+-            ((Either) pair.getSecond()).ifLeft((commandfunction) -> {
+-                String s = resourcelocation.toString();
++            ((Either) function.getSecond()).ifLeft((net_minecraft_commands_functions_commandfunction) -> {
++                String s = minecraftkey.toString();
+ 
+-                if (flag) {
+-                    timerqueue.remove(s);
++                if (append) {
++                    customfunctioncallbacktimerqueue.remove(s);
+                 }
+ 
+-                timerqueue.schedule(s, j, new FunctionCallback(resourcelocation));
+-                commandsourcestack.sendSuccess(() -> {
+-                    return Component.translatable("commands.schedule.created.function", Component.translationArg(resourcelocation), i, j);
++                customfunctioncallbacktimerqueue.schedule(s, j, new FunctionCallback(minecraftkey));
++                source.sendSuccess(() -> {
++                    return Component.translatable("commands.schedule.created.function", Component.translationArg(minecraftkey), time, j);
+                 }, true);
+             }).ifRight((collection) -> {
+-                String s = "#" + resourcelocation;
++                String s = "#" + minecraftkey;
+ 
+-                if (flag) {
+-                    timerqueue.remove(s);
++                if (append) {
++                    customfunctioncallbacktimerqueue.remove(s);
+                 }
+ 
+-                timerqueue.schedule(s, j, new FunctionTagCallback(resourcelocation));
+-                commandsourcestack.sendSuccess(() -> {
+-                    return Component.translatable("commands.schedule.created.tag", Component.translationArg(resourcelocation), i, j);
++                customfunctioncallbacktimerqueue.schedule(s, j, new FunctionTagCallback(minecraftkey));
++                source.sendSuccess(() -> {
++                    return Component.translatable("commands.schedule.created.tag", Component.translationArg(minecraftkey), time, j);
+                 }, true);
+             });
+             return Math.floorMod(j, Integer.MAX_VALUE);
+         }
+     }
+ 
+-    private static int remove(CommandSourceStack commandsourcestack, String s) throws CommandSyntaxException {
+-        int i = commandsourcestack.getServer().getWorldData().overworldData().getScheduledEvents().remove(s);
++    private static int remove(CommandSourceStack source, String function) throws CommandSyntaxException {
++        int i = source.getServer().getWorldData().overworldData().getScheduledEvents().remove(function);
+ 
+         if (i == 0) {
+-            throw ScheduleCommand.ERROR_CANT_REMOVE.create(s);
++            throw ScheduleCommand.ERROR_CANT_REMOVE.create(function);
+         } else {
+-            commandsourcestack.sendSuccess(() -> {
+-                return Component.translatable("commands.schedule.cleared.success", i, s);
++            source.sendSuccess(() -> {
++                return Component.translatable("commands.schedule.cleared.success", i, function);
+             }, true);
+             return i;
+         }

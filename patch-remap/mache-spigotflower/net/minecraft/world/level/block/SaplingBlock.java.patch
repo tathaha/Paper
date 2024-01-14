@@ -1,0 +1,143 @@
+--- a/net/minecraft/world/level/block/SaplingBlock.java
++++ b/net/minecraft/world/level/block/SaplingBlock.java
+@@ -8,84 +8,110 @@
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelReader;
+-import net.minecraft.world.level.block.grower.TreeGrower;
++import net.minecraft.world.level.block.grower.WorldGenTreeProvider;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.IntegerProperty;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.Location;
++import org.bukkit.TreeType;
++import org.bukkit.block.BlockState;
++import org.bukkit.craftbukkit.util.CraftLocation;
++import org.bukkit.event.world.StructureGrowEvent;
++// CraftBukkit end
+ 
+ public class SaplingBlock extends BushBlock implements BonemealableBlock {
+ 
+     public static final MapCodec<SaplingBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
+-        return instance.group(TreeGrower.CODEC.fieldOf("tree").forGetter((saplingblock) -> {
+-            return saplingblock.treeGrower;
++        return instance.group(WorldGenTreeProvider.CODEC.fieldOf("tree").forGetter((blocksapling) -> {
++            return blocksapling.treeGrower;
+         }), propertiesCodec()).apply(instance, SaplingBlock::new);
+     });
+     public static final IntegerProperty STAGE = BlockStateProperties.STAGE;
+     protected static final float AABB_OFFSET = 6.0F;
+     protected static final VoxelShape SHAPE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 12.0D, 14.0D);
+-    protected final TreeGrower treeGrower;
++    protected final WorldGenTreeProvider treeGrower;
++    public static TreeType treeType; // CraftBukkit
+ 
+     @Override
+-    @Override
+     public MapCodec<? extends SaplingBlock> codec() {
+         return SaplingBlock.CODEC;
+     }
+ 
+-    protected SaplingBlock(TreeGrower treegrower, BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.treeGrower = treegrower;
+-        this.registerDefaultState((BlockState) ((BlockState) this.stateDefinition.any()).setValue(SaplingBlock.STAGE, 0));
++    protected SaplingBlock(WorldGenTreeProvider worldgentreeprovider, BlockBehaviour.Properties blockbase_info) {
++        super(blockbase_info);
++        this.treeGrower = worldgentreeprovider;
++        this.registerDefaultState((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(SaplingBlock.STAGE, 0));
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
+         return SaplingBlock.SHAPE;
+     }
+ 
+     @Override
+-    @Override
+-    public void randomTick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        if (serverlevel.getMaxLocalRawBrightness(blockpos.above()) >= 9 && randomsource.nextInt(7) == 0) {
+-            this.advanceTree(serverlevel, blockpos, blockstate, randomsource);
++    public void randomTick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if (level.getMaxLocalRawBrightness(pos.above()) >= 9 && random.nextInt(7) == 0) {
++            this.advanceTree(level, pos, state, random);
+         }
+ 
+     }
+ 
+-    public void advanceTree(ServerLevel serverlevel, BlockPos blockpos, BlockState blockstate, RandomSource randomsource) {
+-        if ((Integer) blockstate.getValue(SaplingBlock.STAGE) == 0) {
+-            serverlevel.setBlock(blockpos, (BlockState) blockstate.cycle(SaplingBlock.STAGE), 4);
++    public void advanceTree(ServerLevel level, BlockPos pos, IBlockData state, RandomSource random) {
++        if ((Integer) state.getValue(SaplingBlock.STAGE) == 0) {
++            level.setBlock(pos, (IBlockData) state.cycle(SaplingBlock.STAGE), 4);
+         } else {
+-            this.treeGrower.growTree(serverlevel, serverlevel.getChunkSource().getGenerator(), blockpos, blockstate, randomsource);
++            // CraftBukkit start
++            if (level.captureTreeGeneration) {
++                this.treeGrower.growTree(level, level.getChunkSource().getGenerator(), pos, state, random);
++            } else {
++                level.captureTreeGeneration = true;
++                this.treeGrower.growTree(level, level.getChunkSource().getGenerator(), pos, state, random);
++                level.captureTreeGeneration = false;
++                if (level.capturedBlockStates.size() > 0) {
++                    TreeType treeType = SaplingBlock.treeType;
++                    SaplingBlock.treeType = null;
++                    Location location = CraftLocation.toBukkit(pos, level.getWorld());
++                    java.util.List<BlockState> blocks = new java.util.ArrayList<>(level.capturedBlockStates.values());
++                    level.capturedBlockStates.clear();
++                    StructureGrowEvent event = null;
++                    if (treeType != null) {
++                        event = new StructureGrowEvent(location, treeType, false, null, blocks);
++                        org.bukkit.Bukkit.getPluginManager().callEvent(event);
++                    }
++                    if (event == null || !event.isCancelled()) {
++                        for (BlockState blockstate : blocks) {
++                            blockstate.update(true);
++                        }
++                    }
++                }
++            }
++            // CraftBukkit end
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isValidBonemealTarget(LevelReader levelreader, BlockPos blockpos, BlockState blockstate) {
++    public boolean isValidBonemealTarget(LevelReader iworldreader, BlockPos blockposition, IBlockData iblockdata) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isBonemealSuccess(Level level, RandomSource randomsource, BlockPos blockpos, BlockState blockstate) {
++    public boolean isBonemealSuccess(Level level, RandomSource random, BlockPos pos, IBlockData state) {
+         return (double) level.random.nextFloat() < 0.45D;
+     }
+ 
+     @Override
+-    @Override
+-    public void performBonemeal(ServerLevel serverlevel, RandomSource randomsource, BlockPos blockpos, BlockState blockstate) {
+-        this.advanceTree(serverlevel, blockpos, blockstate, randomsource);
++    public void performBonemeal(ServerLevel level, RandomSource random, BlockPos pos, IBlockData state) {
++        this.advanceTree(level, pos, state, random);
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(SaplingBlock.STAGE);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(SaplingBlock.STAGE);
+     }
+ }

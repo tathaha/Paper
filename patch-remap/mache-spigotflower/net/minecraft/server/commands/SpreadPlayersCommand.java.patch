@@ -1,0 +1,374 @@
+--- a/net/minecraft/server/commands/SpreadPlayersCommand.java
++++ b/net/minecraft/server/commands/SpreadPlayersCommand.java
+@@ -17,7 +17,6 @@
+ import java.util.Map;
+ import java.util.Set;
+ import net.minecraft.commands.CommandSourceStack;
+-import net.minecraft.commands.Commands;
+ import net.minecraft.commands.arguments.EntityArgument;
+ import net.minecraft.commands.arguments.coordinates.Vec2Argument;
+ import net.minecraft.core.BlockPos;
+@@ -30,7 +29,7 @@
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.BlockGetter;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.phys.Vec2;
+ import net.minecraft.world.scores.PlayerTeam;
+ import net.minecraft.world.scores.Team;
+@@ -50,43 +49,43 @@
+ 
+     public SpreadPlayersCommand() {}
+ 
+-    public static void register(CommandDispatcher<CommandSourceStack> commanddispatcher) {
+-        commanddispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) Commands.literal("spreadplayers").requires((commandsourcestack) -> {
+-            return commandsourcestack.hasPermission(2);
+-        })).then(Commands.argument("center", Vec2Argument.vec2()).then(Commands.argument("spreadDistance", FloatArgumentType.floatArg(0.0F)).then(((RequiredArgumentBuilder) Commands.argument("maxRange", FloatArgumentType.floatArg(1.0F)).then(Commands.argument("respectTeams", BoolArgumentType.bool()).then(Commands.argument("targets", EntityArgument.entities()).executes((commandcontext) -> {
++    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
++        dispatcher.register((LiteralArgumentBuilder) ((LiteralArgumentBuilder) net.minecraft.commands.Commands.literal("spreadplayers").requires((commandlistenerwrapper) -> {
++            return commandlistenerwrapper.hasPermission(2);
++        })).then(net.minecraft.commands.Commands.argument("center", Vec2Argument.vec2()).then(net.minecraft.commands.Commands.argument("spreadDistance", FloatArgumentType.floatArg(0.0F)).then(((RequiredArgumentBuilder) net.minecraft.commands.Commands.argument("maxRange", FloatArgumentType.floatArg(1.0F)).then(net.minecraft.commands.Commands.argument("respectTeams", BoolArgumentType.bool()).then(net.minecraft.commands.Commands.argument("targets", EntityArgument.entities()).executes((commandcontext) -> {
+             return spreadPlayers((CommandSourceStack) commandcontext.getSource(), Vec2Argument.getVec2(commandcontext, "center"), FloatArgumentType.getFloat(commandcontext, "spreadDistance"), FloatArgumentType.getFloat(commandcontext, "maxRange"), ((CommandSourceStack) commandcontext.getSource()).getLevel().getMaxBuildHeight(), BoolArgumentType.getBool(commandcontext, "respectTeams"), EntityArgument.getEntities(commandcontext, "targets"));
+-        })))).then(Commands.literal("under").then(Commands.argument("maxHeight", IntegerArgumentType.integer()).then(Commands.argument("respectTeams", BoolArgumentType.bool()).then(Commands.argument("targets", EntityArgument.entities()).executes((commandcontext) -> {
++        })))).then(net.minecraft.commands.Commands.literal("under").then(net.minecraft.commands.Commands.argument("maxHeight", IntegerArgumentType.integer()).then(net.minecraft.commands.Commands.argument("respectTeams", BoolArgumentType.bool()).then(net.minecraft.commands.Commands.argument("targets", EntityArgument.entities()).executes((commandcontext) -> {
+             return spreadPlayers((CommandSourceStack) commandcontext.getSource(), Vec2Argument.getVec2(commandcontext, "center"), FloatArgumentType.getFloat(commandcontext, "spreadDistance"), FloatArgumentType.getFloat(commandcontext, "maxRange"), IntegerArgumentType.getInteger(commandcontext, "maxHeight"), BoolArgumentType.getBool(commandcontext, "respectTeams"), EntityArgument.getEntities(commandcontext, "targets"));
+         })))))))));
+     }
+ 
+-    private static int spreadPlayers(CommandSourceStack commandsourcestack, Vec2 vec2, float f, float f1, int i, boolean flag, Collection<? extends Entity> collection) throws CommandSyntaxException {
+-        ServerLevel serverlevel = commandsourcestack.getLevel();
+-        int j = serverlevel.getMinBuildHeight();
++    private static int spreadPlayers(CommandSourceStack source, Vec2 center, float spreadDistance, float maxRange, int maxHeight, boolean respectTeams, Collection<? extends Entity> targets) throws CommandSyntaxException {
++        ServerLevel worldserver = source.getLevel();
++        int j = worldserver.getMinBuildHeight();
+ 
+-        if (i < j) {
+-            throw SpreadPlayersCommand.ERROR_INVALID_MAX_HEIGHT.create(i, j);
++        if (maxHeight < j) {
++            throw SpreadPlayersCommand.ERROR_INVALID_MAX_HEIGHT.create(maxHeight, j);
+         } else {
+             RandomSource randomsource = RandomSource.create();
+-            double d0 = (double) (vec2.x - f1);
+-            double d1 = (double) (vec2.y - f1);
+-            double d2 = (double) (vec2.x + f1);
+-            double d3 = (double) (vec2.y + f1);
+-            SpreadPlayersCommand.Position[] aspreadplayerscommand_position = createInitialPositions(randomsource, flag ? getNumberOfTeams(collection) : collection.size(), d0, d1, d2, d3);
++            double d0 = (double) (center.x - maxRange);
++            double d1 = (double) (center.y - maxRange);
++            double d2 = (double) (center.x + maxRange);
++            double d3 = (double) (center.y + maxRange);
++            SpreadPlayersCommand.Position[] acommandspreadplayers_a = createInitialPositions(randomsource, respectTeams ? getNumberOfTeams(targets) : targets.size(), d0, d1, d2, d3);
+ 
+-            spreadPositions(vec2, (double) f, serverlevel, randomsource, d0, d1, d2, d3, i, aspreadplayerscommand_position, flag);
+-            double d4 = setPlayerPositions(collection, serverlevel, aspreadplayerscommand_position, i, flag);
++            spreadPositions(center, (double) spreadDistance, worldserver, randomsource, d0, d1, d2, d3, maxHeight, acommandspreadplayers_a, respectTeams);
++            double d4 = setPlayerPositions(targets, worldserver, acommandspreadplayers_a, maxHeight, respectTeams);
+ 
+-            commandsourcestack.sendSuccess(() -> {
+-                return Component.translatable("commands.spreadplayers.success." + (flag ? "teams" : "entities"), aspreadplayerscommand_position.length, vec2.x, vec2.y, String.format(Locale.ROOT, "%.2f", d4));
++            source.sendSuccess(() -> {
++                return Component.translatable("commands.spreadplayers.success." + (respectTeams ? "teams" : "entities"), acommandspreadplayers_a.length, center.x, center.y, String.format(Locale.ROOT, "%.2f", d4));
+             }, true);
+-            return aspreadplayerscommand_position.length;
++            return acommandspreadplayers_a.length;
+         }
+     }
+ 
+-    private static int getNumberOfTeams(Collection<? extends Entity> collection) {
++    private static int getNumberOfTeams(Collection<? extends Entity> entities) {
+         Set<Team> set = Sets.newHashSet();
+-        Iterator iterator = collection.iterator();
++        Iterator iterator = entities.iterator();
+ 
+         while (iterator.hasNext()) {
+             Entity entity = (Entity) iterator.next();
+@@ -94,14 +93,14 @@
+             if (entity instanceof Player) {
+                 set.add(entity.getTeam());
+             } else {
+-                set.add((Object) null);
++                set.add((Team) null); // CraftBukkit - decompile error
+             }
+         }
+ 
+         return set.size();
+     }
+ 
+-    private static void spreadPositions(Vec2 vec2, double d0, ServerLevel serverlevel, RandomSource randomsource, double d1, double d2, double d3, double d4, int i, SpreadPlayersCommand.Position[] aspreadplayerscommand_position, boolean flag) throws CommandSyntaxException {
++    private static void spreadPositions(Vec2 center, double spreadDistance, ServerLevel worldserver, RandomSource level, double random, double minX, double d3, double minZ, int i, SpreadPlayersCommand.Position[] maxX, boolean flag) throws CommandSyntaxException {
+         boolean flag1 = true;
+         double d5 = 3.4028234663852886E38D;
+ 
+@@ -112,56 +111,56 @@
+             d5 = 3.4028234663852886E38D;
+ 
+             int k;
+-            SpreadPlayersCommand.Position spreadplayerscommand_position;
++            SpreadPlayersCommand.Position commandspreadplayers_a;
+ 
+-            for (int l = 0; l < aspreadplayerscommand_position.length; ++l) {
+-                SpreadPlayersCommand.Position spreadplayerscommand_position1 = aspreadplayerscommand_position[l];
++            for (int l = 0; l < maxX.length; ++l) {
++                SpreadPlayersCommand.Position commandspreadplayers_a1 = maxX[l];
+ 
+                 k = 0;
+-                spreadplayerscommand_position = new SpreadPlayersCommand.Position();
++                commandspreadplayers_a = new SpreadPlayersCommand.Position();
+ 
+-                for (int i1 = 0; i1 < aspreadplayerscommand_position.length; ++i1) {
++                for (int i1 = 0; i1 < maxX.length; ++i1) {
+                     if (l != i1) {
+-                        SpreadPlayersCommand.Position spreadplayerscommand_position2 = aspreadplayerscommand_position[i1];
+-                        double d6 = spreadplayerscommand_position1.dist(spreadplayerscommand_position2);
++                        SpreadPlayersCommand.Position commandspreadplayers_a2 = maxX[i1];
++                        double d6 = commandspreadplayers_a1.dist(commandspreadplayers_a2);
+ 
+                         d5 = Math.min(d6, d5);
+-                        if (d6 < d0) {
++                        if (d6 < spreadDistance) {
+                             ++k;
+-                            spreadplayerscommand_position.x += spreadplayerscommand_position2.x - spreadplayerscommand_position1.x;
+-                            spreadplayerscommand_position.z += spreadplayerscommand_position2.z - spreadplayerscommand_position1.z;
++                            commandspreadplayers_a.x += commandspreadplayers_a2.x - commandspreadplayers_a1.x;
++                            commandspreadplayers_a.z += commandspreadplayers_a2.z - commandspreadplayers_a1.z;
+                         }
+                     }
+                 }
+ 
+                 if (k > 0) {
+-                    spreadplayerscommand_position.x /= (double) k;
+-                    spreadplayerscommand_position.z /= (double) k;
+-                    double d7 = spreadplayerscommand_position.getLength();
++                    commandspreadplayers_a.x /= (double) k;
++                    commandspreadplayers_a.z /= (double) k;
++                    double d7 = commandspreadplayers_a.getLength();
+ 
+                     if (d7 > 0.0D) {
+-                        spreadplayerscommand_position.normalize();
+-                        spreadplayerscommand_position1.moveAway(spreadplayerscommand_position);
++                        commandspreadplayers_a.normalize();
++                        commandspreadplayers_a1.moveAway(commandspreadplayers_a);
+                     } else {
+-                        spreadplayerscommand_position1.randomize(randomsource, d1, d2, d3, d4);
++                        commandspreadplayers_a1.randomize(level, random, minX, d3, minZ);
+                     }
+ 
+                     flag1 = true;
+                 }
+ 
+-                if (spreadplayerscommand_position1.clamp(d1, d2, d3, d4)) {
++                if (commandspreadplayers_a1.clamp(random, minX, d3, minZ)) {
+                     flag1 = true;
+                 }
+             }
+ 
+             if (!flag1) {
+-                SpreadPlayersCommand.Position[] aspreadplayerscommand_position1 = aspreadplayerscommand_position;
+-                int j1 = aspreadplayerscommand_position.length;
++                SpreadPlayersCommand.Position[] acommandspreadplayers_a1 = maxX;
++                int j1 = maxX.length;
+ 
+                 for (k = 0; k < j1; ++k) {
+-                    spreadplayerscommand_position = aspreadplayerscommand_position1[k];
+-                    if (!spreadplayerscommand_position.isSafe(serverlevel, i)) {
+-                        spreadplayerscommand_position.randomize(randomsource, d1, d2, d3, d4);
++                    commandspreadplayers_a = acommandspreadplayers_a1[k];
++                    if (!commandspreadplayers_a.isSafe(worldserver, i)) {
++                        commandspreadplayers_a.randomize(level, random, minX, d3, minZ);
+                         flag1 = true;
+                     }
+                 }
+@@ -174,71 +173,71 @@
+ 
+         if (j >= 10000) {
+             if (flag) {
+-                throw SpreadPlayersCommand.ERROR_FAILED_TO_SPREAD_TEAMS.create(aspreadplayerscommand_position.length, vec2.x, vec2.y, String.format(Locale.ROOT, "%.2f", d5));
++                throw SpreadPlayersCommand.ERROR_FAILED_TO_SPREAD_TEAMS.create(maxX.length, center.x, center.y, String.format(Locale.ROOT, "%.2f", d5));
+             } else {
+-                throw SpreadPlayersCommand.ERROR_FAILED_TO_SPREAD_ENTITIES.create(aspreadplayerscommand_position.length, vec2.x, vec2.y, String.format(Locale.ROOT, "%.2f", d5));
++                throw SpreadPlayersCommand.ERROR_FAILED_TO_SPREAD_ENTITIES.create(maxX.length, center.x, center.y, String.format(Locale.ROOT, "%.2f", d5));
+             }
+         }
+     }
+ 
+-    private static double setPlayerPositions(Collection<? extends Entity> collection, ServerLevel serverlevel, SpreadPlayersCommand.Position[] aspreadplayerscommand_position, int i, boolean flag) {
++    private static double setPlayerPositions(Collection<? extends Entity> targets, ServerLevel level, SpreadPlayersCommand.Position[] positions, int maxHeight, boolean respectTeams) {
+         double d0 = 0.0D;
+         int j = 0;
+         Map<Team, SpreadPlayersCommand.Position> map = Maps.newHashMap();
+ 
+         double d1;
+ 
+-        for (Iterator iterator = collection.iterator(); iterator.hasNext(); d0 += d1) {
++        for (Iterator iterator = targets.iterator(); iterator.hasNext(); d0 += d1) {
+             Entity entity = (Entity) iterator.next();
+-            SpreadPlayersCommand.Position spreadplayerscommand_position;
++            SpreadPlayersCommand.Position commandspreadplayers_a;
+ 
+-            if (flag) {
+-                PlayerTeam playerteam = entity instanceof Player ? entity.getTeam() : null;
++            if (respectTeams) {
++                PlayerTeam scoreboardteam = entity instanceof Player ? entity.getTeam() : null;
+ 
+-                if (!map.containsKey(playerteam)) {
+-                    map.put(playerteam, aspreadplayerscommand_position[j++]);
++                if (!map.containsKey(scoreboardteam)) {
++                    map.put(scoreboardteam, positions[j++]);
+                 }
+ 
+-                spreadplayerscommand_position = (SpreadPlayersCommand.Position) map.get(playerteam);
++                commandspreadplayers_a = (SpreadPlayersCommand.Position) map.get(scoreboardteam);
+             } else {
+-                spreadplayerscommand_position = aspreadplayerscommand_position[j++];
++                commandspreadplayers_a = positions[j++];
+             }
+ 
+-            entity.teleportTo(serverlevel, (double) Mth.floor(spreadplayerscommand_position.x) + 0.5D, (double) spreadplayerscommand_position.getSpawnY(serverlevel, i), (double) Mth.floor(spreadplayerscommand_position.z) + 0.5D, Set.of(), entity.getYRot(), entity.getXRot());
++            entity.teleportTo(level, (double) Mth.floor(commandspreadplayers_a.x) + 0.5D, (double) commandspreadplayers_a.getSpawnY(level, maxHeight), (double) Mth.floor(commandspreadplayers_a.z) + 0.5D, Set.of(), entity.getYRot(), entity.getXRot(), org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.COMMAND); // CraftBukkit - handle teleport reason
+             d1 = Double.MAX_VALUE;
+-            SpreadPlayersCommand.Position[] aspreadplayerscommand_position1 = aspreadplayerscommand_position;
+-            int k = aspreadplayerscommand_position.length;
++            SpreadPlayersCommand.Position[] acommandspreadplayers_a1 = positions;
++            int k = positions.length;
+ 
+             for (int l = 0; l < k; ++l) {
+-                SpreadPlayersCommand.Position spreadplayerscommand_position1 = aspreadplayerscommand_position1[l];
++                SpreadPlayersCommand.Position commandspreadplayers_a1 = acommandspreadplayers_a1[l];
+ 
+-                if (spreadplayerscommand_position != spreadplayerscommand_position1) {
+-                    double d2 = spreadplayerscommand_position.dist(spreadplayerscommand_position1);
++                if (commandspreadplayers_a != commandspreadplayers_a1) {
++                    double d2 = commandspreadplayers_a.dist(commandspreadplayers_a1);
+ 
+                     d1 = Math.min(d2, d1);
+                 }
+             }
+         }
+ 
+-        if (collection.size() < 2) {
++        if (targets.size() < 2) {
+             return 0.0D;
+         } else {
+-            d0 /= (double) collection.size();
++            d0 /= (double) targets.size();
+             return d0;
+         }
+     }
+ 
+-    private static SpreadPlayersCommand.Position[] createInitialPositions(RandomSource randomsource, int i, double d0, double d1, double d2, double d3) {
+-        SpreadPlayersCommand.Position[] aspreadplayerscommand_position = new SpreadPlayersCommand.Position[i];
++    private static SpreadPlayersCommand.Position[] createInitialPositions(RandomSource random, int count, double minX, double d1, double minZ, double d3) {
++        SpreadPlayersCommand.Position[] acommandspreadplayers_a = new SpreadPlayersCommand.Position[count];
+ 
+-        for (int j = 0; j < aspreadplayerscommand_position.length; ++j) {
+-            SpreadPlayersCommand.Position spreadplayerscommand_position = new SpreadPlayersCommand.Position();
++        for (int j = 0; j < acommandspreadplayers_a.length; ++j) {
++            SpreadPlayersCommand.Position commandspreadplayers_a = new SpreadPlayersCommand.Position();
+ 
+-            spreadplayerscommand_position.randomize(randomsource, d0, d1, d2, d3);
+-            aspreadplayerscommand_position[j] = spreadplayerscommand_position;
++            commandspreadplayers_a.randomize(random, minX, d1, minZ, d3);
++            acommandspreadplayers_a[j] = commandspreadplayers_a;
+         }
+ 
+-        return aspreadplayerscommand_position;
++        return acommandspreadplayers_a;
+     }
+ 
+     private static class Position {
+@@ -248,9 +247,9 @@
+ 
+         Position() {}
+ 
+-        double dist(SpreadPlayersCommand.Position spreadplayerscommand_position) {
+-            double d0 = this.x - spreadplayerscommand_position.x;
+-            double d1 = this.z - spreadplayerscommand_position.z;
++        double dist(SpreadPlayersCommand.Position other) {
++            double d0 = this.x - other.x;
++            double d1 = this.z - other.z;
+ 
+             return Math.sqrt(d0 * d0 + d1 * d1);
+         }
+@@ -266,19 +265,19 @@
+             return Math.sqrt(this.x * this.x + this.z * this.z);
+         }
+ 
+-        public void moveAway(SpreadPlayersCommand.Position spreadplayerscommand_position) {
+-            this.x -= spreadplayerscommand_position.x;
+-            this.z -= spreadplayerscommand_position.z;
++        public void moveAway(SpreadPlayersCommand.Position other) {
++            this.x -= other.x;
++            this.z -= other.z;
+         }
+ 
+-        public boolean clamp(double d0, double d1, double d2, double d3) {
++        public boolean clamp(double minX, double d1, double minZ, double d3) {
+             boolean flag = false;
+ 
+-            if (this.x < d0) {
+-                this.x = d0;
++            if (this.x < minX) {
++                this.x = minX;
+                 flag = true;
+-            } else if (this.x > d2) {
+-                this.x = d2;
++            } else if (this.x > minZ) {
++                this.x = minZ;
+                 flag = true;
+             }
+ 
+@@ -293,37 +292,37 @@
+             return flag;
+         }
+ 
+-        public int getSpawnY(BlockGetter blockgetter, int i) {
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos(this.x, (double) (i + 1), this.z);
+-            boolean flag = blockgetter.getBlockState(blockpos_mutableblockpos).isAir();
++        public int getSpawnY(BlockGetter level, int y) {
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos(this.x, (double) (y + 1), this.z);
++            boolean flag = level.getBlockState(blockposition_mutableblockposition).isAir();
+ 
+-            blockpos_mutableblockpos.move(Direction.DOWN);
++            blockposition_mutableblockposition.move(Direction.DOWN);
+ 
+             boolean flag1;
+ 
+-            for (boolean flag2 = blockgetter.getBlockState(blockpos_mutableblockpos).isAir(); blockpos_mutableblockpos.getY() > blockgetter.getMinBuildHeight(); flag2 = flag1) {
+-                blockpos_mutableblockpos.move(Direction.DOWN);
+-                flag1 = blockgetter.getBlockState(blockpos_mutableblockpos).isAir();
++            for (boolean flag2 = level.getBlockState(blockposition_mutableblockposition).isAir(); blockposition_mutableblockposition.getY() > level.getMinBuildHeight(); flag2 = flag1) {
++                blockposition_mutableblockposition.move(Direction.DOWN);
++                flag1 = level.getBlockState(blockposition_mutableblockposition).isAir();
+                 if (!flag1 && flag2 && flag) {
+-                    return blockpos_mutableblockpos.getY() + 1;
++                    return blockposition_mutableblockposition.getY() + 1;
+                 }
+ 
+                 flag = flag2;
+             }
+ 
+-            return i + 1;
++            return y + 1;
+         }
+ 
+-        public boolean isSafe(BlockGetter blockgetter, int i) {
+-            BlockPos blockpos = BlockPos.containing(this.x, (double) (this.getSpawnY(blockgetter, i) - 1), this.z);
+-            BlockState blockstate = blockgetter.getBlockState(blockpos);
++        public boolean isSafe(BlockGetter level, int y) {
++            BlockPos blockposition = BlockPos.containing(this.x, (double) (this.getSpawnY(level, y) - 1), this.z);
++            IBlockData iblockdata = level.getBlockState(blockposition);
+ 
+-            return blockpos.getY() < i && !blockstate.liquid() && !blockstate.is(BlockTags.FIRE);
++            return blockposition.getY() < y && !iblockdata.liquid() && !iblockdata.is(BlockTags.FIRE);
+         }
+ 
+-        public void randomize(RandomSource randomsource, double d0, double d1, double d2, double d3) {
+-            this.x = Mth.nextDouble(randomsource, d0, d2);
+-            this.z = Mth.nextDouble(randomsource, d1, d3);
++        public void randomize(RandomSource random, double minX, double d1, double minZ, double d3) {
++            this.x = Mth.nextDouble(random, minX, minZ);
++            this.z = Mth.nextDouble(random, d1, d3);
+         }
+     }
+ }

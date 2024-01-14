@@ -1,0 +1,1181 @@
+--- a/net/minecraft/world/entity/animal/Bee.java
++++ b/net/minecraft/world/entity/animal/Bee.java
+@@ -39,13 +39,13 @@
+ import net.minecraft.world.entity.AgeableMob;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMonsterType;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MobType;
+ import net.minecraft.world.entity.NeutralMob;
+ import net.minecraft.world.entity.PathfinderMob;
+-import net.minecraft.world.entity.Pose;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+ import net.minecraft.world.entity.ai.attributes.Attributes;
+ import net.minecraft.world.entity.ai.control.FlyingMoveControl;
+@@ -82,15 +82,20 @@
+ import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntityType;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
++import net.minecraft.world.level.block.state.properties.BlockPropertyDoubleBlockHalf;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.pathfinder.BlockPathTypes;
+ import net.minecraft.world.level.pathfinder.Path;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityPotionEffectEvent;
++import org.bukkit.event.entity.EntityTargetEvent;
++// CraftBukkit end
+ 
+-public class Bee extends Animal implements NeutralMob, FlyingAnimal {
++public class Bee extends Animal implements NeutralMob, EntityBird {
+ 
+     public static final float FLAP_DEGREES_PER_TICK = 120.32113F;
+     public static final int TICKS_PER_FLAP = Mth.ceil(1.4959966F);
+@@ -124,7 +129,7 @@
+     private float rollAmountO;
+     private int timeSinceSting;
+     int ticksWithoutNectarSinceExitingHive;
+-    private int stayOutOfHiveCountdown;
++    public int stayOutOfHiveCountdown;
+     private int numCropsGrownSincePollination;
+     private static final int COOLDOWN_BEFORE_LOCATING_NEW_HIVE = 200;
+     int remainingCooldownBeforeLocatingNewHive;
+@@ -133,14 +138,14 @@
+     @Nullable
+     BlockPos savedFlowerPos;
+     @Nullable
+-    BlockPos hivePos;
++    public BlockPos hivePos;
+     Bee.BeePollinateGoal beePollinateGoal;
+     Bee.BeeGoToHiveGoal goToHiveGoal;
+     private Bee.BeeGoToKnownFlowerGoal goToKnownFlowerGoal;
+     private int underWaterTicks;
+ 
+-    public Bee(EntityType<? extends Bee> entitytype, Level level) {
+-        super(entitytype, level);
++    public Bee(EntityType<? extends Bee> entityType, Level level) {
++        super(entityType, level);
+         this.remainingCooldownBeforeLocatingNewFlower = Mth.nextInt(this.random, 20, 60);
+         this.moveControl = new FlyingMoveControl(this, 20, true);
+         this.lookControl = new Bee.BeeLookControl(this);
+@@ -152,7 +157,6 @@
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.entityData.define(Bee.DATA_FLAGS_ID, (byte) 0);
+@@ -160,13 +164,11 @@
+     }
+ 
+     @Override
+-    @Override
+-    public float getWalkTargetValue(BlockPos blockpos, LevelReader levelreader) {
+-        return levelreader.getBlockState(blockpos).isAir() ? 10.0F : 0.0F;
++    public float getWalkTargetValue(BlockPos pos, LevelReader level) {
++        return level.getBlockState(pos).isAir() ? 10.0F : 0.0F;
+     }
+ 
+     @Override
+-    @Override
+     protected void registerGoals() {
+         this.goalSelector.addGoal(0, new Bee.BeeAttackGoal(this, 1.399999976158142D, true));
+         this.goalSelector.addGoal(1, new Bee.BeeEnterHiveGoal());
+@@ -189,49 +191,53 @@
+     }
+ 
+     @Override
++    public void addAdditionalSaveData(CompoundTag compound) {
++        // CraftBukkit start - selectively save data
++        addAdditionalSaveData(compound, true);
++    }
++
+     @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        if (this.hasHive()) {
+-            compoundtag.put("HivePos", NbtUtils.writeBlockPos(this.getHivePos()));
++    public void addAdditionalSaveData(CompoundTag nbttagcompound, boolean includeAll) {
++        // CraftBukkit end
++        super.addAdditionalSaveData(nbttagcompound);
++        if (includeAll && this.hasHive()) { // CraftBukkit - selectively save hive
++            nbttagcompound.put("HivePos", NbtUtils.writeBlockPos(this.getHivePos()));
+         }
+ 
+-        if (this.hasSavedFlowerPos()) {
+-            compoundtag.put("FlowerPos", NbtUtils.writeBlockPos(this.getSavedFlowerPos()));
++        if (includeAll && this.hasSavedFlowerPos()) { // CraftBukkit - selectively save flower
++            nbttagcompound.put("FlowerPos", NbtUtils.writeBlockPos(this.getSavedFlowerPos()));
+         }
+ 
+-        compoundtag.putBoolean("HasNectar", this.hasNectar());
+-        compoundtag.putBoolean("HasStung", this.hasStung());
+-        compoundtag.putInt("TicksSincePollination", this.ticksWithoutNectarSinceExitingHive);
+-        compoundtag.putInt("CannotEnterHiveTicks", this.stayOutOfHiveCountdown);
+-        compoundtag.putInt("CropsGrownSincePollination", this.numCropsGrownSincePollination);
+-        this.addPersistentAngerSaveData(compoundtag);
++        nbttagcompound.putBoolean("HasNectar", this.hasNectar());
++        nbttagcompound.putBoolean("HasStung", this.hasStung());
++        nbttagcompound.putInt("TicksSincePollination", this.ticksWithoutNectarSinceExitingHive);
++        nbttagcompound.putInt("CannotEnterHiveTicks", this.stayOutOfHiveCountdown);
++        nbttagcompound.putInt("CropsGrownSincePollination", this.numCropsGrownSincePollination);
++        this.addPersistentAngerSaveData(nbttagcompound);
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
++    public void readAdditionalSaveData(CompoundTag compound) {
+         this.hivePos = null;
+-        if (compoundtag.contains("HivePos")) {
+-            this.hivePos = NbtUtils.readBlockPos(compoundtag.getCompound("HivePos"));
++        if (compound.contains("HivePos")) {
++            this.hivePos = NbtUtils.readBlockPos(compound.getCompound("HivePos"));
+         }
+ 
+         this.savedFlowerPos = null;
+-        if (compoundtag.contains("FlowerPos")) {
+-            this.savedFlowerPos = NbtUtils.readBlockPos(compoundtag.getCompound("FlowerPos"));
++        if (compound.contains("FlowerPos")) {
++            this.savedFlowerPos = NbtUtils.readBlockPos(compound.getCompound("FlowerPos"));
+         }
+ 
+-        super.readAdditionalSaveData(compoundtag);
+-        this.setHasNectar(compoundtag.getBoolean("HasNectar"));
+-        this.setHasStung(compoundtag.getBoolean("HasStung"));
+-        this.ticksWithoutNectarSinceExitingHive = compoundtag.getInt("TicksSincePollination");
+-        this.stayOutOfHiveCountdown = compoundtag.getInt("CannotEnterHiveTicks");
+-        this.numCropsGrownSincePollination = compoundtag.getInt("CropsGrownSincePollination");
+-        this.readPersistentAngerSaveData(this.level(), compoundtag);
++        super.readAdditionalSaveData(compound);
++        this.setHasNectar(compound.getBoolean("HasNectar"));
++        this.setHasStung(compound.getBoolean("HasStung"));
++        this.ticksWithoutNectarSinceExitingHive = compound.getInt("TicksSincePollination");
++        this.stayOutOfHiveCountdown = compound.getInt("CannotEnterHiveTicks");
++        this.numCropsGrownSincePollination = compound.getInt("CropsGrownSincePollination");
++        this.readPersistentAngerSaveData(this.level(), compound);
+     }
+ 
+     @Override
+-    @Override
+     public boolean doHurtTarget(Entity entity) {
+         boolean flag = entity.hurt(this.damageSources().sting(this), (float) ((int) this.getAttributeValue(Attributes.ATTACK_DAMAGE)));
+ 
+@@ -248,7 +254,7 @@
+                 }
+ 
+                 if (b0 > 0) {
+-                    ((LivingEntity) entity).addEffect(new MobEffectInstance(MobEffects.POISON, b0 * 20, 0), this);
++                    ((LivingEntity) entity).addEffect(new MobEffectInstance(MobEffects.POISON, b0 * 20, 0), this, EntityPotionEffectEvent.Cause.ATTACK); // CraftBukkit
+                 }
+             }
+ 
+@@ -261,7 +267,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         super.tick();
+         if (this.hasNectar() && this.getCropsGrownSincePollination() < 10 && this.random.nextFloat() < 0.05F) {
+@@ -273,15 +278,15 @@
+         this.updateRollAmount();
+     }
+ 
+-    private void spawnFluidParticle(Level level, double d0, double d1, double d2, double d3, double d4, ParticleOptions particleoptions) {
+-        level.addParticle(particleoptions, Mth.lerp(level.random.nextDouble(), d0, d1), d4, Mth.lerp(level.random.nextDouble(), d2, d3), 0.0D, 0.0D, 0.0D);
++    private void spawnFluidParticle(Level level, double startX, double d1, double endX, double d3, double startZ, ParticleOptions particleparam) {
++        level.addParticle(particleparam, Mth.lerp(level.random.nextDouble(), startX, d1), startZ, Mth.lerp(level.random.nextDouble(), endX, d3), 0.0D, 0.0D, 0.0D);
+     }
+ 
+-    void pathfindRandomlyTowards(BlockPos blockpos) {
+-        Vec3 vec3 = Vec3.atBottomCenterOf(blockpos);
++    void pathfindRandomlyTowards(BlockPos pos) {
++        Vec3 vec3d = Vec3.atBottomCenterOf(pos);
+         byte b0 = 0;
+-        BlockPos blockpos1 = this.blockPosition();
+-        int i = (int) vec3.y - blockpos1.getY();
++        BlockPos blockposition1 = this.blockPosition();
++        int i = (int) vec3d.y - blockposition1.getY();
+ 
+         if (i > 2) {
+             b0 = 4;
+@@ -291,18 +296,18 @@
+ 
+         int j = 6;
+         int k = 8;
+-        int l = blockpos1.distManhattan(blockpos);
++        int l = blockposition1.distManhattan(pos);
+ 
+         if (l < 15) {
+             j = l / 2;
+             k = l / 2;
+         }
+ 
+-        Vec3 vec31 = AirRandomPos.getPosTowards(this, j, k, b0, vec3, 0.3141592741012573D);
++        Vec3 vec3d1 = AirRandomPos.getPosTowards(this, j, k, b0, vec3d, 0.3141592741012573D);
+ 
+-        if (vec31 != null) {
++        if (vec3d1 != null) {
+             this.navigation.setMaxVisitedNodesMultiplier(0.5F);
+-            this.navigation.moveTo(vec31.x, vec31.y, vec31.z, 1.0D);
++            this.navigation.moveTo(vec3d1.x, vec3d1.y, vec3d1.z, 1.0D);
+         }
+     }
+ 
+@@ -315,8 +320,8 @@
+         return this.savedFlowerPos != null;
+     }
+ 
+-    public void setSavedFlowerPos(BlockPos blockpos) {
+-        this.savedFlowerPos = blockpos;
++    public void setSavedFlowerPos(BlockPos savedFlowerPos) {
++        this.savedFlowerPos = savedFlowerPos;
+     }
+ 
+     @VisibleForDebug
+@@ -343,12 +348,12 @@
+         }
+     }
+ 
+-    public void setStayOutOfHiveCountdown(int i) {
+-        this.stayOutOfHiveCountdown = i;
++    public void setStayOutOfHiveCountdown(int stayOutOfHiveCountdown) {
++        this.stayOutOfHiveCountdown = stayOutOfHiveCountdown;
+     }
+ 
+-    public float getRollAmount(float f) {
+-        return Mth.lerp(f, this.rollAmountO, this.rollAmount);
++    public float getRollAmount(float partialTick) {
++        return Mth.lerp(partialTick, this.rollAmountO, this.rollAmount);
+     }
+ 
+     private void updateRollAmount() {
+@@ -362,7 +367,6 @@
+     }
+ 
+     @Override
+-    @Override
+     protected void customServerAiStep() {
+         boolean flag = this.hasStung();
+ 
+@@ -401,47 +405,42 @@
+         if (this.hivePos == null) {
+             return false;
+         } else {
+-            BlockEntity blockentity = this.level().getBlockEntity(this.hivePos);
++            BlockEntity tileentity = this.level().getBlockEntity(this.hivePos);
+ 
+-            return blockentity instanceof BeehiveBlockEntity && ((BeehiveBlockEntity) blockentity).isFireNearby();
++            return tileentity instanceof BeehiveBlockEntity && ((BeehiveBlockEntity) tileentity).isFireNearby();
+         }
+     }
+ 
+     @Override
+-    @Override
+     public int getRemainingPersistentAngerTime() {
+         return (Integer) this.entityData.get(Bee.DATA_REMAINING_ANGER_TIME);
+     }
+ 
+     @Override
+-    @Override
+-    public void setRemainingPersistentAngerTime(int i) {
+-        this.entityData.set(Bee.DATA_REMAINING_ANGER_TIME, i);
++    public void setRemainingPersistentAngerTime(int time) {
++        this.entityData.set(Bee.DATA_REMAINING_ANGER_TIME, time);
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public UUID getPersistentAngerTarget() {
+         return this.persistentAngerTarget;
+     }
+ 
+     @Override
+-    @Override
+-    public void setPersistentAngerTarget(@Nullable UUID uuid) {
+-        this.persistentAngerTarget = uuid;
++    public void setPersistentAngerTarget(@Nullable UUID target) {
++        this.persistentAngerTarget = target;
+     }
+ 
+     @Override
+-    @Override
+     public void startPersistentAngerTimer() {
+         this.setRemainingPersistentAngerTime(Bee.PERSISTENT_ANGER_TIME.sample(this.random));
+     }
+ 
+-    private boolean doesHiveHaveSpace(BlockPos blockpos) {
+-        BlockEntity blockentity = this.level().getBlockEntity(blockpos);
++    private boolean doesHiveHaveSpace(BlockPos hivePos) {
++        BlockEntity tileentity = this.level().getBlockEntity(hivePos);
+ 
+-        return blockentity instanceof BeehiveBlockEntity ? !((BeehiveBlockEntity) blockentity).isFull() : false;
++        return tileentity instanceof BeehiveBlockEntity ? !((BeehiveBlockEntity) tileentity).isFull() : false;
+     }
+ 
+     @VisibleForDebug
+@@ -461,7 +460,6 @@
+     }
+ 
+     @Override
+-    @Override
+     protected void sendDebugPackets() {
+         super.sendDebugPackets();
+         DebugPackets.sendBeeInfo(this);
+@@ -480,7 +478,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public void aiStep() {
+         super.aiStep();
+         if (!this.level().isClientSide) {
+@@ -512,9 +509,9 @@
+         } else if (this.isTooFarAway(this.hivePos)) {
+             return false;
+         } else {
+-            BlockEntity blockentity = this.level().getBlockEntity(this.hivePos);
++            BlockEntity tileentity = this.level().getBlockEntity(this.hivePos);
+ 
+-            return blockentity != null && blockentity.getType() == BlockEntityType.BEEHIVE;
++            return tileentity != null && tileentity.getType() == BlockEntityType.BEEHIVE;
+         }
+     }
+ 
+@@ -522,45 +519,45 @@
+         return this.getFlag(8);
+     }
+ 
+-    void setHasNectar(boolean flag) {
+-        if (flag) {
++    public void setHasNectar(boolean hasNectar) {
++        if (hasNectar) {
+             this.resetTicksWithoutNectarSinceExitingHive();
+         }
+ 
+-        this.setFlag(8, flag);
++        this.setFlag(8, hasNectar);
+     }
+ 
+     public boolean hasStung() {
+         return this.getFlag(4);
+     }
+ 
+-    private void setHasStung(boolean flag) {
+-        this.setFlag(4, flag);
++    public void setHasStung(boolean hasStung) {
++        this.setFlag(4, hasStung);
+     }
+ 
+     private boolean isRolling() {
+         return this.getFlag(2);
+     }
+ 
+-    private void setRolling(boolean flag) {
+-        this.setFlag(2, flag);
++    private void setRolling(boolean isRolling) {
++        this.setFlag(2, isRolling);
+     }
+ 
+-    boolean isTooFarAway(BlockPos blockpos) {
+-        return !this.closerThan(blockpos, 32);
++    boolean isTooFarAway(BlockPos pos) {
++        return !this.closerThan(pos, 32);
+     }
+ 
+-    private void setFlag(int i, boolean flag) {
+-        if (flag) {
+-            this.entityData.set(Bee.DATA_FLAGS_ID, (byte) ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) | i));
++    private void setFlag(int flagId, boolean value) {
++        if (value) {
++            this.entityData.set(Bee.DATA_FLAGS_ID, (byte) ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) | flagId));
+         } else {
+-            this.entityData.set(Bee.DATA_FLAGS_ID, (byte) ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) & ~i));
++            this.entityData.set(Bee.DATA_FLAGS_ID, (byte) ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) & ~flagId));
+         }
+ 
+     }
+ 
+-    private boolean getFlag(int i) {
+-        return ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) & i) != 0;
++    private boolean getFlag(int flagId) {
++        return ((Byte) this.entityData.get(Bee.DATA_FLAGS_ID) & flagId) != 0;
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+@@ -568,17 +565,14 @@
+     }
+ 
+     @Override
+-    @Override
+     protected PathNavigation createNavigation(Level level) {
+-        FlyingPathNavigation flyingpathnavigation = new FlyingPathNavigation(this, level) {
++        FlyingPathNavigation navigationflying = new FlyingPathNavigation(this, level) {
+             @Override
+-            @Override
+-            public boolean isStableDestination(BlockPos blockpos) {
+-                return !this.level.getBlockState(blockpos.below()).isAir();
++            public boolean isStableDestination(BlockPos pos) {
++                return !this.level.getBlockState(pos.below()).isAir();
+             }
+ 
+             @Override
+-            @Override
+             public void tick() {
+                 if (!Bee.this.beePollinateGoal.isPollinating()) {
+                     super.tick();
+@@ -586,75 +580,64 @@
+             }
+         };
+ 
+-        flyingpathnavigation.setCanOpenDoors(false);
+-        flyingpathnavigation.setCanFloat(false);
+-        flyingpathnavigation.setCanPassDoors(true);
+-        return flyingpathnavigation;
++        navigationflying.setCanOpenDoors(false);
++        navigationflying.setCanFloat(false);
++        navigationflying.setCanPassDoors(true);
++        return navigationflying;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isFood(ItemStack itemstack) {
+-        return itemstack.is(ItemTags.FLOWERS);
++    public boolean isFood(ItemStack stack) {
++        return stack.is(ItemTags.FLOWERS);
+     }
+ 
+-    boolean isFlowerValid(BlockPos blockpos) {
+-        return this.level().isLoaded(blockpos) && this.level().getBlockState(blockpos).is(BlockTags.FLOWERS);
++    boolean isFlowerValid(BlockPos pos) {
++        return this.level().isLoaded(pos) && this.level().getBlockState(pos).is(BlockTags.FLOWERS);
+     }
+ 
+     @Override
+-    @Override
+-    protected void playStepSound(BlockPos blockpos, BlockState blockstate) {}
++    protected void playStepSound(BlockPos pos, IBlockData block) {}
+ 
+     @Override
+-    @Override
+     protected SoundEvent getAmbientSound() {
+         return null;
+     }
+ 
+     @Override
+-    @Override
+-    protected SoundEvent getHurtSound(DamageSource damagesource) {
++    protected SoundEvent getHurtSound(DamageSource damageSource) {
+         return SoundEvents.BEE_HURT;
+     }
+ 
+     @Override
+-    @Override
+     protected SoundEvent getDeathSound() {
+         return SoundEvents.BEE_DEATH;
+     }
+ 
+     @Override
+-    @Override
+     protected float getSoundVolume() {
+         return 0.4F;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public Bee getBreedOffspring(ServerLevel serverlevel, AgeableMob ageablemob) {
+-        return (Bee) EntityType.BEE.create(serverlevel);
++    public Bee getBreedOffspring(ServerLevel level, AgeableMob otherParent) {
++        return (Bee) EntityType.BEE.create(level);
+     }
+ 
+     @Override
+-    @Override
+-    protected float getStandingEyeHeight(Pose pose, EntityDimensions entitydimensions) {
+-        return this.isBaby() ? entitydimensions.height * 0.5F : entitydimensions.height * 0.5F;
++    protected float getStandingEyeHeight(EntityPose pose, EntityDimensions size) {
++        return this.isBaby() ? size.height * 0.5F : size.height * 0.5F;
+     }
+ 
+     @Override
+-    @Override
+-    protected void checkFallDamage(double d0, boolean flag, BlockState blockstate, BlockPos blockpos) {}
++    protected void checkFallDamage(double y, boolean flag, IBlockData onGround, BlockPos state) {}
+ 
+     @Override
+-    @Override
+     public boolean isFlapping() {
+         return this.isFlying() && this.tickCount % Bee.TICKS_PER_FLAP == 0;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isFlying() {
+         return !this.onGround();
+     }
+@@ -665,39 +648,38 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
+-        if (this.isInvulnerableTo(damagesource)) {
++    public boolean hurt(DamageSource source, float amount) {
++        if (this.isInvulnerableTo(source)) {
+             return false;
+         } else {
+-            if (!this.level().isClientSide) {
++            // CraftBukkit start - Only stop pollinating if entity was damaged
++            boolean result = super.hurt(source, amount);
++            if (result && !this.level().isClientSide) {
++            // CraftBukkit end
+                 this.beePollinateGoal.stopPollinating();
+             }
+ 
+-            return super.hurt(damagesource, f);
++            return result; // CraftBukkit
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public MobType getMobType() {
+-        return MobType.ARTHROPOD;
++    public EnumMonsterType getMobType() {
++        return EnumMonsterType.ARTHROPOD;
+     }
+ 
+     @Override
+-    @Override
+-    protected void jumpInLiquid(TagKey<Fluid> tagkey) {
++    protected void jumpInLiquid(TagKey<Fluid> fluidTag) {
+         this.setDeltaMovement(this.getDeltaMovement().add(0.0D, 0.01D, 0.0D));
+     }
+ 
+     @Override
+-    @Override
+     public Vec3 getLeashOffset() {
+         return new Vec3(0.0D, (double) (0.5F * this.getEyeHeight()), (double) (this.getBbWidth() * 0.2F));
+     }
+ 
+-    boolean closerThan(BlockPos blockpos, int i) {
+-        return blockpos.closerThan(this.blockPosition(), (double) i);
++    boolean closerThan(BlockPos pos, int distance) {
++        return pos.closerThan(this.blockPosition(), (double) distance);
+     }
+ 
+     private class BeePollinateGoal extends Bee.BaseBeeGoal {
+@@ -705,8 +687,8 @@
+         private static final int MIN_POLLINATION_TICKS = 400;
+         private static final int MIN_FIND_FLOWER_RETRY_COOLDOWN = 20;
+         private static final int MAX_FIND_FLOWER_RETRY_COOLDOWN = 60;
+-        private final Predicate<BlockState> VALID_POLLINATION_BLOCKS = (blockstate) -> {
+-            return blockstate.hasProperty(BlockStateProperties.WATERLOGGED) && (Boolean) blockstate.getValue(BlockStateProperties.WATERLOGGED) ? false : (blockstate.is(BlockTags.FLOWERS) ? (blockstate.is(Blocks.SUNFLOWER) ? blockstate.getValue(DoublePlantBlock.HALF) == DoubleBlockHalf.UPPER : true) : false);
++        private final Predicate<IBlockData> VALID_POLLINATION_BLOCKS = (iblockdata) -> {
++            return iblockdata.hasProperty(BlockStateProperties.WATERLOGGED) && (Boolean) iblockdata.getValue(BlockStateProperties.WATERLOGGED) ? false : (iblockdata.is(BlockTags.FLOWERS) ? (iblockdata.is(Blocks.SUNFLOWER) ? iblockdata.getValue(DoublePlantBlock.HALF) == BlockPropertyDoubleBlockHalf.UPPER : true) : false);
+         };
+         private static final double ARRIVAL_THRESHOLD = 0.1D;
+         private static final int POSITION_CHANGE_CHANCE = 25;
+@@ -723,11 +705,10 @@
+ 
+         BeePollinateGoal() {
+             super();
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             if (Bee.this.remainingCooldownBeforeLocatingNewFlower > 0) {
+                 return false;
+@@ -750,7 +731,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             if (!this.pollinating) {
+                 return false;
+@@ -781,7 +761,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+             this.successfulPollinatingTicks = 0;
+             this.pollinatingTicks = 0;
+@@ -791,7 +770,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void stop() {
+             if (this.hasPollinatedLongEnough()) {
+                 Bee.this.setHasNectar(true);
+@@ -803,26 +781,24 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean requiresUpdateEveryTick() {
+             return true;
+         }
+ 
+         @Override
+-        @Override
+         public void tick() {
+             ++this.pollinatingTicks;
+             if (this.pollinatingTicks > 600) {
+                 Bee.this.savedFlowerPos = null;
+             } else {
+-                Vec3 vec3 = Vec3.atBottomCenterOf(Bee.this.savedFlowerPos).add(0.0D, 0.6000000238418579D, 0.0D);
++                Vec3 vec3d = Vec3.atBottomCenterOf(Bee.this.savedFlowerPos).add(0.0D, 0.6000000238418579D, 0.0D);
+ 
+-                if (vec3.distanceTo(Bee.this.position()) > 1.0D) {
+-                    this.hoverPos = vec3;
++                if (vec3d.distanceTo(Bee.this.position()) > 1.0D) {
++                    this.hoverPos = vec3d;
+                     this.setWantedPos();
+                 } else {
+                     if (this.hoverPos == null) {
+-                        this.hoverPos = vec3;
++                        this.hoverPos = vec3d;
+                     }
+ 
+                     boolean flag = Bee.this.position().distanceTo(this.hoverPos) <= 0.1D;
+@@ -835,13 +811,13 @@
+                             boolean flag2 = Bee.this.random.nextInt(25) == 0;
+ 
+                             if (flag2) {
+-                                this.hoverPos = new Vec3(vec3.x() + (double) this.getOffset(), vec3.y(), vec3.z() + (double) this.getOffset());
++                                this.hoverPos = new Vec3(vec3d.x() + (double) this.getOffset(), vec3d.y(), vec3d.z() + (double) this.getOffset());
+                                 Bee.this.navigation.stop();
+                             } else {
+                                 flag1 = false;
+                             }
+ 
+-                            Bee.this.getLookControl().setLookAt(vec3.x(), vec3.y(), vec3.z());
++                            Bee.this.getLookControl().setLookAt(vec3d.x(), vec3d.y(), vec3d.z());
+                         }
+ 
+                         if (flag1) {
+@@ -871,17 +847,17 @@
+             return this.findNearestBlock(this.VALID_POLLINATION_BLOCKS, 5.0D);
+         }
+ 
+-        private Optional<BlockPos> findNearestBlock(Predicate<BlockState> predicate, double d0) {
+-            BlockPos blockpos = Bee.this.blockPosition();
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
++        private Optional<BlockPos> findNearestBlock(Predicate<IBlockData> predicate, double distance) {
++            BlockPos blockposition = Bee.this.blockPosition();
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+ 
+-            for (int i = 0; (double) i <= d0; i = i > 0 ? -i : 1 - i) {
+-                for (int j = 0; (double) j < d0; ++j) {
++            for (int i = 0; (double) i <= distance; i = i > 0 ? -i : 1 - i) {
++                for (int j = 0; (double) j < distance; ++j) {
+                     for (int k = 0; k <= j; k = k > 0 ? -k : 1 - k) {
+                         for (int l = k < j && k > -j ? j : 0; l <= j; l = l > 0 ? -l : 1 - l) {
+-                            blockpos_mutableblockpos.setWithOffset(blockpos, k, i - 1, l);
+-                            if (blockpos.closerThan(blockpos_mutableblockpos, d0) && predicate.test(Bee.this.level().getBlockState(blockpos_mutableblockpos))) {
+-                                return Optional.of(blockpos_mutableblockpos);
++                            blockposition_mutableblockposition.setWithOffset(blockposition, k, i - 1, l);
++                            if (blockposition.closerThan(blockposition_mutableblockposition, distance) && predicate.test(Bee.this.level().getBlockState(blockposition_mutableblockposition))) {
++                                return Optional.of(blockposition_mutableblockposition);
+                             }
+                         }
+                     }
+@@ -899,7 +875,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void tick() {
+             if (!Bee.this.isAngry()) {
+                 super.tick();
+@@ -907,7 +882,6 @@
+         }
+ 
+         @Override
+-        @Override
+         protected boolean resetXRotOnTick() {
+             return !Bee.this.beePollinateGoal.isPollinating();
+         }
+@@ -915,18 +889,16 @@
+ 
+     private class BeeAttackGoal extends MeleeAttackGoal {
+ 
+-        BeeAttackGoal(PathfinderMob pathfindermob, double d0, boolean flag) {
+-            super(pathfindermob, d0, flag);
++        BeeAttackGoal(PathfinderMob mob, double speedModifier, boolean flag) {
++            super(mob, speedModifier, flag);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canUse() {
+             return super.canUse() && Bee.this.isAngry() && !Bee.this.hasStung();
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             return super.canContinueToUse() && Bee.this.isAngry() && !Bee.this.hasStung();
+         }
+@@ -939,15 +911,14 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             if (Bee.this.hasHive() && Bee.this.wantsToEnterHive() && Bee.this.hivePos.closerToCenterThan(Bee.this.position(), 2.0D)) {
+-                BlockEntity blockentity = Bee.this.level().getBlockEntity(Bee.this.hivePos);
++                BlockEntity tileentity = Bee.this.level().getBlockEntity(Bee.this.hivePos);
+ 
+-                if (blockentity instanceof BeehiveBlockEntity) {
+-                    BeehiveBlockEntity beehiveblockentity = (BeehiveBlockEntity) blockentity;
++                if (tileentity instanceof BeehiveBlockEntity) {
++                    BeehiveBlockEntity tileentitybeehive = (BeehiveBlockEntity) tileentity;
+ 
+-                    if (!beehiveblockentity.isFull()) {
++                    if (!tileentitybeehive.isFull()) {
+                         return true;
+                     }
+ 
+@@ -959,20 +930,18 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             return false;
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+-            BlockEntity blockentity = Bee.this.level().getBlockEntity(Bee.this.hivePos);
++            BlockEntity tileentity = Bee.this.level().getBlockEntity(Bee.this.hivePos);
+ 
+-            if (blockentity instanceof BeehiveBlockEntity) {
+-                BeehiveBlockEntity beehiveblockentity = (BeehiveBlockEntity) blockentity;
++            if (tileentity instanceof BeehiveBlockEntity) {
++                BeehiveBlockEntity tileentitybeehive = (BeehiveBlockEntity) tileentity;
+ 
+-                beehiveblockentity.addOccupant(Bee.this, Bee.this.hasNectar());
++                tileentitybeehive.addOccupant(Bee.this, Bee.this.hasNectar());
+             }
+ 
+         }
+@@ -985,19 +954,16 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             return Bee.this.remainingCooldownBeforeLocatingNewHive == 0 && !Bee.this.hasHive() && Bee.this.wantsToEnterHive();
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             return false;
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+             Bee.this.remainingCooldownBeforeLocatingNewHive = 200;
+             List<BlockPos> list = this.findNearbyHivesWithSpace();
+@@ -1005,7 +971,7 @@
+             if (!list.isEmpty()) {
+                 Iterator iterator = list.iterator();
+ 
+-                BlockPos blockpos;
++                BlockPos blockposition;
+ 
+                 do {
+                     if (!iterator.hasNext()) {
+@@ -1014,22 +980,22 @@
+                         return;
+                     }
+ 
+-                    blockpos = (BlockPos) iterator.next();
+-                } while (Bee.this.goToHiveGoal.isTargetBlacklisted(blockpos));
++                    blockposition = (BlockPos) iterator.next();
++                } while (Bee.this.goToHiveGoal.isTargetBlacklisted(blockposition));
+ 
+-                Bee.this.hivePos = blockpos;
++                Bee.this.hivePos = blockposition;
+             }
+         }
+ 
+         private List<BlockPos> findNearbyHivesWithSpace() {
+-            BlockPos blockpos = Bee.this.blockPosition();
+-            PoiManager poimanager = ((ServerLevel) Bee.this.level()).getPoiManager();
+-            Stream<PoiRecord> stream = poimanager.getInRange((holder) -> {
++            BlockPos blockposition = Bee.this.blockPosition();
++            PoiManager villageplace = ((ServerLevel) Bee.this.level()).getPoiManager();
++            Stream<PoiRecord> stream = villageplace.getInRange((holder) -> {
+                 return holder.is(PoiTypeTags.BEE_HOME);
+-            }, blockpos, 20, PoiManager.Occupancy.ANY);
++            }, blockposition, 20, PoiManager.Occupancy.ANY);
+ 
+-            return (List) stream.map(PoiRecord::getPos).filter(Bee.this::doesHiveHaveSpace).sorted(Comparator.comparingDouble((blockpos1) -> {
+-                return blockpos1.distSqr(blockpos);
++            return (List) stream.map(PoiRecord::getPos).filter(Bee.this::doesHiveHaveSpace).sorted(Comparator.comparingDouble((blockposition1) -> {
++                return blockposition1.distSqr(blockposition);
+             })).collect(Collectors.toList());
+         }
+     }
+@@ -1048,25 +1014,22 @@
+ 
+         BeeGoToHiveGoal() {
+             super();
+-            this.travellingTicks = Bee.this.level().random.nextInt(10);
++            this.travellingTicks = Bee.this.random.nextInt(10); // CraftBukkit - SPIGOT-7495: Give Bees another chance and let them use their own random, avoid concurrency issues
+             this.blacklistedTargets = Lists.newArrayList();
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             return Bee.this.hivePos != null && !Bee.this.hasRestriction() && Bee.this.wantsToEnterHive() && !this.hasReachedTarget(Bee.this.hivePos) && Bee.this.level().getBlockState(Bee.this.hivePos).is(BlockTags.BEEHIVES);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             return this.canBeeUse();
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+             this.travellingTicks = 0;
+             this.ticksStuck = 0;
+@@ -1074,7 +1037,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void stop() {
+             this.travellingTicks = 0;
+             this.ticksStuck = 0;
+@@ -1083,7 +1045,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void tick() {
+             if (Bee.this.hivePos != null) {
+                 ++this.travellingTicks;
+@@ -1116,18 +1077,18 @@
+             }
+         }
+ 
+-        private boolean pathfindDirectlyTowards(BlockPos blockpos) {
++        private boolean pathfindDirectlyTowards(BlockPos pos) {
+             Bee.this.navigation.setMaxVisitedNodesMultiplier(10.0F);
+-            Bee.this.navigation.moveTo((double) blockpos.getX(), (double) blockpos.getY(), (double) blockpos.getZ(), 1.0D);
++            Bee.this.navigation.moveTo((double) pos.getX(), (double) pos.getY(), (double) pos.getZ(), 1.0D);
+             return Bee.this.navigation.getPath() != null && Bee.this.navigation.getPath().canReach();
+         }
+ 
+-        boolean isTargetBlacklisted(BlockPos blockpos) {
+-            return this.blacklistedTargets.contains(blockpos);
++        boolean isTargetBlacklisted(BlockPos pos) {
++            return this.blacklistedTargets.contains(pos);
+         }
+ 
+-        private void blacklistTarget(BlockPos blockpos) {
+-            this.blacklistedTargets.add(blockpos);
++        private void blacklistTarget(BlockPos pos) {
++            this.blacklistedTargets.add(pos);
+ 
+             while (this.blacklistedTargets.size() > 3) {
+                 this.blacklistedTargets.remove(0);
+@@ -1152,13 +1113,13 @@
+             Bee.this.remainingCooldownBeforeLocatingNewHive = 200;
+         }
+ 
+-        private boolean hasReachedTarget(BlockPos blockpos) {
+-            if (Bee.this.closerThan(blockpos, 2)) {
++        private boolean hasReachedTarget(BlockPos pos) {
++            if (Bee.this.closerThan(pos, 2)) {
+                 return true;
+             } else {
+-                Path path = Bee.this.navigation.getPath();
++                Path pathentity = Bee.this.navigation.getPath();
+ 
+-                return path != null && path.getTarget().equals(blockpos) && path.canReach() && path.isDone();
++                return pathentity != null && pathentity.getTarget().equals(pos) && pathentity.canReach() && pathentity.isDone();
+             }
+         }
+     }
+@@ -1170,31 +1131,27 @@
+ 
+         BeeGoToKnownFlowerGoal() {
+             super();
+-            this.travellingTicks = Bee.this.level().random.nextInt(10);
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++            this.travellingTicks = Bee.this.random.nextInt(10); // CraftBukkit - SPIGOT-7495: Give Bees another chance and let them use their own random, avoid concurrency issues
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             return Bee.this.savedFlowerPos != null && !Bee.this.hasRestriction() && this.wantsToGoToKnownFlower() && Bee.this.isFlowerValid(Bee.this.savedFlowerPos) && !Bee.this.closerThan(Bee.this.savedFlowerPos, 2);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             return this.canBeeUse();
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+             this.travellingTicks = 0;
+             super.start();
+         }
+ 
+         @Override
+-        @Override
+         public void stop() {
+             this.travellingTicks = 0;
+             Bee.this.navigation.stop();
+@@ -1202,7 +1159,6 @@
+         }
+ 
+         @Override
+-        @Override
+         public void tick() {
+             if (Bee.this.savedFlowerPos != null) {
+                 ++this.travellingTicks;
+@@ -1232,55 +1188,52 @@
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeUse() {
+             return Bee.this.getCropsGrownSincePollination() >= 10 ? false : (Bee.this.random.nextFloat() < 0.3F ? false : Bee.this.hasNectar() && Bee.this.isHiveValid());
+         }
+ 
+         @Override
+-        @Override
+         public boolean canBeeContinueToUse() {
+             return this.canBeeUse();
+         }
+ 
+         @Override
+-        @Override
+         public void tick() {
+             if (Bee.this.random.nextInt(this.adjustedTickDelay(30)) == 0) {
+                 for (int i = 1; i <= 2; ++i) {
+-                    BlockPos blockpos = Bee.this.blockPosition().below(i);
+-                    BlockState blockstate = Bee.this.level().getBlockState(blockpos);
+-                    Block block = blockstate.getBlock();
+-                    BlockState blockstate1 = null;
++                    BlockPos blockposition = Bee.this.blockPosition().below(i);
++                    IBlockData iblockdata = Bee.this.level().getBlockState(blockposition);
++                    Block block = iblockdata.getBlock();
++                    IBlockData iblockdata1 = null;
+ 
+-                    if (blockstate.is(BlockTags.BEE_GROWABLES)) {
++                    if (iblockdata.is(BlockTags.BEE_GROWABLES)) {
+                         if (block instanceof CropBlock) {
+-                            CropBlock cropblock = (CropBlock) block;
++                            CropBlock blockcrops = (CropBlock) block;
+ 
+-                            if (!cropblock.isMaxAge(blockstate)) {
+-                                blockstate1 = cropblock.getStateForAge(cropblock.getAge(blockstate) + 1);
++                            if (!blockcrops.isMaxAge(iblockdata)) {
++                                iblockdata1 = blockcrops.getStateForAge(blockcrops.getAge(iblockdata) + 1);
+                             }
+                         } else {
+                             int j;
+ 
+                             if (block instanceof StemBlock) {
+-                                j = (Integer) blockstate.getValue(StemBlock.AGE);
++                                j = (Integer) iblockdata.getValue(StemBlock.AGE);
+                                 if (j < 7) {
+-                                    blockstate1 = (BlockState) blockstate.setValue(StemBlock.AGE, j + 1);
++                                    iblockdata1 = (IBlockData) iblockdata.setValue(StemBlock.AGE, j + 1);
+                                 }
+-                            } else if (blockstate.is(Blocks.SWEET_BERRY_BUSH)) {
+-                                j = (Integer) blockstate.getValue(SweetBerryBushBlock.AGE);
++                            } else if (iblockdata.is(Blocks.SWEET_BERRY_BUSH)) {
++                                j = (Integer) iblockdata.getValue(SweetBerryBushBlock.AGE);
+                                 if (j < 3) {
+-                                    blockstate1 = (BlockState) blockstate.setValue(SweetBerryBushBlock.AGE, j + 1);
++                                    iblockdata1 = (IBlockData) iblockdata.setValue(SweetBerryBushBlock.AGE, j + 1);
+                                 }
+-                            } else if (blockstate.is(Blocks.CAVE_VINES) || blockstate.is(Blocks.CAVE_VINES_PLANT)) {
+-                                ((BonemealableBlock) blockstate.getBlock()).performBonemeal((ServerLevel) Bee.this.level(), Bee.this.random, blockpos, blockstate);
++                            } else if (iblockdata.is(Blocks.CAVE_VINES) || iblockdata.is(Blocks.CAVE_VINES_PLANT)) {
++                                ((BonemealableBlock) iblockdata.getBlock()).performBonemeal((ServerLevel) Bee.this.level(), Bee.this.random, blockposition, iblockdata);
+                             }
+                         }
+ 
+-                        if (blockstate1 != null) {
+-                            Bee.this.level().levelEvent(2005, blockpos, 0);
+-                            Bee.this.level().setBlockAndUpdate(blockpos, blockstate1);
++                        if (iblockdata1 != null && CraftEventFactory.callEntityChangeBlockEvent(Bee.this, blockposition, iblockdata1)) { // CraftBukkit
++                            Bee.this.level().levelEvent(2005, blockposition, 0);
++                            Bee.this.level().setBlockAndUpdate(blockposition, iblockdata1);
+                             Bee.this.incrementNumCropsGrownSincePollination();
+                         }
+                     }
+@@ -1295,68 +1248,63 @@
+         private static final int WANDER_THRESHOLD = 22;
+ 
+         BeeWanderGoal() {
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+-        @Override
+         public boolean canUse() {
+             return Bee.this.navigation.isDone() && Bee.this.random.nextInt(10) == 0;
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             return Bee.this.navigation.isInProgress();
+         }
+ 
+         @Override
+-        @Override
+         public void start() {
+-            Vec3 vec3 = this.findPos();
++            Vec3 vec3d = this.findPos();
+ 
+-            if (vec3 != null) {
+-                Bee.this.navigation.moveTo(Bee.this.navigation.createPath(BlockPos.containing(vec3), 1), 1.0D);
++            if (vec3d != null) {
++                Bee.this.navigation.moveTo(Bee.this.navigation.createPath(BlockPos.containing(vec3d), 1), 1.0D);
+             }
+ 
+         }
+ 
+         @Nullable
+         private Vec3 findPos() {
+-            Vec3 vec3;
++            Vec3 vec3d;
+ 
+             if (Bee.this.isHiveValid() && !Bee.this.closerThan(Bee.this.hivePos, 22)) {
+-                Vec3 vec31 = Vec3.atCenterOf(Bee.this.hivePos);
++                Vec3 vec3d1 = Vec3.atCenterOf(Bee.this.hivePos);
+ 
+-                vec3 = vec31.subtract(Bee.this.position()).normalize();
++                vec3d = vec3d1.subtract(Bee.this.position()).normalize();
+             } else {
+-                vec3 = Bee.this.getViewVector(0.0F);
++                vec3d = Bee.this.getViewVector(0.0F);
+             }
+ 
+             boolean flag = true;
+-            Vec3 vec32 = HoverRandomPos.getPos(Bee.this, 8, 7, vec3.x, vec3.z, 1.5707964F, 3, 1);
++            Vec3 vec3d2 = HoverRandomPos.getPos(Bee.this, 8, 7, vec3d.x, vec3d.z, 1.5707964F, 3, 1);
+ 
+-            return vec32 != null ? vec32 : AirAndWaterRandomPos.getPos(Bee.this, 8, 4, -2, vec3.x, vec3.z, 1.5707963705062866D);
++            return vec3d2 != null ? vec3d2 : AirAndWaterRandomPos.getPos(Bee.this, 8, 4, -2, vec3d.x, vec3d.z, 1.5707963705062866D);
+         }
+     }
+ 
+     private class BeeHurtByOtherGoal extends HurtByTargetGoal {
+ 
+-        BeeHurtByOtherGoal(Bee bee) {
+-            super(bee);
++        BeeHurtByOtherGoal(Bee entitybee) {
++            super(entitybee);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             return Bee.this.isAngry() && super.canContinueToUse();
+         }
+ 
+         @Override
+-        @Override
+-        protected void alertOther(Mob mob, LivingEntity livingentity) {
+-            if (mob instanceof Bee && this.mob.hasLineOfSight(livingentity)) {
+-                mob.setTarget(livingentity);
++        protected void alertOther(Mob mob, LivingEntity target) {
++            if (mob instanceof Bee && this.mob.hasLineOfSight(target)) {
++                mob.setTarget(target, EntityTargetEvent.TargetReason.TARGET_ATTACKED_ENTITY, true); // CraftBukkit - reason
+             }
+ 
+         }
+@@ -1364,19 +1312,17 @@
+ 
+     private static class BeeBecomeAngryTargetGoal extends NearestAttackableTargetGoal<Player> {
+ 
+-        BeeBecomeAngryTargetGoal(Bee bee) {
+-            Objects.requireNonNull(bee);
+-            super(bee, Player.class, 10, true, false, bee::isAngryAt);
++        BeeBecomeAngryTargetGoal(Bee mob) {
++            // Objects.requireNonNull(entitybee); // CraftBukkit - decompile error
++            super(mob, Player.class, 10, true, false, mob::isAngryAt);
+         }
+ 
+         @Override
+-        @Override
+         public boolean canUse() {
+             return this.beeCanTarget() && super.canUse();
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             boolean flag = this.beeCanTarget();
+ 
+@@ -1389,9 +1335,9 @@
+         }
+ 
+         private boolean beeCanTarget() {
+-            Bee bee = (Bee) this.mob;
++            Bee entitybee = (Bee) this.mob;
+ 
+-            return bee.isAngry() && !bee.hasStung();
++            return entitybee.isAngry() && !entitybee.hasStung();
+         }
+     }
+ 
+@@ -1404,13 +1350,11 @@
+         public abstract boolean canBeeContinueToUse();
+ 
+         @Override
+-        @Override
+         public boolean canUse() {
+             return this.canBeeUse() && !Bee.this.isAngry();
+         }
+ 
+         @Override
+-        @Override
+         public boolean canContinueToUse() {
+             return this.canBeeContinueToUse() && !Bee.this.isAngry();
+         }

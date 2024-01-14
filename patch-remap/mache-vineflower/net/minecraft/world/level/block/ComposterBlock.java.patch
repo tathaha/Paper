@@ -1,0 +1,486 @@
+--- a/net/minecraft/world/level/block/ComposterBlock.java
++++ b/net/minecraft/world/level/block/ComposterBlock.java
+@@ -13,7 +13,7 @@
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+ import net.minecraft.util.RandomSource;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.SimpleContainer;
+ import net.minecraft.world.WorldlyContainer;
+@@ -24,52 +24,58 @@
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.level.BlockGetter;
+-import net.minecraft.world.level.ItemLike;
++import net.minecraft.world.level.IMaterial;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.IntegerProperty;
+ import net.minecraft.world.level.gameevent.GameEvent;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.Vec3;
+ import net.minecraft.world.phys.shapes.BooleanOp;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.Shapes;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++// CraftBukkit start
++import org.bukkit.craftbukkit.inventory.CraftBlockInventoryHolder;
++import org.bukkit.craftbukkit.util.DummyGeneratorAccess;
++// CraftBukkit end
+ 
+ public class ComposterBlock extends Block implements WorldlyContainerHolder {
++
+     public static final MapCodec<ComposterBlock> CODEC = simpleCodec(ComposterBlock::new);
+     public static final int READY = 8;
+     public static final int MIN_LEVEL = 0;
+     public static final int MAX_LEVEL = 7;
+     public static final IntegerProperty LEVEL = BlockStateProperties.LEVEL_COMPOSTER;
+-    public static final Object2FloatMap<ItemLike> COMPOSTABLES = new Object2FloatOpenHashMap<>();
++    public static final Object2FloatMap<IMaterial> COMPOSTABLES = new Object2FloatOpenHashMap();
+     private static final int AABB_SIDE_THICKNESS = 2;
+     private static final VoxelShape OUTER_SHAPE = Shapes.block();
+-    private static final VoxelShape[] SHAPES = Util.make(new VoxelShape[9], shapes -> {
+-        for (int i = 0; i < 8; i++) {
+-            shapes[i] = Shapes.join(OUTER_SHAPE, Block.box(2.0, (double)Math.max(2, 1 + i * 2), 2.0, 14.0, 16.0, 14.0), BooleanOp.ONLY_FIRST);
++    private static final VoxelShape[] SHAPES = (VoxelShape[]) Util.make(new VoxelShape[9], (avoxelshape) -> {
++        for (int i = 0; i < 8; ++i) {
++            avoxelshape[i] = Shapes.join(ComposterBlock.OUTER_SHAPE, Block.box(2.0D, (double) Math.max(2, 1 + i * 2), 2.0D, 14.0D, 16.0D, 14.0D), BooleanOp.ONLY_FIRST);
+         }
+ 
+-        shapes[8] = shapes[7];
++        avoxelshape[8] = avoxelshape[7];
+     });
+ 
+     @Override
+     public MapCodec<ComposterBlock> codec() {
+-        return CODEC;
++        return ComposterBlock.CODEC;
+     }
+ 
+     public static void bootStrap() {
+-        COMPOSTABLES.defaultReturnValue(-1.0F);
++        ComposterBlock.COMPOSTABLES.defaultReturnValue(-1.0F);
+         float f = 0.3F;
+         float f1 = 0.5F;
+         float f2 = 0.65F;
+         float f3 = 0.85F;
+         float f4 = 1.0F;
++
+         add(0.3F, Items.JUNGLE_LEAVES);
+         add(0.3F, Items.OAK_LEAVES);
+         add(0.3F, Items.SPRUCE_LEAVES);
+@@ -173,72 +179,70 @@
+         add(1.0F, Items.PUMPKIN_PIE);
+     }
+ 
+-    private static void add(float chance, ItemLike item) {
+-        COMPOSTABLES.put(item.asItem(), chance);
++    private static void add(float chance, IMaterial item) {
++        ComposterBlock.COMPOSTABLES.put(item.asItem(), chance);
+     }
+ 
+     public ComposterBlock(BlockBehaviour.Properties properties) {
+         super(properties);
+-        this.registerDefaultState(this.stateDefinition.any().setValue(LEVEL, Integer.valueOf(0)));
++        this.registerDefaultState((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(ComposterBlock.LEVEL, 0));
+     }
+ 
+     public static void handleFill(Level level, BlockPos pos, boolean success) {
+-        BlockState blockState = level.getBlockState(pos);
++        IBlockData iblockdata = level.getBlockState(pos);
++
+         level.playLocalSound(pos, success ? SoundEvents.COMPOSTER_FILL_SUCCESS : SoundEvents.COMPOSTER_FILL, SoundSource.BLOCKS, 1.0F, 1.0F, false);
+-        double d = blockState.getShape(level, pos).max(Direction.Axis.Y, 0.5, 0.5) + 0.03125;
+-        double d1 = 0.13125F;
+-        double d2 = 0.7375F;
+-        RandomSource random = level.getRandom();
++        double d0 = iblockdata.getShape(level, pos).max(Direction.Axis.Y, 0.5D, 0.5D) + 0.03125D;
++        double d1 = 0.13124999403953552D;
++        double d2 = 0.737500011920929D;
++        RandomSource randomsource = level.getRandom();
+ 
+-        for (int i = 0; i < 10; i++) {
+-            double d3 = random.nextGaussian() * 0.02;
+-            double d4 = random.nextGaussian() * 0.02;
+-            double d5 = random.nextGaussian() * 0.02;
+-            level.addParticle(
+-                ParticleTypes.COMPOSTER,
+-                (double)pos.getX() + 0.13125F + 0.7375F * (double)random.nextFloat(),
+-                (double)pos.getY() + d + (double)random.nextFloat() * (1.0 - d),
+-                (double)pos.getZ() + 0.13125F + 0.7375F * (double)random.nextFloat(),
+-                d3,
+-                d4,
+-                d5
+-            );
++        for (int i = 0; i < 10; ++i) {
++            double d3 = randomsource.nextGaussian() * 0.02D;
++            double d4 = randomsource.nextGaussian() * 0.02D;
++            double d5 = randomsource.nextGaussian() * 0.02D;
++
++            level.addParticle(ParticleTypes.COMPOSTER, (double) pos.getX() + 0.13124999403953552D + 0.737500011920929D * (double) randomsource.nextFloat(), (double) pos.getY() + d0 + (double) randomsource.nextFloat() * (1.0D - d0), (double) pos.getZ() + 0.13124999403953552D + 0.737500011920929D * (double) randomsource.nextFloat(), d3, d4, d5);
+         }
++
+     }
+ 
+     @Override
+-    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+-        return SHAPES[state.getValue(LEVEL)];
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return ComposterBlock.SHAPES[(Integer) state.getValue(ComposterBlock.LEVEL)];
+     }
+ 
+     @Override
+-    public VoxelShape getInteractionShape(BlockState state, BlockGetter level, BlockPos pos) {
+-        return OUTER_SHAPE;
++    public VoxelShape getInteractionShape(IBlockData state, BlockGetter level, BlockPos pos) {
++        return ComposterBlock.OUTER_SHAPE;
+     }
+ 
+     @Override
+-    public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+-        return SHAPES[0];
++    public VoxelShape getCollisionShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        return ComposterBlock.SHAPES[0];
+     }
+ 
+     @Override
+-    public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+-        if (state.getValue(LEVEL) == 7) {
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
++        if ((Integer) state.getValue(ComposterBlock.LEVEL) == 7) {
+             level.scheduleTick(pos, state.getBlock(), 20);
+         }
++
+     }
+ 
+     @Override
+-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
+-        int i = state.getValue(LEVEL);
+-        ItemStack itemInHand = player.getItemInHand(hand);
+-        if (i < 8 && COMPOSTABLES.containsKey(itemInHand.getItem())) {
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
++        int i = (Integer) state.getValue(ComposterBlock.LEVEL);
++        ItemStack itemstack = player.getItemInHand(hand);
++
++        if (i < 8 && ComposterBlock.COMPOSTABLES.containsKey(itemstack.getItem())) {
+             if (i < 7 && !level.isClientSide) {
+-                BlockState blockState = addItem(player, state, level, pos, itemInHand);
+-                level.levelEvent(1500, pos, state != blockState ? 1 : 0);
+-                player.awardStat(Stats.ITEM_USED.get(itemInHand.getItem()));
++                IBlockData iblockdata1 = addItem(player, state, level, pos, itemstack);
++
++                level.levelEvent(1500, pos, state != iblockdata1 ? 1 : 0);
++                player.awardStat(Stats.ITEM_USED.get(itemstack.getItem()));
+                 if (!player.getAbilities().instabuild) {
+-                    itemInHand.shrink(1);
++                    itemstack.shrink(1);
+                 }
+             }
+ 
+@@ -251,101 +255,143 @@
+         }
+     }
+ 
+-    public static BlockState insertItem(Entity entity, BlockState state, ServerLevel level, ItemStack stack, BlockPos pos) {
+-        int i = state.getValue(LEVEL);
+-        if (i < 7 && COMPOSTABLES.containsKey(stack.getItem())) {
+-            BlockState blockState = addItem(entity, state, level, pos, stack);
++    public static IBlockData insertItem(Entity entity, IBlockData state, ServerLevel level, ItemStack stack, BlockPos pos) {
++        int i = (Integer) state.getValue(ComposterBlock.LEVEL);
++
++        if (i < 7 && ComposterBlock.COMPOSTABLES.containsKey(stack.getItem())) {
++            // CraftBukkit start
++            double rand = level.getRandom().nextDouble();
++            IBlockData iblockdata1 = addItem(entity, state, DummyGeneratorAccess.INSTANCE, pos, stack, rand);
++            if (state == iblockdata1 || !org.bukkit.craftbukkit.event.CraftEventFactory.callEntityChangeBlockEvent(entity, pos, iblockdata1)) {
++                return state;
++            }
++            iblockdata1 = addItem(entity, state, level, pos, stack, rand);
++            // CraftBukkit end
++
+             stack.shrink(1);
+-            return blockState;
++            return iblockdata1;
+         } else {
+             return state;
+         }
+     }
+ 
+-    public static BlockState extractProduce(Entity entity, BlockState state, Level level, BlockPos pos) {
++    public static IBlockData extractProduce(Entity entity, IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        if (entity != null && !(entity instanceof Player)) {
++            IBlockData iblockdata1 = empty(entity, state, DummyGeneratorAccess.INSTANCE, pos);
++            if (!org.bukkit.craftbukkit.event.CraftEventFactory.callEntityChangeBlockEvent(entity, pos, iblockdata1)) {
++                return state;
++            }
++        }
++        // CraftBukkit end
+         if (!level.isClientSide) {
+-            Vec3 vec3 = Vec3.atLowerCornerWithOffset(pos, 0.5, 1.01, 0.5).offsetRandom(level.random, 0.7F);
+-            ItemEntity itemEntity = new ItemEntity(level, vec3.x(), vec3.y(), vec3.z(), new ItemStack(Items.BONE_MEAL));
+-            itemEntity.setDefaultPickUpDelay();
+-            level.addFreshEntity(itemEntity);
++            Vec3 vec3d = Vec3.atLowerCornerWithOffset(pos, 0.5D, 1.01D, 0.5D).offsetRandom(level.random, 0.7F);
++            ItemEntity entityitem = new ItemEntity(level, vec3d.x(), vec3d.y(), vec3d.z(), new ItemStack(Items.BONE_MEAL));
++
++            entityitem.setDefaultPickUpDelay();
++            level.addFreshEntity(entityitem);
+         }
+ 
+-        BlockState blockState = empty(entity, state, level, pos);
+-        level.playSound(null, pos, SoundEvents.COMPOSTER_EMPTY, SoundSource.BLOCKS, 1.0F, 1.0F);
+-        return blockState;
++        IBlockData iblockdata1 = empty(entity, state, level, pos);
++
++        level.playSound((Player) null, pos, SoundEvents.COMPOSTER_EMPTY, SoundSource.BLOCKS, 1.0F, 1.0F);
++        return iblockdata1;
+     }
+ 
+-    static BlockState empty(@Nullable Entity entity, BlockState state, LevelAccessor level, BlockPos pos) {
+-        BlockState blockState = state.setValue(LEVEL, Integer.valueOf(0));
+-        level.setBlock(pos, blockState, 3);
+-        level.gameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Context.of(entity, blockState));
+-        return blockState;
++    static IBlockData empty(@Nullable Entity entity, IBlockData state, LevelAccessor level, BlockPos pos) {
++        IBlockData iblockdata1 = (IBlockData) state.setValue(ComposterBlock.LEVEL, 0);
++
++        level.setBlock(pos, iblockdata1, 3);
++        level.gameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Context.of(entity, iblockdata1));
++        return iblockdata1;
+     }
+ 
+-    static BlockState addItem(@Nullable Entity entity, BlockState state, LevelAccessor level, BlockPos pos, ItemStack stack) {
+-        int i = state.getValue(LEVEL);
+-        float _float = COMPOSTABLES.getFloat(stack.getItem());
+-        if ((i != 0 || !(_float > 0.0F)) && !(level.getRandom().nextDouble() < (double)_float)) {
+-            return state;
++    static IBlockData addItem(@Nullable Entity entity, IBlockData state, LevelAccessor level, BlockPos pos, ItemStack stack) {
++        // CraftBukkit start
++        return addItem(entity, state, level, pos, stack, level.getRandom().nextDouble());
++    }
++
++    static IBlockData addItem(@Nullable Entity entity, IBlockData iblockdata, LevelAccessor generatoraccess, BlockPos blockposition, ItemStack itemstack, double rand) {
++        // CraftBukkit end
++        int i = (Integer) iblockdata.getValue(ComposterBlock.LEVEL);
++        float f = ComposterBlock.COMPOSTABLES.getFloat(itemstack.getItem());
++
++        if ((i != 0 || f <= 0.0F) && rand >= (double) f) {
++            return iblockdata;
+         } else {
+-            int i1 = i + 1;
+-            BlockState blockState = state.setValue(LEVEL, Integer.valueOf(i1));
+-            level.setBlock(pos, blockState, 3);
+-            level.gameEvent(GameEvent.BLOCK_CHANGE, pos, GameEvent.Context.of(entity, blockState));
+-            if (i1 == 7) {
+-                level.scheduleTick(pos, state.getBlock(), 20);
++            int j = i + 1;
++            IBlockData iblockdata1 = (IBlockData) iblockdata.setValue(ComposterBlock.LEVEL, j);
++
++            generatoraccess.setBlock(blockposition, iblockdata1, 3);
++            generatoraccess.gameEvent(GameEvent.BLOCK_CHANGE, blockposition, GameEvent.Context.of(entity, iblockdata1));
++            if (j == 7) {
++                generatoraccess.scheduleTick(blockposition, iblockdata.getBlock(), 20);
+             }
+ 
+-            return blockState;
++            return iblockdata1;
+         }
+     }
+ 
+     @Override
+-    public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+-        if (state.getValue(LEVEL) == 7) {
+-            level.setBlock(pos, state.cycle(LEVEL), 3);
+-            level.playSound(null, pos, SoundEvents.COMPOSTER_READY, SoundSource.BLOCKS, 1.0F, 1.0F);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        if ((Integer) state.getValue(ComposterBlock.LEVEL) == 7) {
++            level.setBlock(pos, (IBlockData) state.cycle(ComposterBlock.LEVEL), 3);
++            level.playSound((Player) null, pos, SoundEvents.COMPOSTER_READY, SoundSource.BLOCKS, 1.0F, 1.0F);
+         }
++
+     }
+ 
+     @Override
+-    public boolean hasAnalogOutputSignal(BlockState state) {
++    public boolean hasAnalogOutputSignal(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    public int getAnalogOutputSignal(BlockState blockState, Level level, BlockPos pos) {
+-        return blockState.getValue(LEVEL);
++    public int getAnalogOutputSignal(IBlockData blockState, Level level, BlockPos pos) {
++        return (Integer) blockState.getValue(ComposterBlock.LEVEL);
+     }
+ 
+     @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+-        builder.add(LEVEL);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(ComposterBlock.LEVEL);
+     }
+ 
+     @Override
+-    public boolean isPathfindable(BlockState state, BlockGetter level, BlockPos pos, PathComputationType type) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+     @Override
+-    public WorldlyContainer getContainer(BlockState state, LevelAccessor level, BlockPos pos) {
+-        int i = state.getValue(LEVEL);
+-        if (i == 8) {
+-            return new ComposterBlock.OutputContainer(state, level, pos, new ItemStack(Items.BONE_MEAL));
+-        } else {
+-            return (WorldlyContainer)(i < 7 ? new ComposterBlock.InputContainer(state, level, pos) : new ComposterBlock.EmptyContainer());
+-        }
++    public WorldlyContainer getContainer(IBlockData state, LevelAccessor level, BlockPos pos) {
++        int i = (Integer) state.getValue(ComposterBlock.LEVEL);
++
++        // CraftBukkit - empty generatoraccess, blockposition
++        return (WorldlyContainer) (i == 8 ? new ComposterBlock.OutputContainer(state, level, pos, new ItemStack(Items.BONE_MEAL)) : (i < 7 ? new ComposterBlock.InputContainer(state, level, pos) : new ComposterBlock.EmptyContainer(level, pos)));
+     }
+ 
+-    static class EmptyContainer extends SimpleContainer implements WorldlyContainer {
+-        public EmptyContainer() {
+-            super(0);
++    public static class OutputContainer extends SimpleContainer implements WorldlyContainer {
++
++        private final IBlockData state;
++        private final LevelAccessor level;
++        private final BlockPos pos;
++        private boolean changed;
++
++        public OutputContainer(IBlockData state, LevelAccessor level, BlockPos pos, ItemStack stack) {
++            super(stack);
++            this.state = state;
++            this.level = level;
++            this.pos = pos;
++            this.bukkitOwner = new CraftBlockInventoryHolder(level, pos, this); // CraftBukkit
+         }
+ 
+         @Override
++        public int getMaxStackSize() {
++            return 1;
++        }
++
++        @Override
+         public int[] getSlotsForFace(Direction side) {
+-            return new int[0];
++            return side == Direction.DOWN ? new int[]{0} : new int[0];
+         }
+ 
+         @Override
+@@ -355,18 +401,33 @@
+ 
+         @Override
+         public boolean canTakeItemThroughFace(int index, ItemStack stack, Direction direction) {
+-            return false;
++            return !this.changed && direction == Direction.DOWN && stack.is(Items.BONE_MEAL);
+         }
++
++        @Override
++        public void setChanged() {
++            // CraftBukkit start - allow putting items back (eg cancelled InventoryMoveItemEvent)
++            if (this.isEmpty()) {
++            ComposterBlock.empty((Entity) null, this.state, this.level, this.pos);
++            this.changed = true;
++            } else {
++                this.level.setBlock(this.pos, this.state, 3);
++                this.changed = false;
++            }
++            // CraftBukkit end
++        }
+     }
+ 
+-    static class InputContainer extends SimpleContainer implements WorldlyContainer {
+-        private final BlockState state;
++    public static class InputContainer extends SimpleContainer implements WorldlyContainer {
++
++        private final IBlockData state;
+         private final LevelAccessor level;
+         private final BlockPos pos;
+         private boolean changed;
+ 
+-        public InputContainer(BlockState state, LevelAccessor level, BlockPos pos) {
++        public InputContainer(IBlockData state, LevelAccessor level, BlockPos pos) {
+             super(1);
++            this.bukkitOwner = new CraftBlockInventoryHolder(level, pos, this); // CraftBukkit
+             this.state = state;
+             this.level = level;
+             this.pos = pos;
+@@ -394,37 +455,29 @@
+ 
+         @Override
+         public void setChanged() {
+-            ItemStack item = this.getItem(0);
+-            if (!item.isEmpty()) {
++            ItemStack itemstack = this.getItem(0);
++
++            if (!itemstack.isEmpty()) {
+                 this.changed = true;
+-                BlockState blockState = ComposterBlock.addItem(null, this.state, this.level, this.pos, item);
+-                this.level.levelEvent(1500, this.pos, blockState != this.state ? 1 : 0);
++                IBlockData iblockdata = ComposterBlock.addItem((Entity) null, this.state, this.level, this.pos, itemstack);
++
++                this.level.levelEvent(1500, this.pos, iblockdata != this.state ? 1 : 0);
+                 this.removeItemNoUpdate(0);
+             }
++
+         }
+     }
+ 
+-    static class OutputContainer extends SimpleContainer implements WorldlyContainer {
+-        private final BlockState state;
+-        private final LevelAccessor level;
+-        private final BlockPos pos;
+-        private boolean changed;
++    public static class EmptyContainer extends SimpleContainer implements WorldlyContainer {
+ 
+-        public OutputContainer(BlockState state, LevelAccessor level, BlockPos pos, ItemStack stack) {
+-            super(stack);
+-            this.state = state;
+-            this.level = level;
+-            this.pos = pos;
++        public EmptyContainer(LevelAccessor generatoraccess, BlockPos blockposition) { // CraftBukkit
++            super(0);
++            this.bukkitOwner = new CraftBlockInventoryHolder(generatoraccess, blockposition, this); // CraftBukkit
+         }
+ 
+         @Override
+-        public int getMaxStackSize() {
+-            return 1;
+-        }
+-
+-        @Override
+         public int[] getSlotsForFace(Direction side) {
+-            return side == Direction.DOWN ? new int[]{0} : new int[0];
++            return new int[0];
+         }
+ 
+         @Override
+@@ -434,13 +487,7 @@
+ 
+         @Override
+         public boolean canTakeItemThroughFace(int index, ItemStack stack, Direction direction) {
+-            return !this.changed && direction == Direction.DOWN && stack.is(Items.BONE_MEAL);
++            return false;
+         }
+-
+-        @Override
+-        public void setChanged() {
+-            ComposterBlock.empty(null, this.state, this.level, this.pos);
+-            this.changed = true;
+-        }
+     }
+ }

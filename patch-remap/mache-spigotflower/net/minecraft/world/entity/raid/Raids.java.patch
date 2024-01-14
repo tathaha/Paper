@@ -1,0 +1,233 @@
+--- a/net/minecraft/world/entity/raid/Raids.java
++++ b/net/minecraft/world/entity/raid/Raids.java
+@@ -29,27 +29,27 @@
+ public class Raids extends SavedData {
+ 
+     private static final String RAID_FILE_ID = "raids";
+-    private final Map<Integer, Raid> raidMap = Maps.newHashMap();
++    public final Map<Integer, Raid> raidMap = Maps.newHashMap();
+     private final ServerLevel level;
+     private int nextAvailableID;
+     private int tick;
+ 
+-    public static SavedData.Factory<Raids> factory(ServerLevel serverlevel) {
+-        return new SavedData.Factory<>(() -> {
+-            return new Raids(serverlevel);
+-        }, (compoundtag) -> {
+-            return load(serverlevel, compoundtag);
++    public static SavedData.a<Raids> factory(ServerLevel worldserver) {
++        return new SavedData.a<>(() -> {
++            return new Raids(worldserver);
++        }, (nbttagcompound) -> {
++            return load(worldserver, nbttagcompound);
+         }, DataFixTypes.SAVED_DATA_RAIDS);
+     }
+ 
+-    public Raids(ServerLevel serverlevel) {
+-        this.level = serverlevel;
++    public Raids(ServerLevel level) {
++        this.level = level;
+         this.nextAvailableID = 1;
+         this.setDirty();
+     }
+ 
+-    public Raid get(int i) {
+-        return (Raid) this.raidMap.get(i);
++    public Raid get(int id) {
++        return (Raid) this.raidMap.get(id);
+     }
+ 
+     public void tick() {
+@@ -83,62 +83,76 @@
+     }
+ 
+     @Nullable
+-    public Raid createOrExtendRaid(ServerPlayer serverplayer) {
+-        if (serverplayer.isSpectator()) {
++    public Raid createOrExtendRaid(ServerPlayer serverPlayer) {
++        if (serverPlayer.isSpectator()) {
+             return null;
+         } else if (this.level.getGameRules().getBoolean(GameRules.RULE_DISABLE_RAIDS)) {
+             return null;
+         } else {
+-            DimensionType dimensiontype = serverplayer.level().dimensionType();
++            DimensionType dimensionmanager = serverPlayer.level().dimensionType();
+ 
+-            if (!dimensiontype.hasRaids()) {
++            if (!dimensionmanager.hasRaids()) {
+                 return null;
+             } else {
+-                BlockPos blockpos = serverplayer.blockPosition();
++                BlockPos blockposition = serverPlayer.blockPosition();
+                 List<PoiRecord> list = this.level.getPoiManager().getInRange((holder) -> {
+                     return holder.is(PoiTypeTags.VILLAGE);
+-                }, blockpos, 64, PoiManager.Occupancy.IS_OCCUPIED).toList();
++                }, blockposition, 64, PoiManager.Occupancy.IS_OCCUPIED).toList();
+                 int i = 0;
+-                Vec3 vec3 = Vec3.ZERO;
++                Vec3 vec3d = Vec3.ZERO;
+ 
+                 for (Iterator iterator = list.iterator(); iterator.hasNext(); ++i) {
+-                    PoiRecord poirecord = (PoiRecord) iterator.next();
+-                    BlockPos blockpos1 = poirecord.getPos();
++                    PoiRecord villageplacerecord = (PoiRecord) iterator.next();
++                    BlockPos blockposition1 = villageplacerecord.getPos();
+ 
+-                    vec3 = vec3.add((double) blockpos1.getX(), (double) blockpos1.getY(), (double) blockpos1.getZ());
++                    vec3d = vec3d.add((double) blockposition1.getX(), (double) blockposition1.getY(), (double) blockposition1.getZ());
+                 }
+ 
+-                BlockPos blockpos2;
++                BlockPos blockposition2;
+ 
+                 if (i > 0) {
+-                    vec3 = vec3.scale(1.0D / (double) i);
+-                    blockpos2 = BlockPos.containing(vec3);
++                    vec3d = vec3d.scale(1.0D / (double) i);
++                    blockposition2 = BlockPos.containing(vec3d);
+                 } else {
+-                    blockpos2 = blockpos;
++                    blockposition2 = blockposition;
+                 }
+ 
+-                Raid raid = this.getOrCreateRaid(serverplayer.serverLevel(), blockpos2);
++                Raid raid = this.getOrCreateRaid(serverPlayer.serverLevel(), blockposition2);
+                 boolean flag = false;
+ 
+                 if (!raid.isStarted()) {
++                    /* CraftBukkit - moved down
+                     if (!this.raidMap.containsKey(raid.getId())) {
+                         this.raidMap.put(raid.getId(), raid);
+                     }
++                    */
+ 
+                     flag = true;
+-                } else if (raid.getBadOmenLevel() < raid.getMaxBadOmenLevel()) {
++                    // CraftBukkit start - fixed a bug with raid: players could add up Bad Omen level even when the raid had finished
++                } else if (raid.isInProgress() && raid.getBadOmenLevel() < raid.getMaxBadOmenLevel()) {
+                     flag = true;
++                    // CraftBukkit end
+                 } else {
+-                    serverplayer.removeEffect(MobEffects.BAD_OMEN);
+-                    serverplayer.connection.send(new ClientboundEntityEventPacket(serverplayer, (byte) 43));
++                    serverPlayer.removeEffect(MobEffects.BAD_OMEN);
++                    serverPlayer.connection.send(new ClientboundEntityEventPacket(serverPlayer, (byte) 43));
+                 }
+ 
+                 if (flag) {
+-                    raid.absorbBadOmen(serverplayer);
+-                    serverplayer.connection.send(new ClientboundEntityEventPacket(serverplayer, (byte) 43));
++                    // CraftBukkit start
++                    if (!org.bukkit.craftbukkit.event.CraftEventFactory.callRaidTriggerEvent(raid, serverPlayer)) {
++                        serverPlayer.removeEffect(MobEffects.BAD_OMEN);
++                        return null;
++                    }
++
++                    if (!this.raidMap.containsKey(raid.getId())) {
++                        this.raidMap.put(raid.getId(), raid);
++                    }
++                    // CraftBukkit end
++                    raid.absorbBadOmen(serverPlayer);
++                    serverPlayer.connection.send(new ClientboundEntityEventPacket(serverPlayer, (byte) 43));
+                     if (!raid.hasFirstWaveSpawned()) {
+-                        serverplayer.awardStat(Stats.RAID_TRIGGER);
+-                        CriteriaTriggers.BAD_OMEN.trigger(serverplayer);
++                        serverPlayer.awardStat(Stats.RAID_TRIGGER);
++                        CriteriaTriggers.BAD_OMEN.trigger(serverPlayer);
+                     }
+                 }
+ 
+@@ -148,51 +162,50 @@
+         }
+     }
+ 
+-    private Raid getOrCreateRaid(ServerLevel serverlevel, BlockPos blockpos) {
+-        Raid raid = serverlevel.getRaidAt(blockpos);
++    private Raid getOrCreateRaid(ServerLevel serverLevel, BlockPos pos) {
++        Raid raid = serverLevel.getRaidAt(pos);
+ 
+-        return raid != null ? raid : new Raid(this.getUniqueId(), serverlevel, blockpos);
++        return raid != null ? raid : new Raid(this.getUniqueId(), serverLevel, pos);
+     }
+ 
+-    public static Raids load(ServerLevel serverlevel, CompoundTag compoundtag) {
+-        Raids raids = new Raids(serverlevel);
++    public static Raids load(ServerLevel level, CompoundTag tag) {
++        Raids persistentraid = new Raids(level);
+ 
+-        raids.nextAvailableID = compoundtag.getInt("NextAvailableID");
+-        raids.tick = compoundtag.getInt("Tick");
+-        ListTag listtag = compoundtag.getList("Raids", 10);
++        persistentraid.nextAvailableID = tag.getInt("NextAvailableID");
++        persistentraid.tick = tag.getInt("Tick");
++        ListTag nbttaglist = tag.getList("Raids", 10);
+ 
+-        for (int i = 0; i < listtag.size(); ++i) {
+-            CompoundTag compoundtag1 = listtag.getCompound(i);
+-            Raid raid = new Raid(serverlevel, compoundtag1);
++        for (int i = 0; i < nbttaglist.size(); ++i) {
++            CompoundTag nbttagcompound1 = nbttaglist.getCompound(i);
++            Raid raid = new Raid(level, nbttagcompound1);
+ 
+-            raids.raidMap.put(raid.getId(), raid);
++            persistentraid.raidMap.put(raid.getId(), raid);
+         }
+ 
+-        return raids;
++        return persistentraid;
+     }
+ 
+     @Override
+-    @Override
+-    public CompoundTag save(CompoundTag compoundtag) {
+-        compoundtag.putInt("NextAvailableID", this.nextAvailableID);
+-        compoundtag.putInt("Tick", this.tick);
+-        ListTag listtag = new ListTag();
++    public CompoundTag save(CompoundTag compound) {
++        compound.putInt("NextAvailableID", this.nextAvailableID);
++        compound.putInt("Tick", this.tick);
++        ListTag nbttaglist = new ListTag();
+         Iterator iterator = this.raidMap.values().iterator();
+ 
+         while (iterator.hasNext()) {
+             Raid raid = (Raid) iterator.next();
+-            CompoundTag compoundtag1 = new CompoundTag();
++            CompoundTag nbttagcompound1 = new CompoundTag();
+ 
+-            raid.save(compoundtag1);
+-            listtag.add(compoundtag1);
++            raid.save(nbttagcompound1);
++            nbttaglist.add(nbttagcompound1);
+         }
+ 
+-        compoundtag.put("Raids", listtag);
+-        return compoundtag;
++        compound.put("Raids", nbttaglist);
++        return compound;
+     }
+ 
+-    public static String getFileId(Holder<DimensionType> holder) {
+-        return holder.is(BuiltinDimensionTypes.END) ? "raids_end" : "raids";
++    public static String getFileId(Holder<DimensionType> dimensionTypeHolder) {
++        return dimensionTypeHolder.is(BuiltinDimensionTypes.END) ? "raids_end" : "raids";
+     }
+ 
+     private int getUniqueId() {
+@@ -200,14 +213,14 @@
+     }
+ 
+     @Nullable
+-    public Raid getNearbyRaid(BlockPos blockpos, int i) {
++    public Raid getNearbyRaid(BlockPos pos, int distance) {
+         Raid raid = null;
+-        double d0 = (double) i;
++        double d0 = (double) distance;
+         Iterator iterator = this.raidMap.values().iterator();
+ 
+         while (iterator.hasNext()) {
+             Raid raid1 = (Raid) iterator.next();
+-            double d1 = raid1.getCenter().distSqr(blockpos);
++            double d1 = raid1.getCenter().distSqr(pos);
+ 
+             if (raid1.isActive() && d1 < d0) {
+                 raid = raid1;

@@ -1,0 +1,208 @@
+--- a/net/minecraft/world/level/block/entity/BlockEntity.java
++++ b/net/minecraft/world/level/block/entity/BlockEntity.java
+@@ -12,19 +12,30 @@
+ import net.minecraft.world.item.BlockItem;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start
++import org.bukkit.craftbukkit.persistence.CraftPersistentDataContainer;
++import org.bukkit.craftbukkit.persistence.CraftPersistentDataTypeRegistry;
++import org.bukkit.inventory.InventoryHolder;
++// CraftBukkit end
++
+ public abstract class BlockEntity {
++
++    // CraftBukkit start - data containers
++    private static final CraftPersistentDataTypeRegistry DATA_TYPE_REGISTRY = new CraftPersistentDataTypeRegistry();
++    public CraftPersistentDataContainer persistentDataContainer;
++    // CraftBukkit end
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private final BlockEntityType<?> type;
+     @Nullable
+     protected Level level;
+     protected final BlockPos worldPosition;
+     protected boolean remove;
+-    private BlockState blockState;
++    private IBlockData blockState;
+ 
+-    public BlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState blockState) {
++    public BlockEntity(BlockEntityType<?> type, BlockPos pos, IBlockData blockState) {
+         this.type = type;
+         this.worldPosition = pos.immutable();
+         this.blockState = blockState;
+@@ -47,36 +58,52 @@
+         return this.level != null;
+     }
+ 
++    // CraftBukkit start - read container
+     public void load(CompoundTag tag) {
+-    }
++        this.persistentDataContainer = new CraftPersistentDataContainer(DATA_TYPE_REGISTRY);
+ 
+-    protected void saveAdditional(CompoundTag tag) {
++        net.minecraft.nbt.Tag persistentDataTag = tag.get("PublicBukkitValues");
++        if (persistentDataTag instanceof CompoundTag) {
++            this.persistentDataContainer.putAll((CompoundTag) persistentDataTag);
++        }
+     }
++    // CraftBukkit end
+ 
++    protected void saveAdditional(CompoundTag tag) {}
++
+     public final CompoundTag saveWithFullMetadata() {
+-        CompoundTag compoundTag = this.saveWithoutMetadata();
+-        this.saveMetadata(compoundTag);
+-        return compoundTag;
++        CompoundTag nbttagcompound = this.saveWithoutMetadata();
++
++        this.saveMetadata(nbttagcompound);
++        return nbttagcompound;
+     }
+ 
+     public final CompoundTag saveWithId() {
+-        CompoundTag compoundTag = this.saveWithoutMetadata();
+-        this.saveId(compoundTag);
+-        return compoundTag;
++        CompoundTag nbttagcompound = this.saveWithoutMetadata();
++
++        this.saveId(nbttagcompound);
++        return nbttagcompound;
+     }
+ 
+     public final CompoundTag saveWithoutMetadata() {
+-        CompoundTag compoundTag = new CompoundTag();
+-        this.saveAdditional(compoundTag);
+-        return compoundTag;
++        CompoundTag nbttagcompound = new CompoundTag();
++
++        this.saveAdditional(nbttagcompound);
++        // CraftBukkit start - store container
++        if (this.persistentDataContainer != null && !this.persistentDataContainer.isEmpty()) {
++            nbttagcompound.put("PublicBukkitValues", this.persistentDataContainer.toTagCompound());
++        }
++        // CraftBukkit end
++        return nbttagcompound;
+     }
+ 
+     private void saveId(CompoundTag tag) {
+-        ResourceLocation key = BlockEntityType.getKey(this.getType());
+-        if (key == null) {
++        ResourceLocation minecraftkey = BlockEntityType.getKey(this.getType());
++
++        if (minecraftkey == null) {
+             throw new RuntimeException(this.getClass() + " is missing a mapping! This is a bug!");
+         } else {
+-            tag.putString("id", key.toString());
++            tag.putString("id", minecraftkey.toString());
+         }
+     }
+ 
+@@ -96,30 +123,31 @@
+     }
+ 
+     @Nullable
+-    public static BlockEntity loadStatic(BlockPos pos, BlockState state, CompoundTag tag) {
+-        String string = tag.getString("id");
+-        ResourceLocation resourceLocation = ResourceLocation.tryParse(string);
+-        if (resourceLocation == null) {
+-            LOGGER.error("Block entity has invalid type: {}", string);
++    public static BlockEntity loadStatic(BlockPos pos, IBlockData state, CompoundTag tag) {
++        String s = tag.getString("id");
++        ResourceLocation minecraftkey = ResourceLocation.tryParse(s);
++
++        if (minecraftkey == null) {
++            BlockEntity.LOGGER.error("Block entity has invalid type: {}", s);
+             return null;
+         } else {
+-            return BuiltInRegistries.BLOCK_ENTITY_TYPE.getOptional(resourceLocation).map(type -> {
++            return (BlockEntity) BuiltInRegistries.BLOCK_ENTITY_TYPE.getOptional(minecraftkey).map((tileentitytypes) -> {
+                 try {
+-                    return type.create(pos, state);
+-                } catch (Throwable var5) {
+-                    LOGGER.error("Failed to create block entity {}", string, var5);
++                    return tileentitytypes.create(pos, state);
++                } catch (Throwable throwable) {
++                    BlockEntity.LOGGER.error("Failed to create block entity {}", s, throwable);
+                     return null;
+                 }
+-            }).map(blockEntity -> {
++            }).map((tileentity) -> {
+                 try {
+-                    blockEntity.load(tag);
+-                    return (BlockEntity)blockEntity;
+-                } catch (Throwable var4x) {
+-                    LOGGER.error("Failed to load data for block entity {}", string, var4x);
++                    tileentity.load(tag);
++                    return tileentity;
++                } catch (Throwable throwable) {
++                    BlockEntity.LOGGER.error("Failed to load data for block entity {}", s, throwable);
+                     return null;
+                 }
+             }).orElseGet(() -> {
+-                LOGGER.warn("Skipping BlockEntity with id {}", string);
++                BlockEntity.LOGGER.warn("Skipping BlockEntity with id {}", s);
+                 return null;
+             });
+         }
+@@ -129,20 +157,22 @@
+         if (this.level != null) {
+             setChanged(this.level, this.worldPosition, this.blockState);
+         }
++
+     }
+ 
+-    protected static void setChanged(Level level, BlockPos pos, BlockState state) {
++    protected static void setChanged(Level level, BlockPos pos, IBlockData state) {
+         level.blockEntityChanged(pos);
+         if (!state.isAir()) {
+             level.updateNeighbourForOutputSignal(pos, state.getBlock());
+         }
++
+     }
+ 
+     public BlockPos getBlockPos() {
+         return this.worldPosition;
+     }
+ 
+-    public BlockState getBlockState() {
++    public IBlockData getBlockState() {
+         return this.blockState;
+     }
+ 
+@@ -172,7 +202,11 @@
+     }
+ 
+     public void fillCrashReportCategory(CrashReportCategory reportCategory) {
+-        reportCategory.setDetail("Name", () -> BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(this.getType()) + " // " + this.getClass().getCanonicalName());
++        reportCategory.setDetail("Name", () -> {
++            ResourceLocation minecraftkey = BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(this.getType());
++
++            return minecraftkey + " // " + this.getClass().getCanonicalName();
++        });
+         if (this.level != null) {
+             CrashReportCategory.populateBlockDetails(reportCategory, this.level, this.worldPosition, this.getBlockState());
+             CrashReportCategory.populateBlockDetails(reportCategory, this.level, this.worldPosition, this.level.getBlockState(this.worldPosition));
+@@ -187,8 +221,18 @@
+         return this.type;
+     }
+ 
++    /** @deprecated */
+     @Deprecated
+-    public void setBlockState(BlockState blockState) {
++    public void setBlockState(IBlockData blockState) {
+         this.blockState = blockState;
+     }
++
++    // CraftBukkit start - add method
++    public InventoryHolder getOwner() {
++        if (level == null) return null;
++        org.bukkit.block.BlockState state = level.getWorld().getBlockAt(worldPosition.getX(), worldPosition.getY(), worldPosition.getZ()).getState();
++        if (state instanceof InventoryHolder) return (InventoryHolder) state;
++        return null;
++    }
++    // CraftBukkit end
+ }

@@ -1,0 +1,280 @@
+--- a/net/minecraft/world/level/levelgen/structure/LegacyStructureDataHandler.java
++++ b/net/minecraft/world/level/levelgen/structure/LegacyStructureDataHandler.java
+@@ -18,7 +18,7 @@
+ import net.minecraft.resources.ResourceKey;
+ import net.minecraft.util.datafix.DataFixTypes;
+ import net.minecraft.world.level.ChunkPos;
+-import net.minecraft.world.level.Level;
++import net.minecraft.world.level.dimension.LevelStem;
+ import net.minecraft.world.level.storage.DimensionDataStorage;
+ 
+ public class LegacyStructureDataHandler {
+@@ -49,10 +49,10 @@
+     private final List<String> legacyKeys;
+     private final List<String> currentKeys;
+ 
+-    public LegacyStructureDataHandler(@Nullable DimensionDataStorage dimensiondatastorage, List<String> list, List<String> list1) {
+-        this.legacyKeys = list;
+-        this.currentKeys = list1;
+-        this.populateCaches(dimensiondatastorage);
++    public LegacyStructureDataHandler(@Nullable DimensionDataStorage storage, List<String> legacyKeys, List<String> currentKeys) {
++        this.legacyKeys = legacyKeys;
++        this.currentKeys = currentKeys;
++        this.populateCaches(storage);
+         boolean flag = false;
+ 
+         String s;
+@@ -64,64 +64,64 @@
+         this.hasLegacyData = flag;
+     }
+ 
+-    public void removeIndex(long i) {
++    public void removeIndex(long packedChunkPos) {
+         Iterator iterator = this.legacyKeys.iterator();
+ 
+         while (iterator.hasNext()) {
+             String s = (String) iterator.next();
+-            StructureFeatureIndexSavedData structurefeatureindexsaveddata = (StructureFeatureIndexSavedData) this.indexMap.get(s);
++            StructureFeatureIndexSavedData persistentindexed = (StructureFeatureIndexSavedData) this.indexMap.get(s);
+ 
+-            if (structurefeatureindexsaveddata != null && structurefeatureindexsaveddata.hasUnhandledIndex(i)) {
+-                structurefeatureindexsaveddata.removeIndex(i);
+-                structurefeatureindexsaveddata.setDirty();
++            if (persistentindexed != null && persistentindexed.hasUnhandledIndex(packedChunkPos)) {
++                persistentindexed.removeIndex(packedChunkPos);
++                persistentindexed.setDirty();
+             }
+         }
+ 
+     }
+ 
+-    public CompoundTag updateFromLegacy(CompoundTag compoundtag) {
+-        CompoundTag compoundtag1 = compoundtag.getCompound("Level");
+-        ChunkPos chunkpos = new ChunkPos(compoundtag1.getInt("xPos"), compoundtag1.getInt("zPos"));
++    public CompoundTag updateFromLegacy(CompoundTag tag) {
++        CompoundTag nbttagcompound1 = tag.getCompound("Level");
++        ChunkPos chunkcoordintpair = new ChunkPos(nbttagcompound1.getInt("xPos"), nbttagcompound1.getInt("zPos"));
+ 
+-        if (this.isUnhandledStructureStart(chunkpos.x, chunkpos.z)) {
+-            compoundtag = this.updateStructureStart(compoundtag, chunkpos);
++        if (this.isUnhandledStructureStart(chunkcoordintpair.x, chunkcoordintpair.z)) {
++            tag = this.updateStructureStart(tag, chunkcoordintpair);
+         }
+ 
+-        CompoundTag compoundtag2 = compoundtag1.getCompound("Structures");
+-        CompoundTag compoundtag3 = compoundtag2.getCompound("References");
++        CompoundTag nbttagcompound2 = nbttagcompound1.getCompound("Structures");
++        CompoundTag nbttagcompound3 = nbttagcompound2.getCompound("References");
+         Iterator iterator = this.currentKeys.iterator();
+ 
+         while (iterator.hasNext()) {
+             String s = (String) iterator.next();
+             boolean flag = LegacyStructureDataHandler.OLD_STRUCTURE_REGISTRY_KEYS.contains(s.toLowerCase(Locale.ROOT));
+ 
+-            if (!compoundtag3.contains(s, 12) && flag) {
++            if (!nbttagcompound3.contains(s, 12) && flag) {
+                 boolean flag1 = true;
+                 LongArrayList longarraylist = new LongArrayList();
+ 
+-                for (int i = chunkpos.x - 8; i <= chunkpos.x + 8; ++i) {
+-                    for (int j = chunkpos.z - 8; j <= chunkpos.z + 8; ++j) {
++                for (int i = chunkcoordintpair.x - 8; i <= chunkcoordintpair.x + 8; ++i) {
++                    for (int j = chunkcoordintpair.z - 8; j <= chunkcoordintpair.z + 8; ++j) {
+                         if (this.hasLegacyStart(i, j, s)) {
+                             longarraylist.add(ChunkPos.asLong(i, j));
+                         }
+                     }
+                 }
+ 
+-                compoundtag3.putLongArray(s, (List) longarraylist);
++                nbttagcompound3.putLongArray(s, (List) longarraylist);
+             }
+         }
+ 
+-        compoundtag2.put("References", compoundtag3);
+-        compoundtag1.put("Structures", compoundtag2);
+-        compoundtag.put("Level", compoundtag1);
+-        return compoundtag;
++        nbttagcompound2.put("References", nbttagcompound3);
++        nbttagcompound1.put("Structures", nbttagcompound2);
++        tag.put("Level", nbttagcompound1);
++        return tag;
+     }
+ 
+-    private boolean hasLegacyStart(int i, int j, String s) {
+-        return !this.hasLegacyData ? false : this.dataMap.get(s) != null && ((StructureFeatureIndexSavedData) this.indexMap.get(LegacyStructureDataHandler.CURRENT_TO_LEGACY_MAP.get(s))).hasStartIndex(ChunkPos.asLong(i, j));
++    private boolean hasLegacyStart(int chunkX, int chunkZ, String key) {
++        return !this.hasLegacyData ? false : this.dataMap.get(key) != null && ((StructureFeatureIndexSavedData) this.indexMap.get(LegacyStructureDataHandler.CURRENT_TO_LEGACY_MAP.get(key))).hasStartIndex(ChunkPos.asLong(chunkX, chunkZ));
+     }
+ 
+-    private boolean isUnhandledStructureStart(int i, int j) {
++    private boolean isUnhandledStructureStart(int chunkX, int chunkZ) {
+         if (!this.hasLegacyData) {
+             return false;
+         } else {
+@@ -135,16 +135,16 @@
+                 }
+ 
+                 s = (String) iterator.next();
+-            } while (this.dataMap.get(s) == null || !((StructureFeatureIndexSavedData) this.indexMap.get(LegacyStructureDataHandler.CURRENT_TO_LEGACY_MAP.get(s))).hasUnhandledIndex(ChunkPos.asLong(i, j)));
++            } while (this.dataMap.get(s) == null || !((StructureFeatureIndexSavedData) this.indexMap.get(LegacyStructureDataHandler.CURRENT_TO_LEGACY_MAP.get(s))).hasUnhandledIndex(ChunkPos.asLong(chunkX, chunkZ)));
+ 
+             return true;
+         }
+     }
+ 
+-    private CompoundTag updateStructureStart(CompoundTag compoundtag, ChunkPos chunkpos) {
+-        CompoundTag compoundtag1 = compoundtag.getCompound("Level");
+-        CompoundTag compoundtag2 = compoundtag1.getCompound("Structures");
+-        CompoundTag compoundtag3 = compoundtag2.getCompound("Starts");
++    private CompoundTag updateStructureStart(CompoundTag tag, ChunkPos chunkPos) {
++        CompoundTag nbttagcompound1 = tag.getCompound("Level");
++        CompoundTag nbttagcompound2 = nbttagcompound1.getCompound("Structures");
++        CompoundTag nbttagcompound3 = nbttagcompound2.getCompound("Starts");
+         Iterator iterator = this.currentKeys.iterator();
+ 
+         while (iterator.hasNext()) {
+@@ -152,104 +152,104 @@
+             Long2ObjectMap<CompoundTag> long2objectmap = (Long2ObjectMap) this.dataMap.get(s);
+ 
+             if (long2objectmap != null) {
+-                long i = chunkpos.toLong();
++                long i = chunkPos.toLong();
+ 
+                 if (((StructureFeatureIndexSavedData) this.indexMap.get(LegacyStructureDataHandler.CURRENT_TO_LEGACY_MAP.get(s))).hasUnhandledIndex(i)) {
+-                    CompoundTag compoundtag4 = (CompoundTag) long2objectmap.get(i);
++                    CompoundTag nbttagcompound4 = (CompoundTag) long2objectmap.get(i);
+ 
+-                    if (compoundtag4 != null) {
+-                        compoundtag3.put(s, compoundtag4);
++                    if (nbttagcompound4 != null) {
++                        nbttagcompound3.put(s, nbttagcompound4);
+                     }
+                 }
+             }
+         }
+ 
+-        compoundtag2.put("Starts", compoundtag3);
+-        compoundtag1.put("Structures", compoundtag2);
+-        compoundtag.put("Level", compoundtag1);
+-        return compoundtag;
++        nbttagcompound2.put("Starts", nbttagcompound3);
++        nbttagcompound1.put("Structures", nbttagcompound2);
++        tag.put("Level", nbttagcompound1);
++        return tag;
+     }
+ 
+-    private void populateCaches(@Nullable DimensionDataStorage dimensiondatastorage) {
+-        if (dimensiondatastorage != null) {
++    private void populateCaches(@Nullable DimensionDataStorage storage) {
++        if (storage != null) {
+             Iterator iterator = this.legacyKeys.iterator();
+ 
+             while (iterator.hasNext()) {
+                 String s = (String) iterator.next();
+-                CompoundTag compoundtag = new CompoundTag();
++                CompoundTag nbttagcompound = new CompoundTag();
+ 
+                 try {
+-                    compoundtag = dimensiondatastorage.readTagFromDisk(s, DataFixTypes.SAVED_DATA_STRUCTURE_FEATURE_INDICES, 1493).getCompound("data").getCompound("Features");
+-                    if (compoundtag.isEmpty()) {
++                    nbttagcompound = storage.readTagFromDisk(s, DataFixTypes.SAVED_DATA_STRUCTURE_FEATURE_INDICES, 1493).getCompound("data").getCompound("Features");
++                    if (nbttagcompound.isEmpty()) {
+                         continue;
+                     }
+                 } catch (IOException ioexception) {
+                     ;
+                 }
+ 
+-                Iterator iterator1 = compoundtag.getAllKeys().iterator();
++                Iterator iterator1 = nbttagcompound.getAllKeys().iterator();
+ 
+                 while (iterator1.hasNext()) {
+                     String s1 = (String) iterator1.next();
+-                    CompoundTag compoundtag1 = compoundtag.getCompound(s1);
+-                    long i = ChunkPos.asLong(compoundtag1.getInt("ChunkX"), compoundtag1.getInt("ChunkZ"));
+-                    ListTag listtag = compoundtag1.getList("Children", 10);
++                    CompoundTag nbttagcompound1 = nbttagcompound.getCompound(s1);
++                    long i = ChunkPos.asLong(nbttagcompound1.getInt("ChunkX"), nbttagcompound1.getInt("ChunkZ"));
++                    ListTag nbttaglist = nbttagcompound1.getList("Children", 10);
+                     String s2;
+ 
+-                    if (!listtag.isEmpty()) {
+-                        s2 = listtag.getCompound(0).getString("id");
++                    if (!nbttaglist.isEmpty()) {
++                        s2 = nbttaglist.getCompound(0).getString("id");
+                         String s3 = (String) LegacyStructureDataHandler.LEGACY_TO_CURRENT_MAP.get(s2);
+ 
+                         if (s3 != null) {
+-                            compoundtag1.putString("id", s3);
++                            nbttagcompound1.putString("id", s3);
+                         }
+                     }
+ 
+-                    s2 = compoundtag1.getString("id");
++                    s2 = nbttagcompound1.getString("id");
+                     ((Long2ObjectMap) this.dataMap.computeIfAbsent(s2, (s4) -> {
+                         return new Long2ObjectOpenHashMap();
+-                    })).put(i, compoundtag1);
++                    })).put(i, nbttagcompound1);
+                 }
+ 
+                 String s4 = s + "_index";
+-                StructureFeatureIndexSavedData structurefeatureindexsaveddata = (StructureFeatureIndexSavedData) dimensiondatastorage.computeIfAbsent(StructureFeatureIndexSavedData.factory(), s4);
++                StructureFeatureIndexSavedData persistentindexed = (StructureFeatureIndexSavedData) storage.computeIfAbsent(StructureFeatureIndexSavedData.factory(), s4);
+ 
+-                if (!structurefeatureindexsaveddata.getAll().isEmpty()) {
+-                    this.indexMap.put(s, structurefeatureindexsaveddata);
++                if (!persistentindexed.getAll().isEmpty()) {
++                    this.indexMap.put(s, persistentindexed);
+                 } else {
+-                    StructureFeatureIndexSavedData structurefeatureindexsaveddata1 = new StructureFeatureIndexSavedData();
++                    StructureFeatureIndexSavedData persistentindexed1 = new StructureFeatureIndexSavedData();
+ 
+-                    this.indexMap.put(s, structurefeatureindexsaveddata1);
+-                    Iterator iterator2 = compoundtag.getAllKeys().iterator();
++                    this.indexMap.put(s, persistentindexed1);
++                    Iterator iterator2 = nbttagcompound.getAllKeys().iterator();
+ 
+                     while (iterator2.hasNext()) {
+                         String s5 = (String) iterator2.next();
+-                        CompoundTag compoundtag2 = compoundtag.getCompound(s5);
++                        CompoundTag nbttagcompound2 = nbttagcompound.getCompound(s5);
+ 
+-                        structurefeatureindexsaveddata1.addIndex(ChunkPos.asLong(compoundtag2.getInt("ChunkX"), compoundtag2.getInt("ChunkZ")));
++                        persistentindexed1.addIndex(ChunkPos.asLong(nbttagcompound2.getInt("ChunkX"), nbttagcompound2.getInt("ChunkZ")));
+                     }
+ 
+-                    structurefeatureindexsaveddata1.setDirty();
++                    persistentindexed1.setDirty();
+                 }
+             }
+ 
+         }
+     }
+ 
+-    public static LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<Level> resourcekey, @Nullable DimensionDataStorage dimensiondatastorage) {
+-        if (resourcekey == Level.OVERWORLD) {
+-            return new LegacyStructureDataHandler(dimensiondatastorage, ImmutableList.of("Monument", "Stronghold", "Village", "Mineshaft", "Temple", "Mansion"), ImmutableList.of("Village", "Mineshaft", "Mansion", "Igloo", "Desert_Pyramid", "Jungle_Pyramid", "Swamp_Hut", "Stronghold", "Monument"));
++    public static LegacyStructureDataHandler getLegacyStructureHandler(ResourceKey<LevelStem> level, @Nullable DimensionDataStorage storage) { // CraftBukkit
++        if (level == LevelStem.OVERWORLD) { // CraftBukkit
++            return new LegacyStructureDataHandler(storage, ImmutableList.of("Monument", "Stronghold", "Village", "Mineshaft", "Temple", "Mansion"), ImmutableList.of("Village", "Mineshaft", "Mansion", "Igloo", "Desert_Pyramid", "Jungle_Pyramid", "Swamp_Hut", "Stronghold", "Monument"));
+         } else {
+             ImmutableList immutablelist;
+ 
+-            if (resourcekey == Level.NETHER) {
++            if (level == LevelStem.NETHER) { // CraftBukkit
+                 immutablelist = ImmutableList.of("Fortress");
+-                return new LegacyStructureDataHandler(dimensiondatastorage, immutablelist, immutablelist);
+-            } else if (resourcekey == Level.END) {
++                return new LegacyStructureDataHandler(storage, immutablelist, immutablelist);
++            } else if (level == LevelStem.END) { // CraftBukkit
+                 immutablelist = ImmutableList.of("EndCity");
+-                return new LegacyStructureDataHandler(dimensiondatastorage, immutablelist, immutablelist);
++                return new LegacyStructureDataHandler(storage, immutablelist, immutablelist);
+             } else {
+-                throw new RuntimeException(String.format(Locale.ROOT, "Unknown dimension type : %s", resourcekey));
++                throw new RuntimeException(String.format(Locale.ROOT, "Unknown dimension type : %s", level));
+             }
+         }
+     }

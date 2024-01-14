@@ -1,0 +1,321 @@
+--- a/net/minecraft/world/entity/animal/Pig.java
++++ b/net/minecraft/world/entity/animal/Pig.java
+@@ -1,5 +1,6 @@
+ package net.minecraft.world.entity.animal;
+ 
++import com.google.common.collect.UnmodifiableIterator;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+@@ -12,20 +13,20 @@
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.world.Difficulty;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.AgeableMob;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntityType;
+ import net.minecraft.world.entity.EquipmentSlot;
++import net.minecraft.world.entity.ISteerable;
+ import net.minecraft.world.entity.ItemBasedSteering;
+-import net.minecraft.world.entity.ItemSteerable;
+ import net.minecraft.world.entity.LightningBolt;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.Pose;
+ import net.minecraft.world.entity.Saddleable;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+ import net.minecraft.world.entity.ai.attributes.Attributes;
+@@ -43,50 +44,67 @@
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.item.crafting.Ingredient;
++import net.minecraft.world.level.IMaterial;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.joml.Vector3f;
+ 
+-public class Pig extends Animal implements ItemSteerable, Saddleable {
++// CraftBukkit start
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
++
++public class Pig extends Animal implements ISteerable, Saddleable {
++
+     private static final EntityDataAccessor<Boolean> DATA_SADDLE_ID = SynchedEntityData.defineId(Pig.class, EntityDataSerializers.BOOLEAN);
+     private static final EntityDataAccessor<Integer> DATA_BOOST_TIME = SynchedEntityData.defineId(Pig.class, EntityDataSerializers.INT);
+     private static final Ingredient FOOD_ITEMS = Ingredient.of(Items.CARROT, Items.POTATO, Items.BEETROOT);
+-    private final ItemBasedSteering steering = new ItemBasedSteering(this.entityData, DATA_BOOST_TIME, DATA_SADDLE_ID);
++    public final ItemBasedSteering steering;
+ 
+     public Pig(EntityType<? extends Pig> entityType, Level level) {
+         super(entityType, level);
++        this.steering = new ItemBasedSteering(this.entityData, Pig.DATA_BOOST_TIME, Pig.DATA_SADDLE_ID);
+     }
+ 
+     @Override
+     protected void registerGoals() {
+         this.goalSelector.addGoal(0, new FloatGoal(this));
+-        this.goalSelector.addGoal(1, new PanicGoal(this, 1.25));
+-        this.goalSelector.addGoal(3, new BreedGoal(this, 1.0));
+-        this.goalSelector.addGoal(4, new TemptGoal(this, 1.2, Ingredient.of(Items.CARROT_ON_A_STICK), false));
+-        this.goalSelector.addGoal(4, new TemptGoal(this, 1.2, FOOD_ITEMS, false));
+-        this.goalSelector.addGoal(5, new FollowParentGoal(this, 1.1));
+-        this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 1.0));
++        this.goalSelector.addGoal(1, new PanicGoal(this, 1.25D));
++        this.goalSelector.addGoal(3, new BreedGoal(this, 1.0D));
++        this.goalSelector.addGoal(4, new TemptGoal(this, 1.2D, Ingredient.of(Items.CARROT_ON_A_STICK), false));
++        this.goalSelector.addGoal(4, new TemptGoal(this, 1.2D, Pig.FOOD_ITEMS, false));
++        this.goalSelector.addGoal(5, new FollowParentGoal(this, 1.1D));
++        this.goalSelector.addGoal(6, new WaterAvoidingRandomStrollGoal(this, 1.0D));
+         this.goalSelector.addGoal(7, new LookAtPlayerGoal(this, Player.class, 6.0F));
+         this.goalSelector.addGoal(8, new RandomLookAroundGoal(this));
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+-        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0).add(Attributes.MOVEMENT_SPEED, 0.25);
++        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 10.0D).add(Attributes.MOVEMENT_SPEED, 0.25D);
+     }
+ 
+     @Nullable
+     @Override
+     public LivingEntity getControllingPassenger() {
+-        return (LivingEntity)(this.isSaddled() && this.getFirstPassenger() instanceof Player player && player.isHolding(Items.CARROT_ON_A_STICK)
+-            ? player
+-            : super.getControllingPassenger());
++        if (this.isSaddled()) {
++            Entity entity = this.getFirstPassenger();
++
++            if (entity instanceof Player) {
++                Player entityhuman = (Player) entity;
++
++                if (entityhuman.isHolding(Items.CARROT_ON_A_STICK)) {
++                    return entityhuman;
++                }
++            }
++        }
++
++        return super.getControllingPassenger();
+     }
+ 
+     @Override
+     public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+-        if (DATA_BOOST_TIME.equals(key) && this.level().isClientSide) {
++        if (Pig.DATA_BOOST_TIME.equals(key) && this.level().isClientSide) {
+             this.steering.onSynced();
+         }
+ 
+@@ -96,8 +114,8 @@
+     @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+-        this.entityData.define(DATA_SADDLE_ID, false);
+-        this.entityData.define(DATA_BOOST_TIME, 0);
++        this.entityData.define(Pig.DATA_SADDLE_ID, false);
++        this.entityData.define(Pig.DATA_BOOST_TIME, 0);
+     }
+ 
+     @Override
+@@ -128,26 +146,29 @@
+     }
+ 
+     @Override
+-    protected void playStepSound(BlockPos pos, BlockState block) {
++    protected void playStepSound(BlockPos pos, IBlockData block) {
+         this.playSound(SoundEvents.PIG_STEP, 0.15F, 1.0F);
+     }
+ 
+     @Override
+-    public InteractionResult mobInteract(Player player, InteractionHand hand) {
+-        boolean isFood = this.isFood(player.getItemInHand(hand));
+-        if (!isFood && this.isSaddled() && !this.isVehicle() && !player.isSecondaryUseActive()) {
++    public InteractionResult mobInteract(Player player, EnumHand hand) {
++        boolean flag = this.isFood(player.getItemInHand(hand));
++
++        if (!flag && this.isSaddled() && !this.isVehicle() && !player.isSecondaryUseActive()) {
+             if (!this.level().isClientSide) {
+                 player.startRiding(this);
+             }
+ 
+             return InteractionResult.sidedSuccess(this.level().isClientSide);
+         } else {
+-            InteractionResult interactionResult = super.mobInteract(player, hand);
+-            if (!interactionResult.consumesAction()) {
+-                ItemStack itemInHand = player.getItemInHand(hand);
+-                return itemInHand.is(Items.SADDLE) ? itemInHand.interactLivingEntity(player, this, hand) : InteractionResult.PASS;
++            InteractionResult enuminteractionresult = super.mobInteract(player, hand);
++
++            if (!enuminteractionresult.consumesAction()) {
++                ItemStack itemstack = player.getItemInHand(hand);
++
++                return itemstack.is(Items.SADDLE) ? itemstack.interactLivingEntity(player, this, hand) : InteractionResult.PASS;
+             } else {
+-                return interactionResult;
++                return enuminteractionresult;
+             }
+         }
+     }
+@@ -161,8 +182,9 @@
+     protected void dropEquipment() {
+         super.dropEquipment();
+         if (this.isSaddled()) {
+-            this.spawnAtLocation(Items.SADDLE);
++            this.spawnAtLocation((IMaterial) Items.SADDLE);
+         }
++
+     }
+ 
+     @Override
+@@ -174,31 +196,41 @@
+     public void equipSaddle(@Nullable SoundSource source) {
+         this.steering.setSaddle(true);
+         if (source != null) {
+-            this.level().playSound(null, this, SoundEvents.PIG_SADDLE, source, 0.5F, 1.0F);
++            this.level().playSound((Player) null, (Entity) this, SoundEvents.PIG_SADDLE, source, 0.5F, 1.0F);
+         }
++
+     }
+ 
+     @Override
+     public Vec3 getDismountLocationForPassenger(LivingEntity livingEntity) {
+-        Direction motionDirection = this.getMotionDirection();
+-        if (motionDirection.getAxis() == Direction.Axis.Y) {
++        Direction enumdirection = this.getMotionDirection();
++
++        if (enumdirection.getAxis() == Direction.Axis.Y) {
+             return super.getDismountLocationForPassenger(livingEntity);
+         } else {
+-            int[][] ints = DismountHelper.offsetsForDirection(motionDirection);
+-            BlockPos blockPos = this.blockPosition();
+-            BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
++            int[][] aint = DismountHelper.offsetsForDirection(enumdirection);
++            BlockPos blockposition = this.blockPosition();
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++            UnmodifiableIterator unmodifiableiterator = livingEntity.getDismountPoses().iterator();
+ 
+-            for (Pose pose : livingEntity.getDismountPoses()) {
+-                AABB localBoundsForPose = livingEntity.getLocalBoundsForPose(pose);
++            while (unmodifiableiterator.hasNext()) {
++                EntityPose entitypose = (EntityPose) unmodifiableiterator.next();
++                AABB axisalignedbb = livingEntity.getLocalBoundsForPose(entitypose);
++                int[][] aint1 = aint;
++                int i = aint.length;
+ 
+-                for (int[] ints1 : ints) {
+-                    mutableBlockPos.set(blockPos.getX() + ints1[0], blockPos.getY(), blockPos.getZ() + ints1[1]);
+-                    double blockFloorHeight = this.level().getBlockFloorHeight(mutableBlockPos);
+-                    if (DismountHelper.isBlockFloorValid(blockFloorHeight)) {
+-                        Vec3 vec3 = Vec3.upFromBottomCenterOf(mutableBlockPos, blockFloorHeight);
+-                        if (DismountHelper.canDismountTo(this.level(), livingEntity, localBoundsForPose.move(vec3))) {
+-                            livingEntity.setPose(pose);
+-                            return vec3;
++                for (int j = 0; j < i; ++j) {
++                    int[] aint2 = aint1[j];
++
++                    blockposition_mutableblockposition.set(blockposition.getX() + aint2[0], blockposition.getY(), blockposition.getZ() + aint2[1]);
++                    double d0 = this.level().getBlockFloorHeight(blockposition_mutableblockposition);
++
++                    if (DismountHelper.isBlockFloorValid(d0)) {
++                        Vec3 vec3d = Vec3.upFromBottomCenterOf(blockposition_mutableblockposition, d0);
++
++                        if (DismountHelper.canDismountTo(this.level(), livingEntity, axisalignedbb.move(vec3d))) {
++                            livingEntity.setPose(entitypose);
++                            return vec3d;
+                         }
+                     }
+                 }
+@@ -211,19 +243,26 @@
+     @Override
+     public void thunderHit(ServerLevel level, LightningBolt lightning) {
+         if (level.getDifficulty() != Difficulty.PEACEFUL) {
+-            ZombifiedPiglin zombifiedPiglin = EntityType.ZOMBIFIED_PIGLIN.create(level);
+-            if (zombifiedPiglin != null) {
+-                zombifiedPiglin.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
+-                zombifiedPiglin.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+-                zombifiedPiglin.setNoAi(this.isNoAi());
+-                zombifiedPiglin.setBaby(this.isBaby());
++            ZombifiedPiglin entitypigzombie = (ZombifiedPiglin) EntityType.ZOMBIFIED_PIGLIN.create(level);
++
++            if (entitypigzombie != null) {
++                entitypigzombie.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.GOLDEN_SWORD));
++                entitypigzombie.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
++                entitypigzombie.setNoAi(this.isNoAi());
++                entitypigzombie.setBaby(this.isBaby());
+                 if (this.hasCustomName()) {
+-                    zombifiedPiglin.setCustomName(this.getCustomName());
+-                    zombifiedPiglin.setCustomNameVisible(this.isCustomNameVisible());
++                    entitypigzombie.setCustomName(this.getCustomName());
++                    entitypigzombie.setCustomNameVisible(this.isCustomNameVisible());
+                 }
+ 
+-                zombifiedPiglin.setPersistenceRequired();
+-                level.addFreshEntity(zombifiedPiglin);
++                entitypigzombie.setPersistenceRequired();
++                // CraftBukkit start
++                if (CraftEventFactory.callPigZapEvent(this, lightning, entitypigzombie).isCancelled()) {
++                    return;
++                }
++                // CraftBukkit - added a reason for spawning this creature
++                level.addFreshEntity(entitypigzombie, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.LIGHTNING);
++                // CraftBukkit end
+                 this.discard();
+             } else {
+                 super.thunderHit(level, lightning);
+@@ -231,6 +270,7 @@
+         } else {
+             super.thunderHit(level, lightning);
+         }
++
+     }
+ 
+     @Override
+@@ -243,12 +283,12 @@
+ 
+     @Override
+     protected Vec3 getRiddenInput(Player player, Vec3 travelVector) {
+-        return new Vec3(0.0, 0.0, 1.0);
++        return new Vec3(0.0D, 0.0D, 1.0D);
+     }
+ 
+     @Override
+     protected float getRiddenSpeed(Player player) {
+-        return (float)(this.getAttributeValue(Attributes.MOVEMENT_SPEED) * 0.225 * (double)this.steering.boostFactor());
++        return (float) (this.getAttributeValue(Attributes.MOVEMENT_SPEED) * 0.225D * (double) this.steering.boostFactor());
+     }
+ 
+     @Override
+@@ -259,21 +299,21 @@
+     @Nullable
+     @Override
+     public Pig getBreedOffspring(ServerLevel level, AgeableMob otherParent) {
+-        return EntityType.PIG.create(level);
++        return (Pig) EntityType.PIG.create(level);
+     }
+ 
+     @Override
+     public boolean isFood(ItemStack stack) {
+-        return FOOD_ITEMS.test(stack);
++        return Pig.FOOD_ITEMS.test(stack);
+     }
+ 
+     @Override
+     public Vec3 getLeashOffset() {
+-        return new Vec3(0.0, (double)(0.6F * this.getEyeHeight()), (double)(this.getBbWidth() * 0.4F));
++        return new Vec3(0.0D, (double) (0.6F * this.getEyeHeight()), (double) (this.getBbWidth() * 0.4F));
+     }
+ 
+     @Override
+-    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entityDimensions, float f) {
+-        return new Vector3f(0.0F, entityDimensions.height - 0.03125F * f, 0.0F);
++    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitysize, float f) {
++        return new Vector3f(0.0F, entitysize.height - 0.03125F * f, 0.0F);
+     }
+ }

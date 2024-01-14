@@ -1,0 +1,65 @@
+--- a/net/minecraft/world/entity/item/FallingBlockEntity.java
++++ b/net/minecraft/world/entity/item/FallingBlockEntity.java
+@@ -49,6 +49,10 @@
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
++
+ public class FallingBlockEntity extends Entity {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+@@ -82,12 +86,19 @@
+         this.setStartPos(this.blockPosition());
+     }
+ 
+-    public static FallingBlockEntity fall(Level level, BlockPos blockpos, BlockState blockstate) {
+-        FallingBlockEntity fallingblockentity = new FallingBlockEntity(level, (double) blockpos.getX() + 0.5D, (double) blockpos.getY(), (double) blockpos.getZ() + 0.5D, blockstate.hasProperty(BlockStateProperties.WATERLOGGED) ? (BlockState) blockstate.setValue(BlockStateProperties.WATERLOGGED, false) : blockstate);
++    public static FallingBlockEntity fall(Level level, BlockPos pos, IBlockData blockState) {
++        // CraftBukkit start
++        return fall(level, pos, blockState, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
++    }
+ 
+-        level.setBlock(blockpos, blockstate.getFluidState().createLegacyBlock(), 3);
+-        level.addFreshEntity(fallingblockentity);
+-        return fallingblockentity;
++    public static FallingBlockEntity fall(Level world, BlockPos blockposition, IBlockData iblockdata, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        // CraftBukkit end
++        FallingBlockEntity entityfallingblock = new FallingBlockEntity(world, (double) blockposition.getX() + 0.5D, (double) blockposition.getY(), (double) blockposition.getZ() + 0.5D, iblockdata.hasProperty(BlockStateProperties.WATERLOGGED) ? (IBlockData) iblockdata.setValue(BlockStateProperties.WATERLOGGED, false) : iblockdata);
++        if (!CraftEventFactory.callEntityChangeBlockEvent(entityfallingblock, blockposition, iblockdata.getFluidState().createLegacyBlock())) return entityfallingblock; // CraftBukkit
++
++        world.setBlock(blockposition, iblockdata.getFluidState().createLegacyBlock(), 3);
++        world.addFreshEntity(entityfallingblock, spawnReason); // CraftBukkit
++        return entityfallingblock;
+     }
+ 
+     @Override
+@@ -174,8 +180,14 @@
+                                     this.blockState = (BlockState) this.blockState.setValue(BlockStateProperties.WATERLOGGED, true);
+                                 }
+ 
+-                                if (this.level().setBlock(blockpos, this.blockState, 3)) {
+-                                    ((ServerLevel) this.level()).getChunkSource().chunkMap.broadcast(this, new ClientboundBlockUpdatePacket(blockpos, this.level().getBlockState(blockpos)));
++                                // CraftBukkit start
++                                if (!CraftEventFactory.callEntityChangeBlockEvent(this, blockposition, this.blockState)) {
++                                    this.discard(); // SPIGOT-6586 called before the event in previous versions
++                                    return;
++                                }
++                                // CraftBukkit end
++                                if (this.level().setBlock(blockposition, this.blockState, 3)) {
++                                    ((ServerLevel) this.level()).getChunkSource().chunkMap.broadcast(this, new ClientboundBlockUpdatePacket(blockposition, this.level().getBlockState(blockposition)));
+                                     this.discard();
+                                     if (block instanceof Fallable) {
+                                         ((Fallable) block).onLand(this.level(), blockpos, this.blockState, blockstate, this);
+@@ -261,7 +272,9 @@
+                 float f2 = (float) Math.min(Mth.floor((float) i * this.fallDamagePerDistance), this.fallDamageMax);
+ 
+                 this.level().getEntities((Entity) this, this.getBoundingBox(), predicate).forEach((entity) -> {
++                    CraftEventFactory.entityDamage = this; // CraftBukkit
+                     entity.hurt(damagesource2, f2);
++                    CraftEventFactory.entityDamage = null; // CraftBukkit
+                 });
+                 boolean flag = this.blockState.is(BlockTags.ANVIL);
+ 

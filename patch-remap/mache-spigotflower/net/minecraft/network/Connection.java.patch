@@ -1,0 +1,386 @@
+--- a/net/minecraft/network/Connection.java
++++ b/net/minecraft/network/Connection.java
+@@ -50,7 +50,7 @@
+ import net.minecraft.network.protocol.login.ClientLoginPacketListener;
+ import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
+ import net.minecraft.network.protocol.status.ClientStatusPacketListener;
+-import net.minecraft.server.RunningOnDifferentThreadException;
++import net.minecraft.server.CancelledPacketHandleException;
+ import net.minecraft.util.Mth;
+ import net.minecraft.util.SampleLogger;
+ import org.apache.commons.lang3.Validate;
+@@ -72,8 +72,8 @@
+     public static final Marker PACKET_SENT_MARKER = (Marker) Util.make(MarkerFactory.getMarker("PACKET_SENT"), (marker) -> {
+         marker.add(Connection.PACKET_MARKER);
+     });
+-    public static final AttributeKey<ConnectionProtocol.CodecData<?>> ATTRIBUTE_SERVERBOUND_PROTOCOL = AttributeKey.valueOf("serverbound_protocol");
+-    public static final AttributeKey<ConnectionProtocol.CodecData<?>> ATTRIBUTE_CLIENTBOUND_PROTOCOL = AttributeKey.valueOf("clientbound_protocol");
++    public static final AttributeKey<ConnectionProtocol.a<?>> ATTRIBUTE_SERVERBOUND_PROTOCOL = AttributeKey.valueOf("serverbound_protocol");
++    public static final AttributeKey<ConnectionProtocol.a<?>> ATTRIBUTE_CLIENTBOUND_PROTOCOL = AttributeKey.valueOf("clientbound_protocol");
+     public static final Supplier<NioEventLoopGroup> NETWORK_WORKER_GROUP = Suppliers.memoize(() -> {
+         return new NioEventLoopGroup(0, (new ThreadFactoryBuilder()).setNameFormat("Netty Client IO #%d").setDaemon(true).build());
+     });
+@@ -85,8 +85,8 @@
+     });
+     private final PacketFlow receiving;
+     private final Queue<Consumer<Connection>> pendingActions = Queues.newConcurrentLinkedQueue();
+-    private Channel channel;
+-    private SocketAddress address;
++    public Channel channel;
++    public SocketAddress address;
+     @Nullable
+     private volatile PacketListener disconnectListener;
+     @Nullable
+@@ -105,12 +105,12 @@
+     private volatile Component delayedDisconnect;
+     @Nullable
+     BandwidthDebugMonitor bandwidthDebugMonitor;
++    public String hostname = ""; // CraftBukkit - add field
+ 
+-    public Connection(PacketFlow packetflow) {
+-        this.receiving = packetflow;
++    public Connection(PacketFlow receiving) {
++        this.receiving = receiving;
+     }
+ 
+-    @Override
+     public void channelActive(ChannelHandlerContext channelhandlercontext) throws Exception {
+         super.channelActive(channelhandlercontext);
+         this.channel = channelhandlercontext.channel();
+@@ -126,12 +126,10 @@
+         channel.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL).set(ConnectionProtocol.HANDSHAKING.codec(PacketFlow.CLIENTBOUND));
+     }
+ 
+-    @Override
+     public void channelInactive(ChannelHandlerContext channelhandlercontext) {
+         this.disconnect(Component.translatable("disconnect.endOfStream"));
+     }
+ 
+-    @Override
+     public void exceptionCaught(ChannelHandlerContext channelhandlercontext, Throwable throwable) {
+         if (throwable instanceof SkipPacketException) {
+             Connection.LOGGER.debug("Skipping packet due to errors", throwable.getCause());
+@@ -144,25 +142,25 @@
+                     Connection.LOGGER.debug("Timeout", throwable);
+                     this.disconnect(Component.translatable("disconnect.timeout"));
+                 } else {
+-                    MutableComponent mutablecomponent = Component.translatable("disconnect.genericReason", "Internal Exception: " + throwable);
++                    MutableComponent ichatmutablecomponent = Component.translatable("disconnect.genericReason", "Internal Exception: " + throwable);
+ 
+                     if (flag) {
+                         Connection.LOGGER.debug("Failed to sent packet", throwable);
+                         if (this.getSending() == PacketFlow.CLIENTBOUND) {
+-                            ConnectionProtocol connectionprotocol = ((ConnectionProtocol.CodecData) this.channel.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL).get()).protocol();
+-                            Packet<?> packet = connectionprotocol == ConnectionProtocol.LOGIN ? new ClientboundLoginDisconnectPacket(mutablecomponent) : new ClientboundDisconnectPacket(mutablecomponent);
++                            ConnectionProtocol enumprotocol = ((ConnectionProtocol.a) this.channel.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL).get()).protocol();
++                            Packet<?> packet = enumprotocol == ConnectionProtocol.LOGIN ? new ClientboundLoginDisconnectPacket(ichatmutablecomponent) : new ClientboundDisconnectPacket(ichatmutablecomponent);
+ 
+                             this.send((Packet) packet, PacketSendListener.thenRun(() -> {
+-                                this.disconnect(mutablecomponent);
++                                this.disconnect(ichatmutablecomponent);
+                             }));
+                         } else {
+-                            this.disconnect(mutablecomponent);
++                            this.disconnect(ichatmutablecomponent);
+                         }
+ 
+                         this.setReadOnly();
+                     } else {
+                         Connection.LOGGER.debug("Double fault", throwable);
+-                        this.disconnect(mutablecomponent);
++                        this.disconnect(ichatmutablecomponent);
+                     }
+                 }
+ 
+@@ -170,8 +168,7 @@
+         }
+     }
+ 
+-    @Override
+-    protected void channelRead0(ChannelHandlerContext channelhandlercontext, Packet<?> packet) {
++    protected void channelRead0(ChannelHandlerContext context, Packet<?> packet) {
+         if (this.channel.isOpen()) {
+             PacketListener packetlistener = this.packetListener;
+ 
+@@ -181,7 +178,7 @@
+                 if (packetlistener.shouldHandleMessage(packet)) {
+                     try {
+                         genericsFtw(packet, packetlistener);
+-                    } catch (RunningOnDifferentThreadException runningondifferentthreadexception) {
++                    } catch (CancelledPacketHandleException cancelledpackethandleexception) {
+                         ;
+                     } catch (RejectedExecutionException rejectedexecutionexception) {
+                         this.disconnect(Component.translatable("multiplayer.disconnect.server_shutdown"));
+@@ -197,8 +194,8 @@
+         }
+     }
+ 
+-    private static <T extends PacketListener> void genericsFtw(Packet<T> packet, PacketListener packetlistener) {
+-        packet.handle(packetlistener);
++    private static <T extends PacketListener> void genericsFtw(Packet<T> packet, PacketListener listener) {
++        packet.handle((T) listener); // CraftBukkit - decompile error
+     }
+ 
+     public void suspendInboundAfterProtocolChange() {
+@@ -209,20 +206,20 @@
+         this.channel.config().setAutoRead(true);
+     }
+ 
+-    public void setListener(PacketListener packetlistener) {
+-        Validate.notNull(packetlistener, "packetListener", new Object[0]);
+-        PacketFlow packetflow = packetlistener.flow();
++    public void setListener(PacketListener handler) {
++        Validate.notNull(handler, "packetListener", new Object[0]);
++        PacketFlow enumprotocoldirection = handler.flow();
+ 
+-        if (packetflow != this.receiving) {
+-            throw new IllegalStateException("Trying to set listener for wrong side: connection is " + this.receiving + ", but listener is " + packetflow);
++        if (enumprotocoldirection != this.receiving) {
++            throw new IllegalStateException("Trying to set listener for wrong side: connection is " + this.receiving + ", but listener is " + enumprotocoldirection);
+         } else {
+-            ConnectionProtocol connectionprotocol = packetlistener.protocol();
+-            ConnectionProtocol connectionprotocol1 = ((ConnectionProtocol.CodecData) this.channel.attr(getProtocolKey(packetflow)).get()).protocol();
++            ConnectionProtocol enumprotocol = handler.protocol();
++            ConnectionProtocol enumprotocol1 = ((ConnectionProtocol.a) this.channel.attr(getProtocolKey(enumprotocoldirection)).get()).protocol();
+ 
+-            if (connectionprotocol1 != connectionprotocol) {
+-                throw new IllegalStateException("Trying to set listener for protocol " + connectionprotocol.id() + ", but current " + packetflow + " protocol is " + connectionprotocol1.id());
++            if (enumprotocol1 != enumprotocol) {
++                throw new IllegalStateException("Trying to set listener for protocol " + enumprotocol.id() + ", but current " + enumprotocoldirection + " protocol is " + enumprotocol1.id());
+             } else {
+-                this.packetListener = packetlistener;
++                this.packetListener = handler;
+                 this.disconnectListener = null;
+             }
+         }
+@@ -238,20 +235,20 @@
+         }
+     }
+ 
+-    public void initiateServerboundStatusConnection(String s, int i, ClientStatusPacketListener clientstatuspacketlistener) {
+-        this.initiateServerboundConnection(s, i, clientstatuspacketlistener, ClientIntent.STATUS);
++    public void initiateServerboundStatusConnection(String s, int i, ClientStatusPacketListener packetstatusoutlistener) {
++        this.initiateServerboundConnection(s, i, packetstatusoutlistener, ClientIntent.STATUS);
+     }
+ 
+-    public void initiateServerboundPlayConnection(String s, int i, ClientLoginPacketListener clientloginpacketlistener) {
+-        this.initiateServerboundConnection(s, i, clientloginpacketlistener, ClientIntent.LOGIN);
++    public void initiateServerboundPlayConnection(String s, int i, ClientLoginPacketListener packetloginoutlistener) {
++        this.initiateServerboundConnection(s, i, packetloginoutlistener, ClientIntent.LOGIN);
+     }
+ 
+     private void initiateServerboundConnection(String s, int i, PacketListener packetlistener, ClientIntent clientintent) {
+         this.disconnectListener = packetlistener;
+-        this.runOnceConnected((connection) -> {
+-            connection.setClientboundProtocolAfterHandshake(clientintent);
++        this.runOnceConnected((networkmanager) -> {
++            networkmanager.setClientboundProtocolAfterHandshake(clientintent);
+             this.setListener(packetlistener);
+-            connection.sendPacket(new ClientIntentionPacket(SharedConstants.getCurrentVersion().getProtocolVersion(), s, i, clientintent), (PacketSendListener) null, true);
++            networkmanager.sendPacket(new ClientIntentionPacket(SharedConstants.getCurrentVersion().getProtocolVersion(), s, i, clientintent), (PacketSendListener) null, true);
+         });
+     }
+ 
+@@ -263,8 +260,8 @@
+         this.send(packet, (PacketSendListener) null);
+     }
+ 
+-    public void send(Packet<?> packet, @Nullable PacketSendListener packetsendlistener) {
+-        this.send(packet, packetsendlistener, true);
++    public void send(Packet<?> packet, @Nullable PacketSendListener sendListener) {
++        this.send(packet, sendListener, true);
+     }
+ 
+     public void send(Packet<?> packet, @Nullable PacketSendListener packetsendlistener, boolean flag) {
+@@ -272,8 +269,8 @@
+             this.flushQueue();
+             this.sendPacket(packet, packetsendlistener, flag);
+         } else {
+-            this.pendingActions.add((connection) -> {
+-                connection.sendPacket(packet, packetsendlistener, flag);
++            this.pendingActions.add((networkmanager) -> {
++                networkmanager.sendPacket(packet, packetsendlistener, flag);
+             });
+         }
+ 
+@@ -344,10 +341,10 @@
+ 
+     }
+ 
+-    private static AttributeKey<ConnectionProtocol.CodecData<?>> getProtocolKey(PacketFlow packetflow) {
++    private static AttributeKey<ConnectionProtocol.a<?>> getProtocolKey(PacketFlow enumprotocoldirection) {
+         AttributeKey attributekey;
+ 
+-        switch (packetflow) {
++        switch (enumprotocoldirection) {
+             case CLIENTBOUND:
+                 attributekey = Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL;
+                 break;
+@@ -419,14 +416,14 @@
+         return this.address == null ? "local" : (flag ? this.address.toString() : "IP hidden");
+     }
+ 
+-    public void disconnect(Component component) {
++    public void disconnect(Component message) {
+         if (this.channel == null) {
+-            this.delayedDisconnect = component;
++            this.delayedDisconnect = message;
+         }
+ 
+         if (this.isConnected()) {
+-            this.channel.close().awaitUninterruptibly();
+-            this.disconnectedReason = component;
++            this.channel.close(); // We can't wait as this may be called from an event loop.
++            this.disconnectedReason = message;
+         }
+ 
+     }
+@@ -444,23 +441,23 @@
+     }
+ 
+     public static Connection connectToServer(InetSocketAddress inetsocketaddress, boolean flag, @Nullable SampleLogger samplelogger) {
+-        Connection connection = new Connection(PacketFlow.CLIENTBOUND);
++        Connection networkmanager = new Connection(PacketFlow.CLIENTBOUND);
+ 
+         if (samplelogger != null) {
+-            connection.setBandwidthLogger(samplelogger);
++            networkmanager.setBandwidthLogger(samplelogger);
+         }
+ 
+-        ChannelFuture channelfuture = connect(inetsocketaddress, flag, connection);
++        ChannelFuture channelfuture = connect(inetsocketaddress, flag, networkmanager);
+ 
+         channelfuture.syncUninterruptibly();
+-        return connection;
++        return networkmanager;
+     }
+ 
+-    public static ChannelFuture connect(InetSocketAddress inetsocketaddress, boolean flag, final Connection connection) {
++    public static ChannelFuture connect(InetSocketAddress address, boolean useEpollIfAvailable, final Connection connection) {
+         Class oclass;
+         EventLoopGroup eventloopgroup;
+ 
+-        if (Epoll.isAvailable() && flag) {
++        if (Epoll.isAvailable() && useEpollIfAvailable) {
+             oclass = EpollSocketChannel.class;
+             eventloopgroup = (EventLoopGroup) Connection.NETWORK_EPOLL_WORKER_GROUP.get();
+         } else {
+@@ -469,7 +466,6 @@
+         }
+ 
+         return ((Bootstrap) ((Bootstrap) ((Bootstrap) (new Bootstrap()).group(eventloopgroup)).handler(new ChannelInitializer<Channel>() {
+-            @Override
+             protected void initChannel(Channel channel) {
+                 Connection.setInitialProtocolAttributes(channel);
+ 
+@@ -484,13 +480,13 @@
+                 Connection.configureSerialization(channelpipeline, PacketFlow.CLIENTBOUND, connection.bandwidthDebugMonitor);
+                 connection.configurePacketHandler(channelpipeline);
+             }
+-        })).channel(oclass)).connect(inetsocketaddress.getAddress(), inetsocketaddress.getPort());
++        })).channel(oclass)).connect(address.getAddress(), address.getPort());
+     }
+ 
+-    public static void configureSerialization(ChannelPipeline channelpipeline, PacketFlow packetflow, @Nullable BandwidthDebugMonitor bandwidthdebugmonitor) {
+-        PacketFlow packetflow1 = packetflow.getOpposite();
+-        AttributeKey<ConnectionProtocol.CodecData<?>> attributekey = getProtocolKey(packetflow);
+-        AttributeKey<ConnectionProtocol.CodecData<?>> attributekey1 = getProtocolKey(packetflow1);
++    public static void configureSerialization(ChannelPipeline channelpipeline, PacketFlow enumprotocoldirection, @Nullable BandwidthDebugMonitor bandwidthdebugmonitor) {
++        PacketFlow enumprotocoldirection1 = enumprotocoldirection.getOpposite();
++        AttributeKey<ConnectionProtocol.a<?>> attributekey = getProtocolKey(enumprotocoldirection);
++        AttributeKey<ConnectionProtocol.a<?>> attributekey1 = getProtocolKey(enumprotocoldirection1);
+ 
+         channelpipeline.addLast("splitter", new Varint21FrameDecoder(bandwidthdebugmonitor)).addLast("decoder", new PacketDecoder(attributekey)).addLast("prepender", new Varint21LengthFieldPrepender()).addLast("encoder", new PacketEncoder(attributekey1)).addLast("unbundler", new PacketBundleUnpacker(attributekey1)).addLast("bundler", new PacketBundlePacker(attributekey));
+     }
+@@ -499,38 +495,37 @@
+         channelpipeline.addLast(new ChannelHandler[]{new FlowControlHandler()}).addLast("packet_handler", this);
+     }
+ 
+-    private static void configureInMemoryPacketValidation(ChannelPipeline channelpipeline, PacketFlow packetflow) {
+-        PacketFlow packetflow1 = packetflow.getOpposite();
+-        AttributeKey<ConnectionProtocol.CodecData<?>> attributekey = getProtocolKey(packetflow);
+-        AttributeKey<ConnectionProtocol.CodecData<?>> attributekey1 = getProtocolKey(packetflow1);
++    private static void configureInMemoryPacketValidation(ChannelPipeline channelpipeline, PacketFlow enumprotocoldirection) {
++        PacketFlow enumprotocoldirection1 = enumprotocoldirection.getOpposite();
++        AttributeKey<ConnectionProtocol.a<?>> attributekey = getProtocolKey(enumprotocoldirection);
++        AttributeKey<ConnectionProtocol.a<?>> attributekey1 = getProtocolKey(enumprotocoldirection1);
+ 
+         channelpipeline.addLast("validator", new PacketFlowValidator(attributekey, attributekey1));
+     }
+ 
+-    public static void configureInMemoryPipeline(ChannelPipeline channelpipeline, PacketFlow packetflow) {
+-        configureInMemoryPacketValidation(channelpipeline, packetflow);
++    public static void configureInMemoryPipeline(ChannelPipeline channelpipeline, PacketFlow enumprotocoldirection) {
++        configureInMemoryPacketValidation(channelpipeline, enumprotocoldirection);
+     }
+ 
+-    public static Connection connectToLocalServer(SocketAddress socketaddress) {
+-        final Connection connection = new Connection(PacketFlow.CLIENTBOUND);
++    public static Connection connectToLocalServer(SocketAddress address) {
++        final Connection networkmanager = new Connection(PacketFlow.CLIENTBOUND);
+ 
+         ((Bootstrap) ((Bootstrap) ((Bootstrap) (new Bootstrap()).group((EventLoopGroup) Connection.LOCAL_WORKER_GROUP.get())).handler(new ChannelInitializer<Channel>() {
+-            @Override
+             protected void initChannel(Channel channel) {
+                 Connection.setInitialProtocolAttributes(channel);
+                 ChannelPipeline channelpipeline = channel.pipeline();
+ 
+                 Connection.configureInMemoryPipeline(channelpipeline, PacketFlow.CLIENTBOUND);
+-                connection.configurePacketHandler(channelpipeline);
++                networkmanager.configurePacketHandler(channelpipeline);
+             }
+-        })).channel(LocalChannel.class)).connect(socketaddress).syncUninterruptibly();
+-        return connection;
++        })).channel(LocalChannel.class)).connect(address).syncUninterruptibly();
++        return networkmanager;
+     }
+ 
+-    public void setEncryptionKey(Cipher cipher, Cipher cipher1) {
++    public void setEncryptionKey(Cipher decryptingCipher, Cipher encryptingCipher) {
+         this.encrypted = true;
+-        this.channel.pipeline().addBefore("splitter", "decrypt", new CipherDecoder(cipher));
+-        this.channel.pipeline().addBefore("prepender", "encrypt", new CipherEncoder(cipher1));
++        this.channel.pipeline().addBefore("splitter", "decrypt", new CipherDecoder(decryptingCipher));
++        this.channel.pipeline().addBefore("prepender", "encrypt", new CipherEncoder(encryptingCipher));
+     }
+ 
+     public boolean isEncrypted() {
+@@ -562,18 +557,18 @@
+ 
+     }
+ 
+-    public void setupCompression(int i, boolean flag) {
+-        if (i >= 0) {
++    public void setupCompression(int threshold, boolean validateDecompressed) {
++        if (threshold >= 0) {
+             if (this.channel.pipeline().get("decompress") instanceof CompressionDecoder) {
+-                ((CompressionDecoder) this.channel.pipeline().get("decompress")).setThreshold(i, flag);
++                ((CompressionDecoder) this.channel.pipeline().get("decompress")).setThreshold(threshold, validateDecompressed);
+             } else {
+-                this.channel.pipeline().addBefore("decoder", "decompress", new CompressionDecoder(i, flag));
++                this.channel.pipeline().addBefore("decoder", "decompress", new CompressionDecoder(threshold, validateDecompressed));
+             }
+ 
+             if (this.channel.pipeline().get("compress") instanceof CompressionEncoder) {
+-                ((CompressionEncoder) this.channel.pipeline().get("compress")).setThreshold(i);
++                ((CompressionEncoder) this.channel.pipeline().get("compress")).setThreshold(threshold);
+             } else {
+-                this.channel.pipeline().addBefore("encoder", "compress", new CompressionEncoder(i));
++                this.channel.pipeline().addBefore("encoder", "compress", new CompressionEncoder(threshold));
+             }
+         } else {
+             if (this.channel.pipeline().get("decompress") instanceof CompressionDecoder) {
+@@ -597,11 +592,11 @@
+                 PacketListener packetlistener1 = packetlistener != null ? packetlistener : this.disconnectListener;
+ 
+                 if (packetlistener1 != null) {
+-                    Component component = (Component) Objects.requireNonNullElseGet(this.getDisconnectedReason(), () -> {
++                    Component ichatbasecomponent = (Component) Objects.requireNonNullElseGet(this.getDisconnectedReason(), () -> {
+                         return Component.translatable("multiplayer.disconnect.generic");
+                     });
+ 
+-                    packetlistener1.onDisconnect(component);
++                    packetlistener1.onDisconnect(ichatbasecomponent);
+                 }
+ 
+             }

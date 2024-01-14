@@ -1,0 +1,97 @@
+--- a/net/minecraft/world/level/redstone/NeighborUpdater.java
++++ b/net/minecraft/world/level/redstone/NeighborUpdater.java
+@@ -8,57 +8,74 @@
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+ import net.minecraft.core.registries.BuiltInRegistries;
++import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.Block;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
++import org.bukkit.craftbukkit.CraftWorld;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.block.data.CraftBlockData;
++import org.bukkit.event.block.BlockPhysicsEvent;
++// CraftBukkit end
+ 
+ public interface NeighborUpdater {
+ 
+     Direction[] UPDATE_ORDER = new Direction[]{Direction.WEST, Direction.EAST, Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH};
+ 
+-    void shapeUpdate(Direction direction, BlockState state, BlockPos pos, BlockPos neighborPos, int flags, int recursionLevel);
++    void shapeUpdate(Direction direction, IBlockData state, BlockPos pos, BlockPos neighborPos, int flags, int recursionLevel);
+ 
+     void neighborChanged(BlockPos pos, Block neighborBlock, BlockPos neighborPos);
+ 
+-    void neighborChanged(BlockState state, BlockPos pos, Block neighborBlock, BlockPos neighborPos, boolean movedByPiston);
++    void neighborChanged(IBlockData state, BlockPos pos, Block neighborBlock, BlockPos neighborPos, boolean movedByPiston);
+ 
+-    default void updateNeighborsAtExceptFromFacing(BlockPos blockpos, Block block, @Nullable Direction direction) {
+-        Direction[] adirection = NeighborUpdater.UPDATE_ORDER;
+-        int i = adirection.length;
++    default void updateNeighborsAtExceptFromFacing(BlockPos pos, Block block, @Nullable Direction facing) {
++        Direction[] aenumdirection = NeighborUpdater.UPDATE_ORDER;
++        int i = aenumdirection.length;
+ 
+         for (int j = 0; j < i; ++j) {
+-            Direction direction1 = adirection[j];
++            Direction enumdirection1 = aenumdirection[j];
+ 
+-            if (direction1 != direction) {
+-                this.neighborChanged(blockpos.relative(direction1), block, blockpos);
++            if (enumdirection1 != facing) {
++                this.neighborChanged(pos.relative(enumdirection1), block, pos);
+             }
+         }
+ 
+     }
+ 
+-    static void executeShapeUpdate(LevelAccessor levelaccessor, Direction direction, BlockState blockstate, BlockPos blockpos, BlockPos blockpos1, int i, int j) {
+-        BlockState blockstate1 = levelaccessor.getBlockState(blockpos);
+-        BlockState blockstate2 = blockstate1.updateShape(direction, blockstate, levelaccessor, blockpos, blockpos1);
++    static void executeShapeUpdate(LevelAccessor level, Direction direction, IBlockData state, BlockPos pos, BlockPos neighborPos, int flags, int recursionLevel) {
++        IBlockData iblockdata1 = level.getBlockState(pos);
++        IBlockData iblockdata2 = iblockdata1.updateShape(direction, state, level, pos, neighborPos);
+ 
+-        Block.updateOrDestroy(blockstate1, blockstate2, levelaccessor, blockpos, i, j);
++        Block.updateOrDestroy(iblockdata1, iblockdata2, level, pos, flags, recursionLevel);
+     }
+ 
+-    static void executeUpdate(Level level, BlockState blockstate, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
++    static void executeUpdate(Level level, IBlockData state, BlockPos pos, Block neighborBlock, BlockPos neighborPos, boolean movedByPiston) {
+         try {
+-            blockstate.neighborChanged(level, blockpos, block, blockpos1, flag);
++            // CraftBukkit start
++            CraftWorld cworld = ((ServerLevel) level).getWorld();
++            if (cworld != null) {
++                BlockPhysicsEvent event = new BlockPhysicsEvent(CraftBlock.at(level, pos), CraftBlockData.fromData(state), CraftBlock.at(level, neighborPos));
++                ((ServerLevel) level).getCraftServer().getPluginManager().callEvent(event);
++
++                if (event.isCancelled()) {
++                    return;
++                }
++            }
++            // CraftBukkit end
++            state.neighborChanged(level, pos, neighborBlock, neighborPos, movedByPiston);
+         } catch (Throwable throwable) {
+             CrashReport crashreport = CrashReport.forThrowable(throwable, "Exception while updating neighbours");
+-            CrashReportCategory crashreportcategory = crashreport.addCategory("Block being updated");
++            CrashReportCategory crashreportsystemdetails = crashreport.addCategory("Block being updated");
+ 
+-            crashreportcategory.setDetail("Source block type", () -> {
++            crashreportsystemdetails.setDetail("Source block type", () -> {
+                 try {
+-                    return String.format(Locale.ROOT, "ID #%s (%s // %s)", BuiltInRegistries.BLOCK.getKey(block), block.getDescriptionId(), block.getClass().getCanonicalName());
++                    return String.format(Locale.ROOT, "ID #%s (%s // %s)", BuiltInRegistries.BLOCK.getKey(neighborBlock), neighborBlock.getDescriptionId(), neighborBlock.getClass().getCanonicalName());
+                 } catch (Throwable throwable1) {
+-                    return "ID #" + BuiltInRegistries.BLOCK.getKey(block);
++                    return "ID #" + BuiltInRegistries.BLOCK.getKey(neighborBlock);
+                 }
+             });
+-            CrashReportCategory.populateBlockDetails(crashreportcategory, level, blockpos, blockstate);
++            CrashReportCategory.populateBlockDetails(crashreportsystemdetails, level, pos, state);
+             throw new ReportedException(crashreport);
+         }
+     }

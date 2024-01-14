@@ -1,0 +1,519 @@
+--- a/net/minecraft/world/level/block/BedBlock.java
++++ b/net/minecraft/world/level/block/BedBlock.java
+@@ -2,7 +2,6 @@
+ 
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import com.mojang.serialization.codecs.RecordCodecBuilder.Instance;
+ import java.util.List;
+ import java.util.Optional;
+ import javax.annotation.Nullable;
+@@ -10,7 +9,7 @@
+ import net.minecraft.core.Direction;
+ import net.minecraft.network.chat.Component;
+ import net.minecraft.util.Mth;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
+@@ -23,18 +22,19 @@
+ import net.minecraft.world.item.context.BlockPlaceContext;
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.CollisionGetter;
++import net.minecraft.world.level.ExplosionDamageCalculator;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.entity.BedBlockEntity;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BedPart;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+ import net.minecraft.world.level.block.state.properties.EnumProperty;
+-import net.minecraft.world.level.pathfinder.PathComputationType;
++import net.minecraft.world.level.pathfinder.PathMode;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.Vec3;
+@@ -44,97 +44,134 @@
+ import org.apache.commons.lang3.ArrayUtils;
+ 
+ public class BedBlock extends HorizontalDirectionalBlock implements EntityBlock {
+-    public static final MapCodec<BedBlock> CODEC = RecordCodecBuilder.mapCodec(
+-        instance -> instance.group(DyeColor.CODEC.fieldOf("color").forGetter(BedBlock::getColor), propertiesCodec()).apply(instance, BedBlock::new)
+-    );
++
++    public static final MapCodec<BedBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
++        return instance.group(DyeColor.CODEC.fieldOf("color").forGetter(BedBlock::getColor), propertiesCodec()).apply(instance, BedBlock::new);
++    });
+     public static final EnumProperty<BedPart> PART = BlockStateProperties.BED_PART;
+     public static final BooleanProperty OCCUPIED = BlockStateProperties.OCCUPIED;
+     protected static final int HEIGHT = 9;
+-    protected static final VoxelShape BASE = Block.box(0.0, 3.0, 0.0, 16.0, 9.0, 16.0);
++    protected static final VoxelShape BASE = Block.box(0.0D, 3.0D, 0.0D, 16.0D, 9.0D, 16.0D);
+     private static final int LEG_WIDTH = 3;
+-    protected static final VoxelShape LEG_NORTH_WEST = Block.box(0.0, 0.0, 0.0, 3.0, 3.0, 3.0);
+-    protected static final VoxelShape LEG_SOUTH_WEST = Block.box(0.0, 0.0, 13.0, 3.0, 3.0, 16.0);
+-    protected static final VoxelShape LEG_NORTH_EAST = Block.box(13.0, 0.0, 0.0, 16.0, 3.0, 3.0);
+-    protected static final VoxelShape LEG_SOUTH_EAST = Block.box(13.0, 0.0, 13.0, 16.0, 3.0, 16.0);
+-    protected static final VoxelShape NORTH_SHAPE = Shapes.or(BASE, LEG_NORTH_WEST, LEG_NORTH_EAST);
+-    protected static final VoxelShape SOUTH_SHAPE = Shapes.or(BASE, LEG_SOUTH_WEST, LEG_SOUTH_EAST);
+-    protected static final VoxelShape WEST_SHAPE = Shapes.or(BASE, LEG_NORTH_WEST, LEG_SOUTH_WEST);
+-    protected static final VoxelShape EAST_SHAPE = Shapes.or(BASE, LEG_NORTH_EAST, LEG_SOUTH_EAST);
++    protected static final VoxelShape LEG_NORTH_WEST = Block.box(0.0D, 0.0D, 0.0D, 3.0D, 3.0D, 3.0D);
++    protected static final VoxelShape LEG_SOUTH_WEST = Block.box(0.0D, 0.0D, 13.0D, 3.0D, 3.0D, 16.0D);
++    protected static final VoxelShape LEG_NORTH_EAST = Block.box(13.0D, 0.0D, 0.0D, 16.0D, 3.0D, 3.0D);
++    protected static final VoxelShape LEG_SOUTH_EAST = Block.box(13.0D, 0.0D, 13.0D, 16.0D, 3.0D, 16.0D);
++    protected static final VoxelShape NORTH_SHAPE = Shapes.or(BedBlock.BASE, BedBlock.LEG_NORTH_WEST, BedBlock.LEG_NORTH_EAST);
++    protected static final VoxelShape SOUTH_SHAPE = Shapes.or(BedBlock.BASE, BedBlock.LEG_SOUTH_WEST, BedBlock.LEG_SOUTH_EAST);
++    protected static final VoxelShape WEST_SHAPE = Shapes.or(BedBlock.BASE, BedBlock.LEG_NORTH_WEST, BedBlock.LEG_SOUTH_WEST);
++    protected static final VoxelShape EAST_SHAPE = Shapes.or(BedBlock.BASE, BedBlock.LEG_NORTH_EAST, BedBlock.LEG_SOUTH_EAST);
+     private final DyeColor color;
+ 
+     @Override
+     public MapCodec<BedBlock> codec() {
+-        return CODEC;
++        return BedBlock.CODEC;
+     }
+ 
+     public BedBlock(DyeColor color, BlockBehaviour.Properties properties) {
+         super(properties);
+         this.color = color;
+-        this.registerDefaultState(this.stateDefinition.any().setValue(PART, BedPart.FOOT).setValue(OCCUPIED, Boolean.valueOf(false)));
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(BedBlock.PART, BedPart.FOOT)).setValue(BedBlock.OCCUPIED, false));
+     }
+ 
+     @Nullable
+     public static Direction getBedOrientation(BlockGetter level, BlockPos pos) {
+-        BlockState blockState = level.getBlockState(pos);
+-        return blockState.getBlock() instanceof BedBlock ? blockState.getValue(FACING) : null;
++        IBlockData iblockdata = level.getBlockState(pos);
++
++        return iblockdata.getBlock() instanceof BedBlock ? (Direction) iblockdata.getValue(BedBlock.FACING) : null;
+     }
+ 
+     @Override
+-    public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
+         if (level.isClientSide) {
+             return InteractionResult.CONSUME;
+         } else {
+-            if (state.getValue(PART) != BedPart.HEAD) {
+-                pos = pos.relative(state.getValue(FACING));
++            if (state.getValue(BedBlock.PART) != BedPart.HEAD) {
++                pos = pos.relative((Direction) state.getValue(BedBlock.FACING));
+                 state = level.getBlockState(pos);
+-                if (!state.is(this)) {
++                if (!state.is((Block) this)) {
+                     return InteractionResult.CONSUME;
+                 }
+             }
+ 
+-            if (!canSetSpawn(level)) {
++            // CraftBukkit - moved world and biome check into EntityHuman
++            if (false && !canSetSpawn(level)) {
+                 level.removeBlock(pos, false);
+-                BlockPos blockPos = pos.relative(state.getValue(FACING).getOpposite());
+-                if (level.getBlockState(blockPos).is(this)) {
+-                    level.removeBlock(blockPos, false);
++                BlockPos blockposition1 = pos.relative(((Direction) state.getValue(BedBlock.FACING)).getOpposite());
++
++                if (level.getBlockState(blockposition1).is((Block) this)) {
++                    level.removeBlock(blockposition1, false);
+                 }
+ 
+-                Vec3 center = pos.getCenter();
+-                level.explode(null, level.damageSources().badRespawnPointExplosion(center), null, center, 5.0F, true, Level.ExplosionInteraction.BLOCK);
++                Vec3 vec3d = pos.getCenter();
++
++                level.explode((Entity) null, level.damageSources().badRespawnPointExplosion(vec3d), (ExplosionDamageCalculator) null, vec3d, 5.0F, true, Level.a.BLOCK);
+                 return InteractionResult.SUCCESS;
+-            } else if (state.getValue(OCCUPIED)) {
++            } else if ((Boolean) state.getValue(BedBlock.OCCUPIED)) {
+                 if (!this.kickVillagerOutOfBed(level, pos)) {
+                     player.displayClientMessage(Component.translatable("block.minecraft.bed.occupied"), true);
+                 }
+ 
+                 return InteractionResult.SUCCESS;
+             } else {
+-                player.startSleepInBed(pos).ifLeft(bedSleepingProblem -> {
+-                    if (bedSleepingProblem.getMessage() != null) {
+-                        player.displayClientMessage(bedSleepingProblem.getMessage(), true);
++                // CraftBukkit start
++                IBlockData finaliblockdata = state;
++                BlockPos finalblockposition = pos;
++                // CraftBukkit end
++                player.startSleepInBed(pos).ifLeft((entityhuman_enumbedresult) -> {
++                    // CraftBukkit start - handling bed explosion from below here
++                    if (!level.dimensionType().bedWorks()) {
++                        this.explodeBed(finaliblockdata, level, finalblockposition);
++                    } else
++                    // CraftBukkit end
++                    if (entityhuman_enumbedresult.getMessage() != null) {
++                        player.displayClientMessage(entityhuman_enumbedresult.getMessage(), true);
+                     }
++
+                 });
+                 return InteractionResult.SUCCESS;
+             }
+         }
+     }
+ 
++    // CraftBukkit start
++    private InteractionResult explodeBed(IBlockData iblockdata, Level world, BlockPos blockposition) {
++        {
++            {
++                world.removeBlock(blockposition, false);
++                BlockPos blockposition1 = blockposition.relative(((Direction) iblockdata.getValue(BedBlock.FACING)).getOpposite());
++
++                if (world.getBlockState(blockposition1).getBlock() == this) {
++                    world.removeBlock(blockposition1, false);
++                }
++
++                Vec3 vec3d = blockposition.getCenter();
++
++                world.explode((Entity) null, world.damageSources().badRespawnPointExplosion(vec3d), (ExplosionDamageCalculator) null, vec3d, 5.0F, true, Level.a.BLOCK);
++                return InteractionResult.SUCCESS;
++            }
++        }
++    }
++    // CraftBukkit end
++
+     public static boolean canSetSpawn(Level level) {
+-        return level.dimensionType().bedWorks();
++        // CraftBukkit - moved world and biome check into EntityHuman
++        return true || level.dimensionType().bedWorks();
+     }
+ 
+     private boolean kickVillagerOutOfBed(Level level, BlockPos pos) {
+-        List<Villager> entitiesOfClass = level.getEntitiesOfClass(Villager.class, new AABB(pos), LivingEntity::isSleeping);
+-        if (entitiesOfClass.isEmpty()) {
++        List<Villager> list = level.getEntitiesOfClass(Villager.class, new AABB(pos), LivingEntity::isSleeping);
++
++        if (list.isEmpty()) {
+             return false;
+         } else {
+-            entitiesOfClass.get(0).stopSleeping();
++            ((Villager) list.get(0)).stopSleeping();
+             return true;
+         }
+     }
+ 
+     @Override
+-    public void fallOn(Level level, BlockState state, BlockPos pos, Entity entity, float fallDistance) {
++    public void fallOn(Level level, IBlockData state, BlockPos pos, Entity entity, float fallDistance) {
+         super.fallOn(level, state, pos, entity, fallDistance * 0.5F);
+     }
+ 
+@@ -145,25 +182,23 @@
+         } else {
+             this.bounceUp(entity);
+         }
++
+     }
+ 
+     private void bounceUp(Entity entity) {
+-        Vec3 deltaMovement = entity.getDeltaMovement();
+-        if (deltaMovement.y < 0.0) {
+-            double d = entity instanceof LivingEntity ? 1.0 : 0.8;
+-            entity.setDeltaMovement(deltaMovement.x, -deltaMovement.y * 0.66F * d, deltaMovement.z);
++        Vec3 vec3d = entity.getDeltaMovement();
++
++        if (vec3d.y < 0.0D) {
++            double d0 = entity instanceof LivingEntity ? 1.0D : 0.8D;
++
++            entity.setDeltaMovement(vec3d.x, -vec3d.y * 0.6600000262260437D * d0, vec3d.z);
+         }
++
+     }
+ 
+     @Override
+-    public BlockState updateShape(BlockState state, Direction facing, BlockState facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
+-        if (facing == getNeighbourDirection(state.getValue(PART), state.getValue(FACING))) {
+-            return facingState.is(this) && facingState.getValue(PART) != state.getValue(PART)
+-                ? state.setValue(OCCUPIED, facingState.getValue(OCCUPIED))
+-                : Blocks.AIR.defaultBlockState();
+-        } else {
+-            return super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+-        }
++    public IBlockData updateShape(IBlockData state, Direction facing, IBlockData facingState, LevelAccessor level, BlockPos currentPos, BlockPos facingPos) {
++        return facing == getNeighbourDirection((BedPart) state.getValue(BedBlock.PART), (Direction) state.getValue(BedBlock.FACING)) ? (facingState.is((Block) this) && facingState.getValue(BedBlock.PART) != state.getValue(BedBlock.PART) ? (IBlockData) state.setValue(BedBlock.OCCUPIED, (Boolean) facingState.getValue(BedBlock.OCCUPIED)) : Blocks.AIR.defaultBlockState()) : super.updateShape(state, facing, facingState, level, currentPos, facingPos);
+     }
+ 
+     private static Direction getNeighbourDirection(BedPart part, Direction direction) {
+@@ -171,57 +206,61 @@
+     }
+ 
+     @Override
+-    public BlockState playerWillDestroy(Level level, BlockPos blockPos, BlockState blockState, Player player) {
+-        if (!level.isClientSide && player.isCreative()) {
+-            BedPart bedPart = blockState.getValue(PART);
+-            if (bedPart == BedPart.FOOT) {
+-                BlockPos blockPos1 = blockPos.relative(getNeighbourDirection(bedPart, blockState.getValue(FACING)));
+-                BlockState blockState1 = level.getBlockState(blockPos1);
+-                if (blockState1.is(this) && blockState1.getValue(PART) == BedPart.HEAD) {
+-                    level.setBlock(blockPos1, Blocks.AIR.defaultBlockState(), 35);
+-                    level.levelEvent(player, 2001, blockPos1, Block.getId(blockState1));
++    public IBlockData playerWillDestroy(Level world, BlockPos blockposition, IBlockData iblockdata, Player entityhuman) {
++        if (!world.isClientSide && entityhuman.isCreative()) {
++            BedPart blockpropertybedpart = (BedPart) iblockdata.getValue(BedBlock.PART);
++
++            if (blockpropertybedpart == BedPart.FOOT) {
++                BlockPos blockposition1 = blockposition.relative(getNeighbourDirection(blockpropertybedpart, (Direction) iblockdata.getValue(BedBlock.FACING)));
++                IBlockData iblockdata1 = world.getBlockState(blockposition1);
++
++                if (iblockdata1.is((Block) this) && iblockdata1.getValue(BedBlock.PART) == BedPart.HEAD) {
++                    world.setBlock(blockposition1, Blocks.AIR.defaultBlockState(), 35);
++                    world.levelEvent(entityhuman, 2001, blockposition1, Block.getId(iblockdata1));
+                 }
+             }
+         }
+ 
+-        return super.playerWillDestroy(level, blockPos, blockState, player);
++        return super.playerWillDestroy(world, blockposition, iblockdata, entityhuman);
+     }
+ 
+     @Nullable
+     @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext context) {
+-        Direction horizontalDirection = context.getHorizontalDirection();
+-        BlockPos clickedPos = context.getClickedPos();
+-        BlockPos blockPos = clickedPos.relative(horizontalDirection);
+-        Level level = context.getLevel();
+-        return level.getBlockState(blockPos).canBeReplaced(context) && level.getWorldBorder().isWithinBounds(blockPos)
+-            ? this.defaultBlockState().setValue(FACING, horizontalDirection)
+-            : null;
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        Direction enumdirection = context.getHorizontalDirection();
++        BlockPos blockposition = context.getClickedPos();
++        BlockPos blockposition1 = blockposition.relative(enumdirection);
++        Level world = context.getLevel();
++
++        return world.getBlockState(blockposition1).canBeReplaced(context) && world.getWorldBorder().isWithinBounds(blockposition1) ? (IBlockData) this.defaultBlockState().setValue(BedBlock.FACING, enumdirection) : null;
+     }
+ 
+     @Override
+-    public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+-        Direction opposite = getConnectedDirection(state).getOpposite();
+-        switch (opposite) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        Direction enumdirection = getConnectedDirection(state).getOpposite();
++
++        switch (enumdirection) {
+             case NORTH:
+-                return NORTH_SHAPE;
++                return BedBlock.NORTH_SHAPE;
+             case SOUTH:
+-                return SOUTH_SHAPE;
++                return BedBlock.SOUTH_SHAPE;
+             case WEST:
+-                return WEST_SHAPE;
++                return BedBlock.WEST_SHAPE;
+             default:
+-                return EAST_SHAPE;
++                return BedBlock.EAST_SHAPE;
+         }
+     }
+ 
+-    public static Direction getConnectedDirection(BlockState state) {
+-        Direction direction = state.getValue(FACING);
+-        return state.getValue(PART) == BedPart.HEAD ? direction.getOpposite() : direction;
++    public static Direction getConnectedDirection(IBlockData state) {
++        Direction enumdirection = (Direction) state.getValue(BedBlock.FACING);
++
++        return state.getValue(BedBlock.PART) == BedPart.HEAD ? enumdirection.getOpposite() : enumdirection;
+     }
+ 
+-    public static DoubleBlockCombiner.BlockType getBlockType(BlockState state) {
+-        BedPart bedPart = state.getValue(PART);
+-        return bedPart == BedPart.HEAD ? DoubleBlockCombiner.BlockType.FIRST : DoubleBlockCombiner.BlockType.SECOND;
++    public static DoubleBlockCombiner.BlockType getBlockType(IBlockData state) {
++        BedPart blockpropertybedpart = (BedPart) state.getValue(BedBlock.PART);
++
++        return blockpropertybedpart == BedPart.HEAD ? DoubleBlockCombiner.BlockType.FIRST : DoubleBlockCombiner.BlockType.SECOND;
+     }
+ 
+     private static boolean isBunkBed(BlockGetter level, BlockPos pos) {
+@@ -229,57 +268,65 @@
+     }
+ 
+     public static Optional<Vec3> findStandUpPosition(EntityType<?> entityType, CollisionGetter collisionGetter, BlockPos pos, Direction direction, float yRot) {
+-        Direction clockWise = direction.getClockWise();
+-        Direction direction1 = clockWise.isFacingAngle(yRot) ? clockWise.getOpposite() : clockWise;
++        Direction enumdirection1 = direction.getClockWise();
++        Direction enumdirection2 = enumdirection1.isFacingAngle(yRot) ? enumdirection1.getOpposite() : enumdirection1;
++
+         if (isBunkBed(collisionGetter, pos)) {
+-            return findBunkBedStandUpPosition(entityType, collisionGetter, pos, direction, direction1);
++            return findBunkBedStandUpPosition(entityType, collisionGetter, pos, direction, enumdirection2);
+         } else {
+-            int[][] ints = bedStandUpOffsets(direction, direction1);
+-            Optional<Vec3> optional = findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints, true);
+-            return optional.isPresent() ? optional : findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints, false);
++            int[][] aint = bedStandUpOffsets(direction, enumdirection2);
++            Optional<Vec3> optional = findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint, true);
++
++            return optional.isPresent() ? optional : findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint, false);
+         }
+     }
+ 
+-    private static Optional<Vec3> findBunkBedStandUpPosition(
+-        EntityType<?> entityType, CollisionGetter collisionGetter, BlockPos pos, Direction stateFacing, Direction entityFacing
+-    ) {
+-        int[][] ints = bedSurroundStandUpOffsets(stateFacing, entityFacing);
+-        Optional<Vec3> optional = findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints, true);
++    private static Optional<Vec3> findBunkBedStandUpPosition(EntityType<?> entityType, CollisionGetter collisionGetter, BlockPos pos, Direction stateFacing, Direction entityFacing) {
++        int[][] aint = bedSurroundStandUpOffsets(stateFacing, entityFacing);
++        Optional<Vec3> optional = findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint, true);
++
+         if (optional.isPresent()) {
+             return optional;
+         } else {
+-            BlockPos blockPos = pos.below();
+-            Optional<Vec3> optional1 = findStandUpPositionAtOffset(entityType, collisionGetter, blockPos, ints, true);
++            BlockPos blockposition1 = pos.below();
++            Optional<Vec3> optional1 = findStandUpPositionAtOffset(entityType, collisionGetter, blockposition1, aint, true);
++
+             if (optional1.isPresent()) {
+                 return optional1;
+             } else {
+-                int[][] ints1 = bedAboveStandUpOffsets(stateFacing);
+-                Optional<Vec3> optional2 = findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints1, true);
++                int[][] aint1 = bedAboveStandUpOffsets(stateFacing);
++                Optional<Vec3> optional2 = findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint1, true);
++
+                 if (optional2.isPresent()) {
+                     return optional2;
+                 } else {
+-                    Optional<Vec3> optional3 = findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints, false);
++                    Optional<Vec3> optional3 = findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint, false);
++
+                     if (optional3.isPresent()) {
+                         return optional3;
+                     } else {
+-                        Optional<Vec3> optional4 = findStandUpPositionAtOffset(entityType, collisionGetter, blockPos, ints, false);
+-                        return optional4.isPresent() ? optional4 : findStandUpPositionAtOffset(entityType, collisionGetter, pos, ints1, false);
++                        Optional<Vec3> optional4 = findStandUpPositionAtOffset(entityType, collisionGetter, blockposition1, aint, false);
++
++                        return optional4.isPresent() ? optional4 : findStandUpPositionAtOffset(entityType, collisionGetter, pos, aint1, false);
+                     }
+                 }
+             }
+         }
+     }
+ 
+-    private static Optional<Vec3> findStandUpPositionAtOffset(
+-        EntityType<?> entityType, CollisionGetter collisionGetter, BlockPos pos, int[][] offsets, boolean simulate
+-    ) {
+-        BlockPos.MutableBlockPos mutableBlockPos = new BlockPos.MutableBlockPos();
++    private static Optional<Vec3> findStandUpPositionAtOffset(EntityType<?> entityType, CollisionGetter collisionGetter, BlockPos pos, int[][] offsets, boolean simulate) {
++        BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++        int[][] aint1 = offsets;
++        int i = offsets.length;
+ 
+-        for (int[] ints : offsets) {
+-            mutableBlockPos.set(pos.getX() + ints[0], pos.getY(), pos.getZ() + ints[1]);
+-            Vec3 vec3 = DismountHelper.findSafeDismountLocation(entityType, collisionGetter, mutableBlockPos, simulate);
+-            if (vec3 != null) {
+-                return Optional.of(vec3);
++        for (int j = 0; j < i; ++j) {
++            int[] aint2 = aint1[j];
++
++            blockposition_mutableblockposition.set(pos.getX() + aint2[0], pos.getY(), pos.getZ() + aint2[1]);
++            Vec3 vec3d = DismountHelper.findSafeDismountLocation(entityType, collisionGetter, blockposition_mutableblockposition, simulate);
++
++            if (vec3d != null) {
++                return Optional.of(vec3d);
+             }
+         }
+ 
+@@ -287,29 +334,36 @@
+     }
+ 
+     @Override
+-    public RenderShape getRenderShape(BlockState state) {
+-        return RenderShape.ENTITYBLOCK_ANIMATED;
++    public EnumRenderType getRenderShape(IBlockData state) {
++        return EnumRenderType.ENTITYBLOCK_ANIMATED;
+     }
+ 
+     @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+-        builder.add(FACING, PART, OCCUPIED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(BedBlock.FACING, BedBlock.PART, BedBlock.OCCUPIED);
+     }
+ 
+     @Override
+-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
++    public BlockEntity newBlockEntity(BlockPos pos, IBlockData state) {
+         return new BedBlockEntity(pos, state, this.color);
+     }
+ 
+     @Override
+-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
++    public void setPlacedBy(Level level, BlockPos pos, IBlockData state, @Nullable LivingEntity placer, ItemStack stack) {
+         super.setPlacedBy(level, pos, state, placer, stack);
+         if (!level.isClientSide) {
+-            BlockPos blockPos = pos.relative(state.getValue(FACING));
+-            level.setBlock(blockPos, state.setValue(PART, BedPart.HEAD), 3);
++            BlockPos blockposition1 = pos.relative((Direction) state.getValue(BedBlock.FACING));
++
++            level.setBlock(blockposition1, (IBlockData) state.setValue(BedBlock.PART, BedPart.HEAD), 3);
++            // CraftBukkit start - SPIGOT-7315: Don't updated if we capture block states
++            if (level.captureBlockStates) {
++                return;
++            }
++            // CraftBukkit end
+             level.blockUpdated(pos, Blocks.AIR);
+             state.updateNeighbourShapes(level, pos, 3);
+         }
++
+     }
+ 
+     public DyeColor getColor() {
+@@ -317,33 +371,23 @@
+     }
+ 
+     @Override
+-    public long getSeed(BlockState state, BlockPos pos) {
+-        BlockPos blockPos = pos.relative(state.getValue(FACING), state.getValue(PART) == BedPart.HEAD ? 0 : 1);
+-        return Mth.getSeed(blockPos.getX(), pos.getY(), blockPos.getZ());
++    public long getSeed(IBlockData state, BlockPos pos) {
++        BlockPos blockposition1 = pos.relative((Direction) state.getValue(BedBlock.FACING), state.getValue(BedBlock.PART) == BedPart.HEAD ? 0 : 1);
++
++        return Mth.getSeed(blockposition1.getX(), pos.getY(), blockposition1.getZ());
+     }
+ 
+     @Override
+-    public boolean isPathfindable(BlockState state, BlockGetter level, BlockPos pos, PathComputationType type) {
++    public boolean isPathfindable(IBlockData state, BlockGetter level, BlockPos pos, PathMode type) {
+         return false;
+     }
+ 
+     private static int[][] bedStandUpOffsets(Direction firstDir, Direction secondDir) {
+-        return ArrayUtils.addAll((int[][])bedSurroundStandUpOffsets(firstDir, secondDir), (int[][])bedAboveStandUpOffsets(firstDir));
++        return (int[][]) ArrayUtils.addAll(bedSurroundStandUpOffsets(firstDir, secondDir), bedAboveStandUpOffsets(firstDir));
+     }
+ 
+     private static int[][] bedSurroundStandUpOffsets(Direction firstDir, Direction secondDir) {
+-        return new int[][]{
+-            {secondDir.getStepX(), secondDir.getStepZ()},
+-            {secondDir.getStepX() - firstDir.getStepX(), secondDir.getStepZ() - firstDir.getStepZ()},
+-            {secondDir.getStepX() - firstDir.getStepX() * 2, secondDir.getStepZ() - firstDir.getStepZ() * 2},
+-            {-firstDir.getStepX() * 2, -firstDir.getStepZ() * 2},
+-            {-secondDir.getStepX() - firstDir.getStepX() * 2, -secondDir.getStepZ() - firstDir.getStepZ() * 2},
+-            {-secondDir.getStepX() - firstDir.getStepX(), -secondDir.getStepZ() - firstDir.getStepZ()},
+-            {-secondDir.getStepX(), -secondDir.getStepZ()},
+-            {-secondDir.getStepX() + firstDir.getStepX(), -secondDir.getStepZ() + firstDir.getStepZ()},
+-            {firstDir.getStepX(), firstDir.getStepZ()},
+-            {secondDir.getStepX() + firstDir.getStepX(), secondDir.getStepZ() + firstDir.getStepZ()}
+-        };
++        return new int[][]{{secondDir.getStepX(), secondDir.getStepZ()}, {secondDir.getStepX() - firstDir.getStepX(), secondDir.getStepZ() - firstDir.getStepZ()}, {secondDir.getStepX() - firstDir.getStepX() * 2, secondDir.getStepZ() - firstDir.getStepZ() * 2}, {-firstDir.getStepX() * 2, -firstDir.getStepZ() * 2}, {-secondDir.getStepX() - firstDir.getStepX() * 2, -secondDir.getStepZ() - firstDir.getStepZ() * 2}, {-secondDir.getStepX() - firstDir.getStepX(), -secondDir.getStepZ() - firstDir.getStepZ()}, {-secondDir.getStepX(), -secondDir.getStepZ()}, {-secondDir.getStepX() + firstDir.getStepX(), -secondDir.getStepZ() + firstDir.getStepZ()}, {firstDir.getStepX(), firstDir.getStepZ()}, {secondDir.getStepX() + firstDir.getStepX(), secondDir.getStepZ() + firstDir.getStepZ()}};
+     }
+ 
+     private static int[][] bedAboveStandUpOffsets(Direction dir) {

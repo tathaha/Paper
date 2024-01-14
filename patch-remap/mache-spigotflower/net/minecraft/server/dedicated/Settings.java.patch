@@ -1,0 +1,260 @@
+--- a/net/minecraft/server/dedicated/Settings.java
++++ b/net/minecraft/server/dedicated/Settings.java
+@@ -20,20 +20,40 @@
+ import java.util.function.Supplier;
+ import java.util.function.UnaryOperator;
+ import javax.annotation.Nullable;
+-import net.minecraft.core.RegistryAccess;
+ import org.slf4j.Logger;
+ 
++import joptsimple.OptionSet; // CraftBukkit
++import net.minecraft.core.RegistryAccess;
++
+ public abstract class Settings<T extends Settings<T>> {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    protected final Properties properties;
++    public final Properties properties;
++    // CraftBukkit start
++    private OptionSet options = null;
+ 
+-    public Settings(Properties properties) {
++    public Settings(Properties properties, final OptionSet options) {
+         this.properties = properties;
++
++        this.options = options;
+     }
+ 
++    private String getOverride(String name, String value) {
++        if ((this.options != null) && (this.options.has(name))) {
++            return String.valueOf(this.options.valueOf(name));
++        }
++
++        return value;
++        // CraftBukkit end
++    }
++
+     public static Properties loadFromFile(Path path) {
+         try {
++            // CraftBukkit start - SPIGOT-7465, MC-264979: Don't load if file doesn't exist
++            if (!path.toFile().exists()) {
++                return new Properties();
++            }
++            // CraftBukkit end
+             Properties properties;
+             Properties properties1;
+ 
+@@ -97,6 +117,11 @@
+ 
+     public void store(Path path) {
+         try {
++            // CraftBukkit start - Don't attempt writing to file if it's read only
++            if (path.toFile().exists() && !path.toFile().canWrite()) {
++                return;
++            }
++            // CraftBukkit end
+             BufferedWriter bufferedwriter = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
+ 
+             try {
+@@ -122,44 +147,54 @@
+ 
+     }
+ 
+-    private static <V extends Number> Function<String, V> wrapNumberDeserializer(Function<String, V> function) {
++    private static <V extends Number> Function<String, V> wrapNumberDeserializer(Function<String, V> parseFunc) {
+         return (s) -> {
+             try {
+-                return (Number) function.apply(s);
++                return (V) parseFunc.apply(s); // CraftBukkit - decompile error
+             } catch (NumberFormatException numberformatexception) {
+                 return null;
+             }
+         };
+     }
+ 
+-    protected static <V> Function<String, V> dispatchNumberOrString(IntFunction<V> intfunction, Function<String, V> function) {
++    protected static <V> Function<String, V> dispatchNumberOrString(IntFunction<V> byId, Function<String, V> byName) {
+         return (s) -> {
+             try {
+-                return intfunction.apply(Integer.parseInt(s));
++                return byId.apply(Integer.parseInt(s));
+             } catch (NumberFormatException numberformatexception) {
+-                return function.apply(s);
++                return byName.apply(s);
+             }
+         };
+     }
+ 
+     @Nullable
+-    private String getStringRaw(String s) {
+-        return (String) this.properties.get(s);
++    private String getStringRaw(String key) {
++        return (String) getOverride(key, this.properties.getProperty(key)); // CraftBukkit
+     }
+ 
+     @Nullable
+-    protected <V> V getLegacy(String s, Function<String, V> function) {
+-        String s1 = this.getStringRaw(s);
++    protected <V> V getLegacy(String key, Function<String, V> mapper) {
++        String s1 = this.getStringRaw(key);
+ 
+         if (s1 == null) {
+             return null;
+         } else {
+-            this.properties.remove(s);
+-            return function.apply(s1);
++            this.properties.remove(key);
++            return mapper.apply(s1);
+         }
+     }
+ 
+-    protected <V> V get(String s, Function<String, V> function, Function<V, String> function1, V v0) {
++    protected <V> V get(String key, Function<String, V> mapper, Function<V, String> toString, V value) {
++        // CraftBukkit start
++        try {
++            return get0(key, mapper, toString, value);
++        } catch (Exception ex) {
++            throw new RuntimeException("Could not load invalidly configured property '" + key + "'", ex);
++        }
++    }
++
++    private <V> V get0(String s, Function<String, V> function, Function<V, String> function1, V v0) {
++        // CraftBukkit end
+         String s1 = this.getStringRaw(s);
+         V v1 = MoreObjects.firstNonNull(s1 != null ? function.apply(s1) : null, v0);
+ 
+@@ -167,66 +202,66 @@
+         return v1;
+     }
+ 
+-    protected <V> Settings<T>.MutableValue<V> getMutable(String s, Function<String, V> function, Function<V, String> function1, V v0) {
+-        String s1 = this.getStringRaw(s);
+-        V v1 = MoreObjects.firstNonNull(s1 != null ? function.apply(s1) : null, v0);
++    protected <V> Settings<T>.MutableValue<V> getMutable(String key, Function<String, V> mapper, Function<V, String> toString, V value) {
++        String s1 = this.getStringRaw(key);
++        V v1 = MoreObjects.firstNonNull(s1 != null ? mapper.apply(s1) : null, value);
+ 
+-        this.properties.put(s, function1.apply(v1));
+-        return new Settings.MutableValue<>(s, v1, function1);
++        this.properties.put(key, toString.apply(v1));
++        return new Settings.MutableValue(key, v1, toString); // CraftBukkit - decompile error
+     }
+ 
+-    protected <V> V get(String s, Function<String, V> function, UnaryOperator<V> unaryoperator, Function<V, String> function1, V v0) {
+-        return this.get(s, (s1) -> {
+-            V v1 = function.apply(s1);
++    protected <V> V get(String key, Function<String, V> mapper, UnaryOperator<V> unaryoperator, Function<V, String> toString, V value) {
++        return this.get(key, (s1) -> {
++            V v1 = mapper.apply(s1);
+ 
+             return v1 != null ? unaryoperator.apply(v1) : null;
+-        }, function1, v0);
++        }, toString, value);
+     }
+ 
+-    protected <V> V get(String s, Function<String, V> function, V v0) {
+-        return this.get(s, function, Objects::toString, v0);
++    protected <V> V get(String key, Function<String, V> mapper, V value) {
++        return this.get(key, mapper, Objects::toString, value);
+     }
+ 
+-    protected <V> Settings<T>.MutableValue<V> getMutable(String s, Function<String, V> function, V v0) {
+-        return this.getMutable(s, function, Objects::toString, v0);
++    protected <V> Settings<T>.MutableValue<V> getMutable(String key, Function<String, V> mapper, V value) {
++        return this.getMutable(key, mapper, Objects::toString, value);
+     }
+ 
+-    protected String get(String s, String s1) {
+-        return (String) this.get(s, Function.identity(), Function.identity(), s1);
++    protected String get(String key, String value) {
++        return (String) this.get(key, Function.identity(), Function.identity(), value);
+     }
+ 
+     @Nullable
+-    protected String getLegacyString(String s) {
+-        return (String) this.getLegacy(s, Function.identity());
++    protected String getLegacyString(String key) {
++        return (String) this.getLegacy(key, Function.identity());
+     }
+ 
+-    protected int get(String s, int i) {
+-        return (Integer) this.get(s, wrapNumberDeserializer(Integer::parseInt), i);
++    protected int get(String key, int value) {
++        return (Integer) this.get(key, wrapNumberDeserializer(Integer::parseInt), value);
+     }
+ 
+-    protected Settings<T>.MutableValue<Integer> getMutable(String s, int i) {
+-        return this.getMutable(s, wrapNumberDeserializer(Integer::parseInt), i);
++    protected Settings<T>.MutableValue<Integer> getMutable(String key, int value) {
++        return this.getMutable(key, wrapNumberDeserializer(Integer::parseInt), value);
+     }
+ 
+-    protected int get(String s, UnaryOperator<Integer> unaryoperator, int i) {
+-        return (Integer) this.get(s, wrapNumberDeserializer(Integer::parseInt), unaryoperator, Objects::toString, i);
++    protected int get(String key, UnaryOperator<Integer> unaryoperator, int value) {
++        return (Integer) this.get(key, wrapNumberDeserializer(Integer::parseInt), unaryoperator, Objects::toString, value);
+     }
+ 
+-    protected long get(String s, long i) {
+-        return (Long) this.get(s, wrapNumberDeserializer(Long::parseLong), i);
++    protected long get(String key, long value) {
++        return (Long) this.get(key, wrapNumberDeserializer(Long::parseLong), value);
+     }
+ 
+-    protected boolean get(String s, boolean flag) {
+-        return (Boolean) this.get(s, Boolean::valueOf, flag);
++    protected boolean get(String key, boolean value) {
++        return (Boolean) this.get(key, Boolean::valueOf, value);
+     }
+ 
+-    protected Settings<T>.MutableValue<Boolean> getMutable(String s, boolean flag) {
+-        return this.getMutable(s, Boolean::valueOf, flag);
++    protected Settings<T>.MutableValue<Boolean> getMutable(String key, boolean value) {
++        return this.getMutable(key, Boolean::valueOf, value);
+     }
+ 
+     @Nullable
+-    protected Boolean getLegacyBoolean(String s) {
+-        return (Boolean) this.getLegacy(s, Boolean::valueOf);
++    protected Boolean getLegacyBoolean(String key) {
++        return (Boolean) this.getLegacy(key, Boolean::valueOf);
+     }
+ 
+     protected Properties cloneProperties() {
+@@ -236,7 +271,7 @@
+         return properties;
+     }
+ 
+-    protected abstract T reload(RegistryAccess registryAccess, Properties properties);
++    protected abstract T reload(RegistryAccess iregistrycustom, Properties properties, OptionSet optionset); // CraftBukkit
+ 
+     public class MutableValue<V> implements Supplier<V> {
+ 
+@@ -244,22 +279,21 @@
+         private final V value;
+         private final Function<V, String> serializer;
+ 
+-        MutableValue(String s, V v0, Function<V, String> function) {
++        MutableValue(String s, V object, Function function) { // CraftBukkit - decompile error
+             this.key = s;
+-            this.value = v0;
++            this.value = object;
+             this.serializer = function;
+         }
+ 
+-        @Override
+         public V get() {
+             return this.value;
+         }
+ 
+-        public T update(RegistryAccess registryaccess, V v0) {
++        public T update(RegistryAccess registryAccess, V newValue) {
+             Properties properties = Settings.this.cloneProperties();
+ 
+-            properties.put(this.key, this.serializer.apply(v0));
+-            return Settings.this.reload(registryaccess, properties);
++            properties.put(this.key, this.serializer.apply(newValue));
++            return Settings.this.reload(registryAccess, properties, Settings.this.options); // CraftBukkit
+         }
+     }
+ }

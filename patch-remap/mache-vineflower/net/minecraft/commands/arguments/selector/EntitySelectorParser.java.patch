@@ -1,0 +1,449 @@
+--- a/net/minecraft/commands/arguments/selector/EntitySelectorParser.java
++++ b/net/minecraft/commands/arguments/selector/EntitySelectorParser.java
+@@ -30,6 +30,7 @@
+ import net.minecraft.world.phys.Vec3;
+ 
+ public class EntitySelectorParser {
++
+     public static final char SYNTAX_SELECTOR_START = '@';
+     private static final char SYNTAX_OPTIONS_START = '[';
+     private static final char SYNTAX_OPTIONS_END = ']';
+@@ -42,41 +43,39 @@
+     private static final char SELECTOR_RANDOM_PLAYERS = 'r';
+     private static final char SELECTOR_CURRENT_ENTITY = 's';
+     private static final char SELECTOR_ALL_ENTITIES = 'e';
+-    public static final SimpleCommandExceptionType ERROR_INVALID_NAME_OR_UUID = new SimpleCommandExceptionType(
+-        Component.translatable("argument.entity.invalid")
+-    );
+-    public static final DynamicCommandExceptionType ERROR_UNKNOWN_SELECTOR_TYPE = new DynamicCommandExceptionType(
+-        type -> Component.translatableEscape("argument.entity.selector.unknown", type)
+-    );
+-    public static final SimpleCommandExceptionType ERROR_SELECTORS_NOT_ALLOWED = new SimpleCommandExceptionType(
+-        Component.translatable("argument.entity.selector.not_allowed")
+-    );
+-    public static final SimpleCommandExceptionType ERROR_MISSING_SELECTOR_TYPE = new SimpleCommandExceptionType(
+-        Component.translatable("argument.entity.selector.missing")
+-    );
+-    public static final SimpleCommandExceptionType ERROR_EXPECTED_END_OF_OPTIONS = new SimpleCommandExceptionType(
+-        Component.translatable("argument.entity.options.unterminated")
+-    );
+-    public static final DynamicCommandExceptionType ERROR_EXPECTED_OPTION_VALUE = new DynamicCommandExceptionType(
+-        value -> Component.translatableEscape("argument.entity.options.valueless", value)
+-    );
+-    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_NEAREST = (pos, entities) -> entities.sort(
+-            (entity1, entity2) -> Doubles.compare(entity1.distanceToSqr(pos), entity2.distanceToSqr(pos))
+-        );
+-    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_FURTHEST = (pos, entities) -> entities.sort(
+-            (entity1, entity2) -> Doubles.compare(entity2.distanceToSqr(pos), entity1.distanceToSqr(pos))
+-        );
+-    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_RANDOM = (pos, entities) -> Collections.shuffle(entities);
+-    public static final BiFunction<SuggestionsBuilder, Consumer<SuggestionsBuilder>, CompletableFuture<Suggestions>> SUGGEST_NOTHING = (builder, consumer) -> builder.buildFuture(
+-            
+-        );
++    public static final SimpleCommandExceptionType ERROR_INVALID_NAME_OR_UUID = new SimpleCommandExceptionType(Component.translatable("argument.entity.invalid"));
++    public static final DynamicCommandExceptionType ERROR_UNKNOWN_SELECTOR_TYPE = new DynamicCommandExceptionType((object) -> {
++        return Component.translatableEscape("argument.entity.selector.unknown", object);
++    });
++    public static final SimpleCommandExceptionType ERROR_SELECTORS_NOT_ALLOWED = new SimpleCommandExceptionType(Component.translatable("argument.entity.selector.not_allowed"));
++    public static final SimpleCommandExceptionType ERROR_MISSING_SELECTOR_TYPE = new SimpleCommandExceptionType(Component.translatable("argument.entity.selector.missing"));
++    public static final SimpleCommandExceptionType ERROR_EXPECTED_END_OF_OPTIONS = new SimpleCommandExceptionType(Component.translatable("argument.entity.options.unterminated"));
++    public static final DynamicCommandExceptionType ERROR_EXPECTED_OPTION_VALUE = new DynamicCommandExceptionType((object) -> {
++        return Component.translatableEscape("argument.entity.options.valueless", object);
++    });
++    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_NEAREST = (vec3d, list) -> {
++        list.sort((entity, entity1) -> {
++            return Doubles.compare(entity.distanceToSqr(vec3d), entity1.distanceToSqr(vec3d));
++        });
++    };
++    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_FURTHEST = (vec3d, list) -> {
++        list.sort((entity, entity1) -> {
++            return Doubles.compare(entity1.distanceToSqr(vec3d), entity.distanceToSqr(vec3d));
++        });
++    };
++    public static final BiConsumer<Vec3, List<? extends Entity>> ORDER_RANDOM = (vec3d, list) -> {
++        Collections.shuffle(list);
++    };
++    public static final BiFunction<SuggestionsBuilder, Consumer<SuggestionsBuilder>, CompletableFuture<Suggestions>> SUGGEST_NOTHING = (suggestionsbuilder, consumer) -> {
++        return suggestionsbuilder.buildFuture();
++    };
+     private final StringReader reader;
+     private final boolean allowSelectors;
+     private int maxResults;
+     private boolean includesEntities;
+     private boolean worldLimited;
+-    private MinMaxBounds.Doubles distance = MinMaxBounds.Doubles.ANY;
+-    private MinMaxBounds.Ints level = MinMaxBounds.Ints.ANY;
++    private MinMaxBounds.Doubles distance;
++    private MinMaxBounds.Ints level;
+     @Nullable
+     private Double x;
+     @Nullable
+@@ -89,17 +88,17 @@
+     private Double deltaY;
+     @Nullable
+     private Double deltaZ;
+-    private WrappedMinMaxBounds rotX = WrappedMinMaxBounds.ANY;
+-    private WrappedMinMaxBounds rotY = WrappedMinMaxBounds.ANY;
+-    private Predicate<Entity> predicate = entity -> true;
+-    private BiConsumer<Vec3, List<? extends Entity>> order = EntitySelector.ORDER_ARBITRARY;
++    private WrappedMinMaxBounds rotX;
++    private WrappedMinMaxBounds rotY;
++    private Predicate<Entity> predicate;
++    private BiConsumer<Vec3, List<? extends Entity>> order;
+     private boolean currentEntity;
+     @Nullable
+     private String playerName;
+     private int startPosition;
+     @Nullable
+     private UUID entityUUID;
+-    private BiFunction<SuggestionsBuilder, Consumer<SuggestionsBuilder>, CompletableFuture<Suggestions>> suggestions = SUGGEST_NOTHING;
++    private BiFunction<SuggestionsBuilder, Consumer<SuggestionsBuilder>, CompletableFuture<Suggestions>> suggestions;
+     private boolean hasNameEquals;
+     private boolean hasNameNotEquals;
+     private boolean isLimited;
+@@ -120,58 +119,61 @@
+     }
+ 
+     public EntitySelectorParser(StringReader reader, boolean allowSelectors) {
++        this.distance = MinMaxBounds.Doubles.ANY;
++        this.level = MinMaxBounds.Ints.ANY;
++        this.rotX = WrappedMinMaxBounds.ANY;
++        this.rotY = WrappedMinMaxBounds.ANY;
++        this.predicate = (entity) -> {
++            return true;
++        };
++        this.order = EntitySelector.ORDER_ARBITRARY;
++        this.suggestions = EntitySelectorParser.SUGGEST_NOTHING;
+         this.reader = reader;
+         this.allowSelectors = allowSelectors;
+     }
+ 
+     public EntitySelector getSelector() {
+-        AABB aABB;
++        AABB axisalignedbb;
++
+         if (this.deltaX == null && this.deltaY == null && this.deltaZ == null) {
+             if (this.distance.max().isPresent()) {
+-                double d = this.distance.max().get();
+-                aABB = new AABB(-d, -d, -d, d + 1.0, d + 1.0, d + 1.0);
++                double d0 = (Double) this.distance.max().get();
++
++                axisalignedbb = new AABB(-d0, -d0, -d0, d0 + 1.0D, d0 + 1.0D, d0 + 1.0D);
+             } else {
+-                aABB = null;
++                axisalignedbb = null;
+             }
+         } else {
+-            aABB = this.createAabb(this.deltaX == null ? 0.0 : this.deltaX, this.deltaY == null ? 0.0 : this.deltaY, this.deltaZ == null ? 0.0 : this.deltaZ);
++            axisalignedbb = this.createAabb(this.deltaX == null ? 0.0D : this.deltaX, this.deltaY == null ? 0.0D : this.deltaY, this.deltaZ == null ? 0.0D : this.deltaZ);
+         }
+ 
+-        Function<Vec3, Vec3> function;
++        Function<Vec3, Vec3> function; // CraftBukkit - decompile error
++
+         if (this.x == null && this.y == null && this.z == null) {
+-            function = vec -> vec;
++            function = (vec3d) -> {
++                return vec3d;
++            };
+         } else {
+-            function = vec -> new Vec3(this.x == null ? vec.x : this.x, this.y == null ? vec.y : this.y, this.z == null ? vec.z : this.z);
++            function = (vec3d) -> {
++                return new Vec3(this.x == null ? vec3d.x : this.x, this.y == null ? vec3d.y : this.y, this.z == null ? vec3d.z : this.z);
++            };
+         }
+ 
+-        return new EntitySelector(
+-            this.maxResults,
+-            this.includesEntities,
+-            this.worldLimited,
+-            this.predicate,
+-            this.distance,
+-            function,
+-            aABB,
+-            this.order,
+-            this.currentEntity,
+-            this.playerName,
+-            this.entityUUID,
+-            this.type,
+-            this.usesSelectors
+-        );
++        return new EntitySelector(this.maxResults, this.includesEntities, this.worldLimited, this.predicate, this.distance, function, axisalignedbb, this.order, this.currentEntity, this.playerName, this.entityUUID, this.type, this.usesSelectors);
+     }
+ 
+-    private AABB createAabb(double sizeX, double sizeY, double sizeZ) {
+-        boolean flag = sizeX < 0.0;
+-        boolean flag1 = sizeY < 0.0;
+-        boolean flag2 = sizeZ < 0.0;
+-        double d = flag ? sizeX : 0.0;
+-        double d1 = flag1 ? sizeY : 0.0;
+-        double d2 = flag2 ? sizeZ : 0.0;
+-        double d3 = (flag ? 0.0 : sizeX) + 1.0;
+-        double d4 = (flag1 ? 0.0 : sizeY) + 1.0;
+-        double d5 = (flag2 ? 0.0 : sizeZ) + 1.0;
+-        return new AABB(d, d1, d2, d3, d4, d5);
++    private AABB createAabb(double sizeX, double d1, double sizeY) {
++        boolean flag = sizeX < 0.0D;
++        boolean flag1 = d1 < 0.0D;
++        boolean flag2 = sizeY < 0.0D;
++        double d3 = flag ? sizeX : 0.0D;
++        double d4 = flag1 ? d1 : 0.0D;
++        double d5 = flag2 ? sizeY : 0.0D;
++        double d6 = (flag ? 0.0D : sizeX) + 1.0D;
++        double d7 = (flag1 ? 0.0D : d1) + 1.0D;
++        double d8 = (flag2 ? 0.0D : sizeY) + 1.0D;
++
++        return new AABB(d3, d4, d5, d6, d7, d8);
+     }
+ 
+     private void finalizePredicates() {
+@@ -184,50 +186,58 @@
+         }
+ 
+         if (!this.level.isAny()) {
+-            this.predicate = this.predicate.and(entity -> entity instanceof ServerPlayer && this.level.matches(((ServerPlayer)entity).experienceLevel));
++            this.predicate = this.predicate.and((entity) -> {
++                return !(entity instanceof ServerPlayer) ? false : this.level.matches(((ServerPlayer) entity).experienceLevel);
++            });
+         }
++
+     }
+ 
+     private Predicate<Entity> createRotationPredicate(WrappedMinMaxBounds angleBounds, ToDoubleFunction<Entity> angleFunction) {
+-        double d = (double)Mth.wrapDegrees(angleBounds.min() == null ? 0.0F : angleBounds.min());
+-        double d1 = (double)Mth.wrapDegrees(angleBounds.max() == null ? 359.0F : angleBounds.max());
+-        return entity -> {
+-            double d3 = Mth.wrapDegrees(angleFunction.applyAsDouble(entity));
+-            return d > d1 ? d3 >= d || d3 <= d1 : d3 >= d && d3 <= d1;
++        double d0 = (double) Mth.wrapDegrees(angleBounds.min() == null ? 0.0F : angleBounds.min());
++        double d1 = (double) Mth.wrapDegrees(angleBounds.max() == null ? 359.0F : angleBounds.max());
++
++        return (entity) -> {
++            double d2 = Mth.wrapDegrees(angleFunction.applyAsDouble(entity));
++
++            return d0 > d1 ? d2 >= d0 || d2 <= d1 : d2 >= d0 && d2 <= d1;
+         };
+     }
+ 
+-    protected void parseSelector() throws CommandSyntaxException {
+-        this.usesSelectors = true;
++    // CraftBukkit start
++    protected void parseSelector(boolean overridePermissions) throws CommandSyntaxException {
++        this.usesSelectors = !overridePermissions;
++        // CraftBukkit end
+         this.suggestions = this::suggestSelector;
+         if (!this.reader.canRead()) {
+-            throw ERROR_MISSING_SELECTOR_TYPE.createWithContext(this.reader);
++            throw EntitySelectorParser.ERROR_MISSING_SELECTOR_TYPE.createWithContext(this.reader);
+         } else {
+-            int cursor = this.reader.getCursor();
+-            char c = this.reader.read();
+-            if (c == 'p') {
++            int i = this.reader.getCursor();
++            char c0 = this.reader.read();
++
++            if (c0 == 'p') {
+                 this.maxResults = 1;
+                 this.includesEntities = false;
+-                this.order = ORDER_NEAREST;
++                this.order = EntitySelectorParser.ORDER_NEAREST;
+                 this.limitToType(EntityType.PLAYER);
+-            } else if (c == 'a') {
++            } else if (c0 == 'a') {
+                 this.maxResults = Integer.MAX_VALUE;
+                 this.includesEntities = false;
+                 this.order = EntitySelector.ORDER_ARBITRARY;
+                 this.limitToType(EntityType.PLAYER);
+-            } else if (c == 'r') {
++            } else if (c0 == 'r') {
+                 this.maxResults = 1;
+                 this.includesEntities = false;
+-                this.order = ORDER_RANDOM;
++                this.order = EntitySelectorParser.ORDER_RANDOM;
+                 this.limitToType(EntityType.PLAYER);
+-            } else if (c == 's') {
++            } else if (c0 == 's') {
+                 this.maxResults = 1;
+                 this.includesEntities = true;
+                 this.currentEntity = true;
+             } else {
+-                if (c != 'e') {
+-                    this.reader.setCursor(cursor);
+-                    throw ERROR_UNKNOWN_SELECTOR_TYPE.createWithContext(this.reader, "@" + c);
++                if (c0 != 'e') {
++                    this.reader.setCursor(i);
++                    throw EntitySelectorParser.ERROR_UNKNOWN_SELECTOR_TYPE.createWithContext(this.reader, "@" + String.valueOf(c0));
+                 }
+ 
+                 this.maxResults = Integer.MAX_VALUE;
+@@ -242,6 +252,7 @@
+                 this.suggestions = this::suggestOptionsKeyOrClose;
+                 this.parseOptions();
+             }
++
+         }
+     }
+ 
+@@ -250,20 +261,20 @@
+             this.suggestions = this::suggestName;
+         }
+ 
+-        int cursor = this.reader.getCursor();
+-        String string = this.reader.readString();
++        int i = this.reader.getCursor();
++        String s = this.reader.readString();
+ 
+         try {
+-            this.entityUUID = UUID.fromString(string);
++            this.entityUUID = UUID.fromString(s);
+             this.includesEntities = true;
+-        } catch (IllegalArgumentException var4) {
+-            if (string.isEmpty() || string.length() > 16) {
+-                this.reader.setCursor(cursor);
+-                throw ERROR_INVALID_NAME_OR_UUID.createWithContext(this.reader);
++        } catch (IllegalArgumentException illegalargumentexception) {
++            if (s.isEmpty() || s.length() > 16) {
++                this.reader.setCursor(i);
++                throw EntitySelectorParser.ERROR_INVALID_NAME_OR_UUID.createWithContext(this.reader);
+             }
+ 
+             this.includesEntities = false;
+-            this.playerName = string;
++            this.playerName = s;
+         }
+ 
+         this.maxResults = 1;
+@@ -273,41 +284,47 @@
+         this.suggestions = this::suggestOptionsKey;
+         this.reader.skipWhitespace();
+ 
+-        while (this.reader.canRead() && this.reader.peek() != ']') {
+-            this.reader.skipWhitespace();
+-            int cursor = this.reader.getCursor();
+-            String string = this.reader.readString();
+-            EntitySelectorOptions.Modifier modifier = EntitySelectorOptions.get(this, string, cursor);
+-            this.reader.skipWhitespace();
+-            if (!this.reader.canRead() || this.reader.peek() != '=') {
+-                this.reader.setCursor(cursor);
+-                throw ERROR_EXPECTED_OPTION_VALUE.createWithContext(this.reader, string);
+-            }
++        while (true) {
++            if (this.reader.canRead() && this.reader.peek() != ']') {
++                this.reader.skipWhitespace();
++                int i = this.reader.getCursor();
++                String s = this.reader.readString();
++                EntitySelectorOptions.Modifier playerselector_a = EntitySelectorOptions.get(this, s, i);
+ 
+-            this.reader.skip();
+-            this.reader.skipWhitespace();
+-            this.suggestions = SUGGEST_NOTHING;
+-            modifier.handle(this);
+-            this.reader.skipWhitespace();
+-            this.suggestions = this::suggestOptionsNextOrClose;
+-            if (this.reader.canRead()) {
+-                if (this.reader.peek() != ',') {
+-                    if (this.reader.peek() != ']') {
+-                        throw ERROR_EXPECTED_END_OF_OPTIONS.createWithContext(this.reader);
+-                    }
+-                    break;
++                this.reader.skipWhitespace();
++                if (!this.reader.canRead() || this.reader.peek() != '=') {
++                    this.reader.setCursor(i);
++                    throw EntitySelectorParser.ERROR_EXPECTED_OPTION_VALUE.createWithContext(this.reader, s);
+                 }
+ 
+                 this.reader.skip();
+-                this.suggestions = this::suggestOptionsKey;
++                this.reader.skipWhitespace();
++                this.suggestions = EntitySelectorParser.SUGGEST_NOTHING;
++                playerselector_a.handle(this);
++                this.reader.skipWhitespace();
++                this.suggestions = this::suggestOptionsNextOrClose;
++                if (!this.reader.canRead()) {
++                    continue;
++                }
++
++                if (this.reader.peek() == ',') {
++                    this.reader.skip();
++                    this.suggestions = this::suggestOptionsKey;
++                    continue;
++                }
++
++                if (this.reader.peek() != ']') {
++                    throw EntitySelectorParser.ERROR_EXPECTED_END_OF_OPTIONS.createWithContext(this.reader);
++                }
+             }
+-        }
+ 
+-        if (this.reader.canRead()) {
+-            this.reader.skip();
+-            this.suggestions = SUGGEST_NOTHING;
+-        } else {
+-            throw ERROR_EXPECTED_END_OF_OPTIONS.createWithContext(this.reader);
++            if (this.reader.canRead()) {
++                this.reader.skip();
++                this.suggestions = EntitySelectorParser.SUGGEST_NOTHING;
++                return;
++            }
++
++            throw EntitySelectorParser.ERROR_EXPECTED_END_OF_OPTIONS.createWithContext(this.reader);
+         }
+     }
+ 
+@@ -448,15 +465,21 @@
+     }
+ 
+     public EntitySelector parse() throws CommandSyntaxException {
++        // CraftBukkit start
++        return parse(false);
++    }
++
++    public EntitySelector parse(boolean overridePermissions) throws CommandSyntaxException {
++        // CraftBukkit end
+         this.startPosition = this.reader.getCursor();
+         this.suggestions = this::suggestNameOrSelector;
+         if (this.reader.canRead() && this.reader.peek() == '@') {
+             if (!this.allowSelectors) {
+-                throw ERROR_SELECTORS_NOT_ALLOWED.createWithContext(this.reader);
++                throw EntitySelectorParser.ERROR_SELECTORS_NOT_ALLOWED.createWithContext(this.reader);
+             }
+ 
+             this.reader.skip();
+-            this.parseSelector();
++            this.parseSelector(overridePermissions); // CraftBukkit
+         } else {
+             this.parseNameOrUUID();
+         }
+@@ -483,15 +506,17 @@
+     }
+ 
+     private CompletableFuture<Suggestions> suggestName(SuggestionsBuilder builder, Consumer<SuggestionsBuilder> consumer) {
+-        SuggestionsBuilder suggestionsBuilder = builder.createOffset(this.startPosition);
+-        consumer.accept(suggestionsBuilder);
+-        return builder.add(suggestionsBuilder).buildFuture();
++        SuggestionsBuilder suggestionsbuilder1 = builder.createOffset(this.startPosition);
++
++        consumer.accept(suggestionsbuilder1);
++        return builder.add(suggestionsbuilder1).buildFuture();
+     }
+ 
+     private CompletableFuture<Suggestions> suggestSelector(SuggestionsBuilder builder, Consumer<SuggestionsBuilder> consumer) {
+-        SuggestionsBuilder suggestionsBuilder = builder.createOffset(builder.getStart() - 1);
+-        fillSelectorSuggestions(suggestionsBuilder);
+-        builder.add(suggestionsBuilder);
++        SuggestionsBuilder suggestionsbuilder1 = builder.createOffset(builder.getStart() - 1);
++
++        fillSelectorSuggestions(suggestionsbuilder1);
++        builder.add(suggestionsbuilder1);
+         return builder.buildFuture();
+     }
+ 
+@@ -531,7 +556,7 @@
+     }
+ 
+     public CompletableFuture<Suggestions> fillSuggestions(SuggestionsBuilder builder, Consumer<SuggestionsBuilder> consumer) {
+-        return this.suggestions.apply(builder.createOffset(this.reader.getCursor()), consumer);
++        return (CompletableFuture) this.suggestions.apply(builder.createOffset(this.reader.getCursor()), consumer);
+     }
+ 
+     public boolean hasNameEquals() {

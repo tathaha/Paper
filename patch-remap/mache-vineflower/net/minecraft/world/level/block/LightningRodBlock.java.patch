@@ -1,0 +1,216 @@
+--- a/net/minecraft/world/level/block/LightningRodBlock.java
++++ b/net/minecraft/world/level/block/LightningRodBlock.java
+@@ -14,6 +14,7 @@
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
+ import net.minecraft.world.entity.LightningBolt;
++import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.entity.projectile.Projectile;
+ import net.minecraft.world.entity.projectile.ThrownTrident;
+ import net.minecraft.world.item.context.BlockPlaceContext;
+@@ -21,17 +22,23 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
+ import net.minecraft.world.level.levelgen.Heightmap;
++import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.level.material.Fluids;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.block.BlockRedstoneEvent;
++// CraftBukkit end
+ 
+ public class LightningRodBlock extends RodBlock implements SimpleWaterloggedBlock {
++
+     public static final MapCodec<LightningRodBlock> CODEC = simpleCodec(LightningRodBlock::new);
+     public static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;
+     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+@@ -41,77 +48,86 @@
+ 
+     @Override
+     public MapCodec<LightningRodBlock> codec() {
+-        return CODEC;
++        return LightningRodBlock.CODEC;
+     }
+ 
+     public LightningRodBlock(BlockBehaviour.Properties properties) {
+         super(properties);
+-        this.registerDefaultState(
+-            this.stateDefinition.any().setValue(FACING, Direction.UP).setValue(WATERLOGGED, Boolean.valueOf(false)).setValue(POWERED, Boolean.valueOf(false))
+-        );
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(LightningRodBlock.FACING, Direction.UP)).setValue(LightningRodBlock.WATERLOGGED, false)).setValue(LightningRodBlock.POWERED, false));
+     }
+ 
+     @Override
+-    public BlockState getStateForPlacement(BlockPlaceContext context) {
+-        FluidState fluidState = context.getLevel().getFluidState(context.getClickedPos());
+-        boolean flag = fluidState.getType() == Fluids.WATER;
+-        return this.defaultBlockState().setValue(FACING, context.getClickedFace()).setValue(WATERLOGGED, Boolean.valueOf(flag));
++    public IBlockData getStateForPlacement(BlockPlaceContext context) {
++        FluidState fluid = context.getLevel().getFluidState(context.getClickedPos());
++        boolean flag = fluid.getType() == Fluids.WATER;
++
++        return (IBlockData) ((IBlockData) this.defaultBlockState().setValue(LightningRodBlock.FACING, context.getClickedFace())).setValue(LightningRodBlock.WATERLOGGED, flag);
+     }
+ 
+     @Override
+-    public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
+-        if (state.getValue(WATERLOGGED)) {
+-            level.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(level));
++    public IBlockData updateShape(IBlockData state, Direction direction, IBlockData neighborState, LevelAccessor level, BlockPos pos, BlockPos neighborPos) {
++        if ((Boolean) state.getValue(LightningRodBlock.WATERLOGGED)) {
++            level.scheduleTick(pos, (Fluid) Fluids.WATER, Fluids.WATER.getTickDelay(level));
+         }
+ 
+         return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
+     }
+ 
+     @Override
+-    public FluidState getFluidState(BlockState state) {
+-        return state.getValue(WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
++    public FluidState getFluidState(IBlockData state) {
++        return (Boolean) state.getValue(LightningRodBlock.WATERLOGGED) ? Fluids.WATER.getSource(false) : super.getFluidState(state);
+     }
+ 
+     @Override
+-    public int getSignal(BlockState state, BlockGetter level, BlockPos pos, Direction direction) {
+-        return state.getValue(POWERED) ? 15 : 0;
++    public int getSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
++        return (Boolean) state.getValue(LightningRodBlock.POWERED) ? 15 : 0;
+     }
+ 
+     @Override
+-    public int getDirectSignal(BlockState state, BlockGetter level, BlockPos pos, Direction direction) {
+-        return state.getValue(POWERED) && state.getValue(FACING) == direction ? 15 : 0;
++    public int getDirectSignal(IBlockData state, BlockGetter level, BlockPos pos, Direction direction) {
++        return (Boolean) state.getValue(LightningRodBlock.POWERED) && state.getValue(LightningRodBlock.FACING) == direction ? 15 : 0;
+     }
+ 
+-    public void onLightningStrike(BlockState state, Level level, BlockPos pos) {
+-        level.setBlock(pos, state.setValue(POWERED, Boolean.valueOf(true)), 3);
++    public void onLightningStrike(IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        boolean powered = state.getValue(LightningRodBlock.POWERED);
++        int old = (powered) ? 15 : 0;
++        int current = (!powered) ? 15 : 0;
++
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), old, current);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() <= 0) {
++            return;
++        }
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) state.setValue(LightningRodBlock.POWERED, true), 3);
+         this.updateNeighbours(state, level, pos);
+-        level.scheduleTick(pos, this, 8);
+-        level.levelEvent(3002, pos, state.getValue(FACING).getAxis().ordinal());
++        level.scheduleTick(pos, (Block) this, 8);
++        level.levelEvent(3002, pos, ((Direction) state.getValue(LightningRodBlock.FACING)).getAxis().ordinal());
+     }
+ 
+-    private void updateNeighbours(BlockState state, Level level, BlockPos pos) {
+-        level.updateNeighborsAt(pos.relative(state.getValue(FACING).getOpposite()), this);
++    private void updateNeighbours(IBlockData state, Level level, BlockPos pos) {
++        level.updateNeighborsAt(pos.relative(((Direction) state.getValue(LightningRodBlock.FACING)).getOpposite()), this);
+     }
+ 
+     @Override
+-    public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+-        level.setBlock(pos, state.setValue(POWERED, Boolean.valueOf(false)), 3);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        level.setBlock(pos, (IBlockData) state.setValue(LightningRodBlock.POWERED, false), 3);
+         this.updateNeighbours(state, level, pos);
+     }
+ 
+     @Override
+-    public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
+-        if (level.isThundering()
+-            && (long)level.random.nextInt(200) <= level.getGameTime() % 200L
+-            && pos.getY() == level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX(), pos.getZ()) - 1) {
+-            ParticleUtils.spawnParticlesAlongAxis(state.getValue(FACING).getAxis(), level, pos, 0.125, ParticleTypes.ELECTRIC_SPARK, UniformInt.of(1, 2));
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if (level.isThundering() && (long) level.random.nextInt(200) <= level.getGameTime() % 200L && pos.getY() == level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX(), pos.getZ()) - 1) {
++            ParticleUtils.spawnParticlesAlongAxis(((Direction) state.getValue(LightningRodBlock.FACING)).getAxis(), level, pos, 0.125D, ParticleTypes.ELECTRIC_SPARK, UniformInt.of(1, 2));
+         }
+     }
+ 
+     @Override
+-    public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean movedByPiston) {
+         if (!state.is(newState.getBlock())) {
+-            if (state.getValue(POWERED)) {
++            if ((Boolean) state.getValue(LightningRodBlock.POWERED)) {
+                 this.updateNeighbours(state, level, pos);
+             }
+ 
+@@ -120,39 +136,44 @@
+     }
+ 
+     @Override
+-    public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean movedByPiston) {
+         if (!state.is(oldState.getBlock())) {
+-            if (state.getValue(POWERED) && !level.getBlockTicks().hasScheduledTick(pos, this)) {
+-                level.setBlock(pos, state.setValue(POWERED, Boolean.valueOf(false)), 18);
++            if ((Boolean) state.getValue(LightningRodBlock.POWERED) && !level.getBlockTicks().hasScheduledTick(pos, this)) {
++                level.setBlock(pos, (IBlockData) state.setValue(LightningRodBlock.POWERED, false), 18);
+             }
++
+         }
+     }
+ 
+     @Override
+-    public void onProjectileHit(Level level, BlockState state, BlockHitResult hit, Projectile projectile) {
+-        if (level.isThundering() && projectile instanceof ThrownTrident && ((ThrownTrident)projectile).isChanneling()) {
+-            BlockPos blockPos = hit.getBlockPos();
+-            if (level.canSeeSky(blockPos)) {
+-                LightningBolt lightningBolt = EntityType.LIGHTNING_BOLT.create(level);
+-                if (lightningBolt != null) {
+-                    lightningBolt.moveTo(Vec3.atBottomCenterOf(blockPos.above()));
+-                    Entity owner = projectile.getOwner();
+-                    lightningBolt.setCause(owner instanceof ServerPlayer ? (ServerPlayer)owner : null);
+-                    level.addFreshEntity(lightningBolt);
++    public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {
++        if (level.isThundering() && projectile instanceof ThrownTrident && ((ThrownTrident) projectile).isChanneling()) {
++            BlockPos blockposition = hit.getBlockPos();
++
++            if (level.canSeeSky(blockposition)) {
++                LightningBolt entitylightning = (LightningBolt) EntityType.LIGHTNING_BOLT.create(level);
++
++                if (entitylightning != null) {
++                    entitylightning.moveTo(Vec3.atBottomCenterOf(blockposition.above()));
++                    Entity entity = projectile.getOwner();
++
++                    entitylightning.setCause(entity instanceof ServerPlayer ? (ServerPlayer) entity : null);
++                    ((ServerLevel) level).strikeLightning(entitylightning, org.bukkit.event.weather.LightningStrikeEvent.Cause.TRIDENT); // CraftBukkit
+                 }
+ 
+-                level.playSound(null, blockPos, SoundEvents.TRIDENT_THUNDER, SoundSource.WEATHER, 5.0F, 1.0F);
++                level.playSound((Player) null, blockposition, SoundEvents.TRIDENT_THUNDER, SoundSource.WEATHER, 5.0F, 1.0F);
+             }
+         }
++
+     }
+ 
+     @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+-        builder.add(FACING, POWERED, WATERLOGGED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(LightningRodBlock.FACING, LightningRodBlock.POWERED, LightningRodBlock.WATERLOGGED);
+     }
+ 
+     @Override
+-    public boolean isSignalSource(BlockState state) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ }

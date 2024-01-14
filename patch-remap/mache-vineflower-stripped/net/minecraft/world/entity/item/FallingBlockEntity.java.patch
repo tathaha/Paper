@@ -1,0 +1,109 @@
+--- a/net/minecraft/world/entity/item/FallingBlockEntity.java
++++ b/net/minecraft/world/entity/item/FallingBlockEntity.java
+@@ -46,6 +49,10 @@
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
++
+ public class FallingBlockEntity extends Entity {
+     private static final Logger LOGGER = LogUtils.getLogger();
+     private BlockState blockState = Blocks.SAND.defaultBlockState();
+@@ -75,21 +86,21 @@
+         this.setStartPos(this.blockPosition());
+     }
+ 
+-    public static FallingBlockEntity fall(Level level, BlockPos pos, BlockState blockState) {
+-        FallingBlockEntity fallingBlockEntity = new FallingBlockEntity(
+-            level,
+-            (double)pos.getX() + 0.5,
+-            (double)pos.getY(),
+-            (double)pos.getZ() + 0.5,
+-            blockState.hasProperty(BlockStateProperties.WATERLOGGED)
+-                ? blockState.setValue(BlockStateProperties.WATERLOGGED, Boolean.valueOf(false))
+-                : blockState
+-        );
+-        level.setBlock(pos, blockState.getFluidState().createLegacyBlock(), 3);
+-        level.addFreshEntity(fallingBlockEntity);
+-        return fallingBlockEntity;
++    public static FallingBlockEntity fall(Level level, BlockPos pos, IBlockData blockState) {
++        // CraftBukkit start
++        return fall(level, pos, blockState, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
+     }
+ 
++    public static FallingBlockEntity fall(Level world, BlockPos blockposition, IBlockData iblockdata, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        // CraftBukkit end
++        FallingBlockEntity entityfallingblock = new FallingBlockEntity(world, (double) blockposition.getX() + 0.5D, (double) blockposition.getY(), (double) blockposition.getZ() + 0.5D, iblockdata.hasProperty(BlockStateProperties.WATERLOGGED) ? (IBlockData) iblockdata.setValue(BlockStateProperties.WATERLOGGED, false) : iblockdata);
++        if (!CraftEventFactory.callEntityChangeBlockEvent(entityfallingblock, blockposition, iblockdata.getFluidState().createLegacyBlock())) return entityfallingblock; // CraftBukkit
++
++        world.setBlock(blockposition, iblockdata.getFluidState().createLegacyBlock(), 3);
++        world.addFreshEntity(entityfallingblock, spawnReason); // CraftBukkit
++        return entityfallingblock;
++    }
++
+     @Override
+     public boolean isAttackable() {
+         return false;
+@@ -164,11 +180,14 @@
+                                     this.blockState = this.blockState.setValue(BlockStateProperties.WATERLOGGED, Boolean.valueOf(true));
+                                 }
+ 
+-                                if (this.level().setBlock(blockPos, this.blockState, 3)) {
+-                                    ((ServerLevel)this.level())
+-                                        .getChunkSource()
+-                                        .chunkMap
+-                                        .broadcast(this, new ClientboundBlockUpdatePacket(blockPos, this.level().getBlockState(blockPos)));
++                                // CraftBukkit start
++                                if (!CraftEventFactory.callEntityChangeBlockEvent(this, blockposition, this.blockState)) {
++                                    this.discard(); // SPIGOT-6586 called before the event in previous versions
++                                    return;
++                                }
++                                // CraftBukkit end
++                                if (this.level().setBlock(blockposition, this.blockState, 3)) {
++                                    ((ServerLevel) this.level()).getChunkSource().chunkMap.broadcast(this, new ClientboundBlockUpdatePacket(blockposition, this.level().getBlockState(blockposition)));
+                                     this.discard();
+                                     if (block instanceof Fallable) {
+                                         ((Fallable)block).onLand(this.level(), blockPos, this.blockState, blockState, this);
+@@ -242,15 +257,31 @@
+                 return false;
+             } else {
+                 Predicate<Entity> predicate = EntitySelector.NO_CREATIVE_OR_SPECTATOR.and(EntitySelector.LIVING_ENTITY_STILL_ALIVE);
+-                DamageSource damageSource = this.blockState.getBlock() instanceof Fallable fallable
+-                    ? fallable.getFallDamageSource(this)
+-                    : this.damageSources().fallingBlock(this);
+-                float f = (float)Math.min(Mth.floor((float)ceil * this.fallDamagePerDistance), this.fallDamageMax);
+-                this.level().getEntities(this, this.getBoundingBox(), predicate).forEach(entity -> entity.hurt(damageSource, f));
+-                boolean isAnvil = this.blockState.is(BlockTags.ANVIL);
+-                if (isAnvil && f > 0.0F && this.random.nextFloat() < 0.05F + (float)ceil * 0.05F) {
+-                    BlockState blockState = AnvilBlock.damage(this.blockState);
+-                    if (blockState == null) {
++                Block block = this.blockState.getBlock();
++                DamageSource damagesource1;
++
++                if (block instanceof Fallable) {
++                    Fallable fallable = (Fallable) block;
++
++                    damagesource1 = fallable.getFallDamageSource(this);
++                } else {
++                    damagesource1 = this.damageSources().fallingBlock(this);
++                }
++
++                DamageSource damagesource2 = damagesource1;
++                float f2 = (float) Math.min(Mth.floor((float) i * this.fallDamagePerDistance), this.fallDamageMax);
++
++                this.level().getEntities((Entity) this, this.getBoundingBox(), predicate).forEach((entity) -> {
++                    CraftEventFactory.entityDamage = this; // CraftBukkit
++                    entity.hurt(damagesource2, f2);
++                    CraftEventFactory.entityDamage = null; // CraftBukkit
++                });
++                boolean flag = this.blockState.is(BlockTags.ANVIL);
++
++                if (flag && f2 > 0.0F && this.random.nextFloat() < 0.05F + (float) i * 0.05F) {
++                    IBlockData iblockdata = AnvilBlock.damage(this.blockState);
++
++                    if (iblockdata == null) {
+                         this.cancelDrop = true;
+                     } else {
+                         this.blockState = blockState;

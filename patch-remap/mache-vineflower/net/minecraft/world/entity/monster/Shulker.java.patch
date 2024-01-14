@@ -1,0 +1,853 @@
+--- a/net/minecraft/world/entity/monster/Shulker.java
++++ b/net/minecraft/world/entity/monster/Shulker.java
+@@ -1,6 +1,8 @@
+ package net.minecraft.world.entity.monster;
+ 
+ import java.util.EnumSet;
++import java.util.Iterator;
++import java.util.List;
+ import java.util.Optional;
+ import java.util.UUID;
+ import javax.annotation.Nullable;
+@@ -23,14 +25,14 @@
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityDimensions;
++import net.minecraft.world.entity.EntityPose;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMobSpawn;
++import net.minecraft.world.entity.EnumMoveType;
++import net.minecraft.world.entity.GroupDataEntity;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MobSpawnType;
+-import net.minecraft.world.entity.MoverType;
+-import net.minecraft.world.entity.Pose;
+-import net.minecraft.world.entity.SpawnGroupData;
+ import net.minecraft.world.entity.VariantHolder;
+ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+@@ -50,20 +52,26 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.ServerLevelAccessor;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
++import net.minecraft.world.level.entity.EntityTypeTest;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.AABB;
+ import net.minecraft.world.phys.Vec3;
+ import org.joml.Vector3f;
+ 
+-public class Shulker extends AbstractGolem implements VariantHolder<Optional<DyeColor>>, Enemy {
++// CraftBukkit start
++import org.bukkit.craftbukkit.util.CraftLocation;
++import org.bukkit.event.entity.EntityTeleportEvent;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
++
++public class Shulker extends AbstractGolem implements VariantHolder<Optional<DyeColor>>, IMonster {
++
+     private static final UUID COVERED_ARMOR_MODIFIER_UUID = UUID.fromString("7E0292F2-9434-48D5-A29F-9583AF7DF27F");
+-    private static final AttributeModifier COVERED_ARMOR_MODIFIER = new AttributeModifier(
+-        COVERED_ARMOR_MODIFIER_UUID, "Covered armor bonus", 20.0, AttributeModifier.Operation.ADDITION
+-    );
++    private static final AttributeModifier COVERED_ARMOR_MODIFIER = new AttributeModifier(Shulker.COVERED_ARMOR_MODIFIER_UUID, "Covered armor bonus", 20.0D, AttributeModifier.Operation.ADDITION);
+     protected static final EntityDataAccessor<Direction> DATA_ATTACH_FACE_ID = SynchedEntityData.defineId(Shulker.class, EntityDataSerializers.DIRECTION);
+     protected static final EntityDataAccessor<Byte> DATA_PEEK_ID = SynchedEntityData.defineId(Shulker.class, EntityDataSerializers.BYTE);
+-    protected static final EntityDataAccessor<Byte> DATA_COLOR_ID = SynchedEntityData.defineId(Shulker.class, EntityDataSerializers.BYTE);
++    public static final EntityDataAccessor<Byte> DATA_COLOR_ID = SynchedEntityData.defineId(Shulker.class, EntityDataSerializers.BYTE);
+     private static final int TELEPORT_STEPS = 6;
+     private static final byte NO_COLOR = 16;
+     private static final byte DEFAULT_COLOR = 16;
+@@ -71,9 +79,10 @@
+     private static final int OTHER_SHULKER_SCAN_RADIUS = 8;
+     private static final int OTHER_SHULKER_LIMIT = 5;
+     private static final float PEEK_PER_TICK = 0.05F;
+-    static final Vector3f FORWARD = Util.make(() -> {
+-        Vec3i normal = Direction.SOUTH.getNormal();
+-        return new Vector3f((float)normal.getX(), (float)normal.getY(), (float)normal.getZ());
++    static final Vector3f FORWARD = (Vector3f) Util.make(() -> {
++        Vec3i baseblockposition = Direction.SOUTH.getNormal();
++
++        return new Vector3f((float) baseblockposition.getX(), (float) baseblockposition.getY(), (float) baseblockposition.getZ());
+     });
+     private float currentPeekAmountO;
+     private float currentPeekAmount;
+@@ -94,7 +103,7 @@
+         this.goalSelector.addGoal(4, new Shulker.ShulkerAttackGoal());
+         this.goalSelector.addGoal(7, new Shulker.ShulkerPeekGoal());
+         this.goalSelector.addGoal(8, new RandomLookAroundGoal(this));
+-        this.targetSelector.addGoal(1, new HurtByTargetGoal(this, this.getClass()).setAlertOthers());
++        this.targetSelector.addGoal(1, (new HurtByTargetGoal(this, new Class[]{this.getClass()})).setAlertOthers());
+         this.targetSelector.addGoal(2, new Shulker.ShulkerNearestAttackGoal(this));
+         this.targetSelector.addGoal(3, new Shulker.ShulkerDefenseAttackGoal(this));
+     }
+@@ -119,6 +128,7 @@
+         if (!this.isClosed()) {
+             super.playAmbientSound();
+         }
++
+     }
+ 
+     @Override
+@@ -134,13 +144,13 @@
+     @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+-        this.entityData.define(DATA_ATTACH_FACE_ID, Direction.DOWN);
+-        this.entityData.define(DATA_PEEK_ID, (byte)0);
+-        this.entityData.define(DATA_COLOR_ID, (byte)16);
++        this.entityData.define(Shulker.DATA_ATTACH_FACE_ID, Direction.DOWN);
++        this.entityData.define(Shulker.DATA_PEEK_ID, (byte) 0);
++        this.entityData.define(Shulker.DATA_COLOR_ID, (byte) 16);
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+-        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 30.0);
++        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 30.0D);
+     }
+ 
+     @Override
+@@ -152,18 +162,19 @@
+     public void readAdditionalSaveData(CompoundTag compound) {
+         super.readAdditionalSaveData(compound);
+         this.setAttachFace(Direction.from3DDataValue(compound.getByte("AttachFace")));
+-        this.entityData.set(DATA_PEEK_ID, compound.getByte("Peek"));
++        this.entityData.set(Shulker.DATA_PEEK_ID, compound.getByte("Peek"));
+         if (compound.contains("Color", 99)) {
+-            this.entityData.set(DATA_COLOR_ID, compound.getByte("Color"));
++            this.entityData.set(Shulker.DATA_COLOR_ID, compound.getByte("Color"));
+         }
++
+     }
+ 
+     @Override
+     public void addAdditionalSaveData(CompoundTag compound) {
+         super.addAdditionalSaveData(compound);
+-        compound.putByte("AttachFace", (byte)this.getAttachFace().get3DDataValue());
+-        compound.putByte("Peek", this.entityData.get(DATA_PEEK_ID));
+-        compound.putByte("Color", this.entityData.get(DATA_COLOR_ID));
++        compound.putByte("AttachFace", (byte) this.getAttachFace().get3DDataValue());
++        compound.putByte("Peek", (Byte) this.entityData.get(Shulker.DATA_PEEK_ID));
++        compound.putByte("Color", (Byte) this.entityData.get(Shulker.DATA_COLOR_ID));
+     }
+ 
+     @Override
+@@ -179,37 +190,42 @@
+ 
+         if (this.level().isClientSide) {
+             if (this.clientSideTeleportInterpolation > 0) {
+-                this.clientSideTeleportInterpolation--;
++                --this.clientSideTeleportInterpolation;
+             } else {
+                 this.clientOldAttachPosition = null;
+             }
+         }
++
+     }
+ 
+     private void findNewAttachment() {
+-        Direction direction = this.findAttachableSurface(this.blockPosition());
+-        if (direction != null) {
+-            this.setAttachFace(direction);
++        Direction enumdirection = this.findAttachableSurface(this.blockPosition());
++
++        if (enumdirection != null) {
++            this.setAttachFace(enumdirection);
+         } else {
+             this.teleportSomewhere();
+         }
++
+     }
+ 
+     @Override
+     protected AABB makeBoundingBox() {
+-        float physicalPeek = getPhysicalPeek(this.currentPeekAmount);
+-        Direction opposite = this.getAttachFace().getOpposite();
+-        float f = this.getType().getWidth() / 2.0F;
+-        return getProgressAabb(opposite, physicalPeek).move(this.getX() - (double)f, this.getY(), this.getZ() - (double)f);
++        float f = getPhysicalPeek(this.currentPeekAmount);
++        Direction enumdirection = this.getAttachFace().getOpposite();
++        float f1 = this.getType().getWidth() / 2.0F;
++
++        return getProgressAabb(enumdirection, f).move(this.getX() - (double) f1, this.getY(), this.getZ() - (double) f1);
+     }
+ 
+     private static float getPhysicalPeek(float peek) {
+-        return 0.5F - Mth.sin((0.5F + peek) * (float) Math.PI) * 0.5F;
++        return 0.5F - Mth.sin((0.5F + peek) * 3.1415927F) * 0.5F;
+     }
+ 
+     private boolean updatePeekAmount() {
+         this.currentPeekAmountO = this.currentPeekAmount;
+-        float f = (float)this.getRawPeekAmount() * 0.01F;
++        float f = (float) this.getRawPeekAmount() * 0.01F;
++
+         if (this.currentPeekAmount == f) {
+             return false;
+         } else {
+@@ -225,24 +241,25 @@
+ 
+     private void onPeekAmountChange() {
+         this.reapplyPosition();
+-        float physicalPeek = getPhysicalPeek(this.currentPeekAmount);
+-        float physicalPeek1 = getPhysicalPeek(this.currentPeekAmountO);
+-        Direction opposite = this.getAttachFace().getOpposite();
+-        float f = physicalPeek - physicalPeek1;
+-        if (!(f <= 0.0F)) {
+-            for (Entity entity : this.level()
+-                .getEntities(
+-                    this,
+-                    getProgressDeltaAabb(opposite, physicalPeek1, physicalPeek).move(this.getX() - 0.5, this.getY(), this.getZ() - 0.5),
+-                    EntitySelector.NO_SPECTATORS.and(entity1 -> !entity1.isPassengerOfSameVehicle(this))
+-                )) {
++        float f = getPhysicalPeek(this.currentPeekAmount);
++        float f1 = getPhysicalPeek(this.currentPeekAmountO);
++        Direction enumdirection = this.getAttachFace().getOpposite();
++        float f2 = f - f1;
++
++        if (f2 > 0.0F) {
++            List<Entity> list = this.level().getEntities((Entity) this, getProgressDeltaAabb(enumdirection, f1, f).move(this.getX() - 0.5D, this.getY(), this.getZ() - 0.5D), EntitySelector.NO_SPECTATORS.and((entity) -> {
++                return !entity.isPassengerOfSameVehicle(this);
++            }));
++            Iterator iterator = list.iterator();
++
++            while (iterator.hasNext()) {
++                Entity entity = (Entity) iterator.next();
++
+                 if (!(entity instanceof Shulker) && !entity.noPhysics) {
+-                    entity.move(
+-                        MoverType.SHULKER,
+-                        new Vec3((double)(f * (float)opposite.getStepX()), (double)(f * (float)opposite.getStepY()), (double)(f * (float)opposite.getStepZ()))
+-                    );
++                    entity.move(EnumMoveType.SHULKER, new Vec3((double) (f2 * (float) enumdirection.getStepX()), (double) (f2 * (float) enumdirection.getStepY()), (double) (f2 * (float) enumdirection.getStepZ())));
+                 }
+             }
++
+         }
+     }
+ 
+@@ -251,11 +268,10 @@
+     }
+ 
+     public static AABB getProgressDeltaAabb(Direction direction, float delta, float deltaO) {
+-        double d = (double)Math.max(delta, deltaO);
+-        double d1 = (double)Math.min(delta, deltaO);
+-        return new AABB(BlockPos.ZERO)
+-            .expandTowards((double)direction.getStepX() * d, (double)direction.getStepY() * d, (double)direction.getStepZ() * d)
+-            .contract((double)(-direction.getStepX()) * (1.0 + d1), (double)(-direction.getStepY()) * (1.0 + d1), (double)(-direction.getStepZ()) * (1.0 + d1));
++        double d0 = (double) Math.max(delta, deltaO);
++        double d1 = (double) Math.min(delta, deltaO);
++
++        return (new AABB(BlockPos.ZERO)).expandTowards((double) direction.getStepX() * d0, (double) direction.getStepY() * d0, (double) direction.getStepZ() * d0).contract((double) (-direction.getStepX()) * (1.0D + d1), (double) (-direction.getStepY()) * (1.0D + d1), (double) (-direction.getStepZ()) * (1.0D + d1));
+     }
+ 
+     @Override
+@@ -282,9 +298,7 @@
+ 
+     @Nullable
+     @Override
+-    public SpawnGroupData finalizeSpawn(
+-        ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType reason, @Nullable SpawnGroupData spawnData, @Nullable CompoundTag dataTag
+-    ) {
++    public GroupDataEntity finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, EnumMobSpawn reason, @Nullable GroupDataEntity spawnData, @Nullable CompoundTag dataTag) {
+         this.setYRot(0.0F);
+         this.yHeadRot = this.getYRot();
+         this.setOldPosAndRot();
+@@ -292,12 +306,13 @@
+     }
+ 
+     @Override
+-    public void move(MoverType type, Vec3 pos) {
+-        if (type == MoverType.SHULKER_BOX) {
++    public void move(EnumMoveType type, Vec3 pos) {
++        if (type == EnumMoveType.SHULKER_BOX) {
+             this.teleportSomewhere();
+         } else {
+             super.move(type, pos);
+         }
++
+     }
+ 
+     @Override
+@@ -306,39 +321,46 @@
+     }
+ 
+     @Override
+-    public void setDeltaMovement(Vec3 deltaMovement) {
+-    }
++    public void setDeltaMovement(Vec3 deltaMovement) {}
+ 
+     @Override
+-    public void setPos(double x, double y, double z) {
+-        BlockPos blockPos = this.blockPosition();
++    public void setPos(double x, double d1, double y) {
++        BlockPos blockposition = this.blockPosition();
++
+         if (this.isPassenger()) {
+-            super.setPos(x, y, z);
++            super.setPos(x, d1, y);
+         } else {
+-            super.setPos((double)Mth.floor(x) + 0.5, (double)Mth.floor(y + 0.5), (double)Mth.floor(z) + 0.5);
++            super.setPos((double) Mth.floor(x) + 0.5D, (double) Mth.floor(d1 + 0.5D), (double) Mth.floor(y) + 0.5D);
+         }
+ 
+         if (this.tickCount != 0) {
+-            BlockPos blockPos1 = this.blockPosition();
+-            if (!blockPos1.equals(blockPos)) {
+-                this.entityData.set(DATA_PEEK_ID, (byte)0);
++            BlockPos blockposition1 = this.blockPosition();
++
++            if (!blockposition1.equals(blockposition)) {
++                this.entityData.set(Shulker.DATA_PEEK_ID, (byte) 0);
+                 this.hasImpulse = true;
+-                if (this.level().isClientSide && !this.isPassenger() && !blockPos1.equals(this.clientOldAttachPosition)) {
+-                    this.clientOldAttachPosition = blockPos;
++                if (this.level().isClientSide && !this.isPassenger() && !blockposition1.equals(this.clientOldAttachPosition)) {
++                    this.clientOldAttachPosition = blockposition;
+                     this.clientSideTeleportInterpolation = 6;
+                     this.xOld = this.getX();
+                     this.yOld = this.getY();
+                     this.zOld = this.getZ();
+                 }
+             }
++
+         }
+     }
+ 
+     @Nullable
+     protected Direction findAttachableSurface(BlockPos pos) {
+-        for (Direction direction : Direction.values()) {
+-            if (this.canStayAt(pos, direction)) {
+-                return direction;
++        Direction[] aenumdirection = Direction.values();
++        int i = aenumdirection.length;
++
++        for (int j = 0; j < i; ++j) {
++            Direction enumdirection = aenumdirection[j];
++
++            if (this.canStayAt(pos, enumdirection)) {
++                return enumdirection;
+             }
+         }
+ 
+@@ -349,49 +371,56 @@
+         if (this.isPositionBlocked(pos)) {
+             return false;
+         } else {
+-            Direction opposite = facing.getOpposite();
+-            if (!this.level().loadedAndEntityCanStandOnFace(pos.relative(facing), this, opposite)) {
++            Direction enumdirection1 = facing.getOpposite();
++
++            if (!this.level().loadedAndEntityCanStandOnFace(pos.relative(facing), this, enumdirection1)) {
+                 return false;
+             } else {
+-                AABB aABB = getProgressAabb(opposite, 1.0F).move(pos).deflate(1.0E-6);
+-                return this.level().noCollision(this, aABB);
++                AABB axisalignedbb = getProgressAabb(enumdirection1, 1.0F).move(pos).deflate(1.0E-6D);
++
++                return this.level().noCollision(this, axisalignedbb);
+             }
+         }
+     }
+ 
+     private boolean isPositionBlocked(BlockPos pos) {
+-        BlockState blockState = this.level().getBlockState(pos);
+-        if (blockState.isAir()) {
++        IBlockData iblockdata = this.level().getBlockState(pos);
++
++        if (iblockdata.isAir()) {
+             return false;
+         } else {
+-            boolean flag = blockState.is(Blocks.MOVING_PISTON) && pos.equals(this.blockPosition());
++            boolean flag = iblockdata.is(Blocks.MOVING_PISTON) && pos.equals(this.blockPosition());
++
+             return !flag;
+         }
+     }
+ 
+     protected boolean teleportSomewhere() {
+         if (!this.isNoAi() && this.isAlive()) {
+-            BlockPos blockPos = this.blockPosition();
++            BlockPos blockposition = this.blockPosition();
+ 
+-            for (int i = 0; i < 5; i++) {
+-                BlockPos blockPos1 = blockPos.offset(
+-                    Mth.randomBetweenInclusive(this.random, -8, 8),
+-                    Mth.randomBetweenInclusive(this.random, -8, 8),
+-                    Mth.randomBetweenInclusive(this.random, -8, 8)
+-                );
+-                if (blockPos1.getY() > this.level().getMinBuildHeight()
+-                    && this.level().isEmptyBlock(blockPos1)
+-                    && this.level().getWorldBorder().isWithinBounds(blockPos1)
+-                    && this.level().noCollision(this, new AABB(blockPos1).deflate(1.0E-6))) {
+-                    Direction direction = this.findAttachableSurface(blockPos1);
+-                    if (direction != null) {
++            for (int i = 0; i < 5; ++i) {
++                BlockPos blockposition1 = blockposition.offset(Mth.randomBetweenInclusive(this.random, -8, 8), Mth.randomBetweenInclusive(this.random, -8, 8), Mth.randomBetweenInclusive(this.random, -8, 8));
++
++                if (blockposition1.getY() > this.level().getMinBuildHeight() && this.level().isEmptyBlock(blockposition1) && this.level().getWorldBorder().isWithinBounds(blockposition1) && this.level().noCollision(this, (new AABB(blockposition1)).deflate(1.0E-6D))) {
++                    Direction enumdirection = this.findAttachableSurface(blockposition1);
++
++                    if (enumdirection != null) {
++                        // CraftBukkit start
++                        EntityTeleportEvent teleportEvent = CraftEventFactory.callEntityTeleportEvent(this, blockposition1.getX(), blockposition1.getY(), blockposition1.getZ());
++                        if (teleportEvent.isCancelled()) {
++                            return false;
++                        } else {
++                            blockposition1 = CraftLocation.toBlockPosition(teleportEvent.getTo());
++                        }
++                        // CraftBukkit end
+                         this.unRide();
+-                        this.setAttachFace(direction);
++                        this.setAttachFace(enumdirection);
+                         this.playSound(SoundEvents.SHULKER_TELEPORT, 1.0F, 1.0F);
+-                        this.setPos((double)blockPos1.getX() + 0.5, (double)blockPos1.getY(), (double)blockPos1.getZ() + 0.5);
+-                        this.level().gameEvent(GameEvent.TELEPORT, blockPos, GameEvent.Context.of(this));
+-                        this.entityData.set(DATA_PEEK_ID, (byte)0);
+-                        this.setTarget(null);
++                        this.setPos((double) blockposition1.getX() + 0.5D, (double) blockposition1.getY(), (double) blockposition1.getZ() + 0.5D);
++                        this.level().gameEvent(GameEvent.TELEPORT, blockposition, GameEvent.Context.of((Entity) this));
++                        this.entityData.set(Shulker.DATA_PEEK_ID, (byte) 0);
++                        this.setTarget((LivingEntity) null);
+                         return true;
+                     }
+                 }
+@@ -404,17 +433,19 @@
+     }
+ 
+     @Override
+-    public void lerpTo(double d, double d1, double d2, float f, float f1, int i) {
++    public void lerpTo(double d0, double d1, double d2, float f, float f1, int i) {
+         this.lerpSteps = 0;
+-        this.setPos(d, d1, d2);
++        this.setPos(d0, d1, d2);
+         this.setRot(f, f1);
+     }
+ 
+     @Override
+     public boolean hurt(DamageSource source, float amount) {
++        Entity entity;
++
+         if (this.isClosed()) {
+-            Entity directEntity = source.getDirectEntity();
+-            if (directEntity instanceof AbstractArrow) {
++            entity = source.getDirectEntity();
++            if (entity instanceof AbstractArrow) {
+                 return false;
+             }
+         }
+@@ -422,11 +453,11 @@
+         if (!super.hurt(source, amount)) {
+             return false;
+         } else {
+-            if ((double)this.getHealth() < (double)this.getMaxHealth() * 0.5 && this.random.nextInt(4) == 0) {
++            if ((double) this.getHealth() < (double) this.getMaxHealth() * 0.5D && this.random.nextInt(4) == 0) {
+                 this.teleportSomewhere();
+             } else if (source.is(DamageTypeTags.IS_PROJECTILE)) {
+-                Entity directEntity = source.getDirectEntity();
+-                if (directEntity != null && directEntity.getType() == EntityType.SHULKER_BULLET) {
++                entity = source.getDirectEntity();
++                if (entity != null && entity.getType() == EntityType.SHULKER_BULLET) {
+                     this.hitByShulkerBullet();
+                 }
+             }
+@@ -440,18 +471,22 @@
+     }
+ 
+     private void hitByShulkerBullet() {
+-        Vec3 vec3 = this.position();
+-        AABB boundingBox = this.getBoundingBox();
++        Vec3 vec3d = this.position();
++        AABB axisalignedbb = this.getBoundingBox();
++
+         if (!this.isClosed() && this.teleportSomewhere()) {
+-            int size = this.level().getEntities(EntityType.SHULKER, boundingBox.inflate(8.0), Entity::isAlive).size();
+-            float f = (float)(size - 1) / 5.0F;
+-            if (!(this.level().random.nextFloat() < f)) {
+-                Shulker shulker = EntityType.SHULKER.create(this.level());
+-                if (shulker != null) {
+-                    shulker.setVariant(this.getVariant());
+-                    shulker.moveTo(vec3);
+-                    this.level().addFreshEntity(shulker);
++            int i = this.level().getEntities((EntityTypeTest) EntityType.SHULKER, axisalignedbb.inflate(8.0D), Entity::isAlive).size();
++            float f = (float) (i - 1) / 5.0F;
++
++            if (this.level().random.nextFloat() >= f) {
++                Shulker entityshulker = (Shulker) EntityType.SHULKER.create(this.level());
++
++                if (entityshulker != null) {
++                    entityshulker.setVariant(this.getVariant());
++                    entityshulker.moveTo(vec3d);
++                    this.level().addFreshEntity(entityshulker, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.BREEDING); // CraftBukkit - the mysteries of life
+                 }
++
+             }
+         }
+     }
+@@ -462,31 +497,31 @@
+     }
+ 
+     public Direction getAttachFace() {
+-        return this.entityData.get(DATA_ATTACH_FACE_ID);
++        return (Direction) this.entityData.get(Shulker.DATA_ATTACH_FACE_ID);
+     }
+ 
+-    private void setAttachFace(Direction attachFace) {
+-        this.entityData.set(DATA_ATTACH_FACE_ID, attachFace);
++    public void setAttachFace(Direction attachFace) {
++        this.entityData.set(Shulker.DATA_ATTACH_FACE_ID, attachFace);
+     }
+ 
+     @Override
+     public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+-        if (DATA_ATTACH_FACE_ID.equals(key)) {
++        if (Shulker.DATA_ATTACH_FACE_ID.equals(key)) {
+             this.setBoundingBox(this.makeBoundingBox());
+         }
+ 
+         super.onSyncedDataUpdated(key);
+     }
+ 
+-    private int getRawPeekAmount() {
+-        return this.entityData.get(DATA_PEEK_ID);
++    public int getRawPeekAmount() {
++        return (Byte) this.entityData.get(Shulker.DATA_PEEK_ID);
+     }
+ 
+-    void setRawPeekAmount(int peekAmount) {
++    public void setRawPeekAmount(int peekAmount) {
+         if (!this.level().isClientSide) {
+-            this.getAttribute(Attributes.ARMOR).removeModifier(COVERED_ARMOR_MODIFIER.getId());
++            this.getAttribute(Attributes.ARMOR).removeModifier(Shulker.COVERED_ARMOR_MODIFIER.getId());
+             if (peekAmount == 0) {
+-                this.getAttribute(Attributes.ARMOR).addPermanentModifier(COVERED_ARMOR_MODIFIER);
++                this.getAttribute(Attributes.ARMOR).addPermanentModifier(Shulker.COVERED_ARMOR_MODIFIER);
+                 this.playSound(SoundEvents.SHULKER_CLOSE, 1.0F, 1.0F);
+                 this.gameEvent(GameEvent.CONTAINER_CLOSE);
+             } else {
+@@ -495,7 +530,7 @@
+             }
+         }
+ 
+-        this.entityData.set(DATA_PEEK_ID, (byte)peekAmount);
++        this.entityData.set(Shulker.DATA_PEEK_ID, (byte) peekAmount);
+     }
+ 
+     public float getClientPeekAmount(float partialTick) {
+@@ -503,7 +538,7 @@
+     }
+ 
+     @Override
+-    protected float getStandingEyeHeight(Pose pose, EntityDimensions size) {
++    protected float getStandingEyeHeight(EntityPose pose, EntityDimensions size) {
+         return 0.5F;
+     }
+ 
+@@ -525,26 +560,28 @@
+     }
+ 
+     @Override
+-    public void push(Entity entity) {
+-    }
++    public void push(Entity entity) {}
+ 
+     public Optional<Vec3> getRenderPosition(float partial) {
+         if (this.clientOldAttachPosition != null && this.clientSideTeleportInterpolation > 0) {
+-            double d = (double)((float)this.clientSideTeleportInterpolation - partial) / 6.0;
+-            d *= d;
+-            BlockPos blockPos = this.blockPosition();
+-            double d1 = (double)(blockPos.getX() - this.clientOldAttachPosition.getX()) * d;
+-            double d2 = (double)(blockPos.getY() - this.clientOldAttachPosition.getY()) * d;
+-            double d3 = (double)(blockPos.getZ() - this.clientOldAttachPosition.getZ()) * d;
++            double d0 = (double) ((float) this.clientSideTeleportInterpolation - partial) / 6.0D;
++
++            d0 *= d0;
++            BlockPos blockposition = this.blockPosition();
++            double d1 = (double) (blockposition.getX() - this.clientOldAttachPosition.getX()) * d0;
++            double d2 = (double) (blockposition.getY() - this.clientOldAttachPosition.getY()) * d0;
++            double d3 = (double) (blockposition.getZ() - this.clientOldAttachPosition.getZ()) * d0;
++
+             return Optional.of(new Vec3(-d1, -d2, -d3));
+         } else {
+             return Optional.empty();
+         }
+     }
+ 
+-    @Override
+     public void setVariant(Optional<DyeColor> variant) {
+-        this.entityData.set(DATA_COLOR_ID, variant.<Byte>map(color -> (byte)color.getId()).orElse((byte)16));
++        this.entityData.set(Shulker.DATA_COLOR_ID, (Byte) variant.map((enumcolor) -> {
++            return (byte) enumcolor.getId();
++        }).orElse((byte) 16));
+     }
+ 
+     @Override
+@@ -554,21 +591,57 @@
+ 
+     @Nullable
+     public DyeColor getColor() {
+-        byte b = this.entityData.get(DATA_COLOR_ID);
+-        return b != 16 && b <= 15 ? DyeColor.byId(b) : null;
++        byte b0 = (Byte) this.entityData.get(Shulker.DATA_COLOR_ID);
++
++        return b0 != 16 && b0 <= 15 ? DyeColor.byId(b0) : null;
+     }
+ 
+-    class ShulkerAttackGoal extends Goal {
++    private class ShulkerLookControl extends LookControl {
++
++        public ShulkerLookControl(Mob mob) {
++            super(mob);
++        }
++
++        @Override
++        protected void clampHeadRotationToBody() {}
++
++        @Override
++        protected Optional<Float> getYRotD() {
++            Direction enumdirection = Shulker.this.getAttachFace().getOpposite();
++            Vector3f vector3f = enumdirection.getRotation().transform(new Vector3f(Shulker.FORWARD));
++            Vec3i baseblockposition = enumdirection.getNormal();
++            Vector3f vector3f1 = new Vector3f((float) baseblockposition.getX(), (float) baseblockposition.getY(), (float) baseblockposition.getZ());
++
++            vector3f1.cross(vector3f);
++            double d0 = this.wantedX - this.mob.getX();
++            double d1 = this.wantedY - this.mob.getEyeY();
++            double d2 = this.wantedZ - this.mob.getZ();
++            Vector3f vector3f2 = new Vector3f((float) d0, (float) d1, (float) d2);
++            float f = vector3f1.dot(vector3f2);
++            float f1 = vector3f.dot(vector3f2);
++
++            return Math.abs(f) <= 1.0E-5F && Math.abs(f1) <= 1.0E-5F ? Optional.empty() : Optional.of((float) (Mth.atan2((double) (-f), (double) f1) * 57.2957763671875D));
++        }
++
++        @Override
++        protected Optional<Float> getXRotD() {
++            return Optional.of(0.0F);
++        }
++    }
++
++    private class ShulkerAttackGoal extends Goal {
++
+         private int attackTime;
+ 
+         public ShulkerAttackGoal() {
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
++            this.setFlags(EnumSet.of(Goal.Type.MOVE, Goal.Type.LOOK));
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            LivingEntity target = Shulker.this.getTarget();
+-            return target != null && target.isAlive() && Shulker.this.level().getDifficulty() != Difficulty.PEACEFUL;
++            LivingEntity entityliving = Shulker.this.getTarget();
++
++            return entityliving != null && entityliving.isAlive() ? Shulker.this.level().getDifficulty() != Difficulty.PEACEFUL : false;
+         }
+ 
+         @Override
+@@ -590,22 +663,21 @@
+         @Override
+         public void tick() {
+             if (Shulker.this.level().getDifficulty() != Difficulty.PEACEFUL) {
+-                this.attackTime--;
+-                LivingEntity target = Shulker.this.getTarget();
+-                if (target != null) {
+-                    Shulker.this.getLookControl().setLookAt(target, 180.0F, 180.0F);
+-                    double d = Shulker.this.distanceToSqr(target);
+-                    if (d < 400.0) {
++                --this.attackTime;
++                LivingEntity entityliving = Shulker.this.getTarget();
++
++                if (entityliving != null) {
++                    Shulker.this.getLookControl().setLookAt(entityliving, 180.0F, 180.0F);
++                    double d0 = Shulker.this.distanceToSqr((Entity) entityliving);
++
++                    if (d0 < 400.0D) {
+                         if (this.attackTime <= 0) {
+                             this.attackTime = 20 + Shulker.this.random.nextInt(10) * 20 / 2;
+-                            Shulker.this.level()
+-                                .addFreshEntity(new ShulkerBullet(Shulker.this.level(), Shulker.this, target, Shulker.this.getAttachFace().getAxis()));
+-                            Shulker.this.playSound(
+-                                SoundEvents.SHULKER_SHOOT, 2.0F, (Shulker.this.random.nextFloat() - Shulker.this.random.nextFloat()) * 0.2F + 1.0F
+-                            );
++                            Shulker.this.level().addFreshEntity(new ShulkerBullet(Shulker.this.level(), Shulker.this, entityliving, Shulker.this.getAttachFace().getAxis()));
++                            Shulker.this.playSound(SoundEvents.SHULKER_SHOOT, 2.0F, (Shulker.this.random.nextFloat() - Shulker.this.random.nextFloat()) * 0.2F + 1.0F);
+                         }
+                     } else {
+-                        Shulker.this.setTarget(null);
++                        Shulker.this.setTarget((LivingEntity) null);
+                     }
+ 
+                     super.tick();
+@@ -614,126 +686,89 @@
+         }
+     }
+ 
+-    static class ShulkerBodyRotationControl extends BodyRotationControl {
+-        public ShulkerBodyRotationControl(Mob mob) {
+-            super(mob);
+-        }
++    private class ShulkerPeekGoal extends Goal {
+ 
+-        @Override
+-        public void clientTick() {
+-        }
+-    }
++        private int peekTime;
+ 
+-    static class ShulkerDefenseAttackGoal extends NearestAttackableTargetGoal<LivingEntity> {
+-        public ShulkerDefenseAttackGoal(Shulker shulker) {
+-            super(shulker, LivingEntity.class, 10, true, false, entity -> entity instanceof Enemy);
+-        }
++        ShulkerPeekGoal() {}
+ 
+         @Override
+         public boolean canUse() {
+-            return this.mob.getTeam() != null && super.canUse();
++            return Shulker.this.getTarget() == null && Shulker.this.random.nextInt(reducedTickDelay(40)) == 0 && Shulker.this.canStayAt(Shulker.this.blockPosition(), Shulker.this.getAttachFace());
+         }
+ 
+         @Override
+-        protected AABB getTargetSearchArea(double targetDistance) {
+-            Direction attachFace = ((Shulker)this.mob).getAttachFace();
+-            if (attachFace.getAxis() == Direction.Axis.X) {
+-                return this.mob.getBoundingBox().inflate(4.0, targetDistance, targetDistance);
+-            } else {
+-                return attachFace.getAxis() == Direction.Axis.Z
+-                    ? this.mob.getBoundingBox().inflate(targetDistance, targetDistance, 4.0)
+-                    : this.mob.getBoundingBox().inflate(targetDistance, 4.0, targetDistance);
+-            }
++        public boolean canContinueToUse() {
++            return Shulker.this.getTarget() == null && this.peekTime > 0;
+         }
+-    }
+ 
+-    class ShulkerLookControl extends LookControl {
+-        public ShulkerLookControl(Mob mob) {
+-            super(mob);
+-        }
+-
+         @Override
+-        protected void clampHeadRotationToBody() {
++        public void start() {
++            this.peekTime = this.adjustedTickDelay(20 * (1 + Shulker.this.random.nextInt(3)));
++            Shulker.this.setRawPeekAmount(30);
+         }
+ 
+         @Override
+-        protected Optional<Float> getYRotD() {
+-            Direction opposite = Shulker.this.getAttachFace().getOpposite();
+-            Vector3f vector3f = opposite.getRotation().transform(new Vector3f(Shulker.FORWARD));
+-            Vec3i normal = opposite.getNormal();
+-            Vector3f vector3f1 = new Vector3f((float)normal.getX(), (float)normal.getY(), (float)normal.getZ());
+-            vector3f1.cross(vector3f);
+-            double d = this.wantedX - this.mob.getX();
+-            double d1 = this.wantedY - this.mob.getEyeY();
+-            double d2 = this.wantedZ - this.mob.getZ();
+-            Vector3f vector3f2 = new Vector3f((float)d, (float)d1, (float)d2);
+-            float f = vector3f1.dot(vector3f2);
+-            float f1 = vector3f.dot(vector3f2);
+-            return !(Math.abs(f) > 1.0E-5F) && !(Math.abs(f1) > 1.0E-5F)
+-                ? Optional.empty()
+-                : Optional.of((float)(Mth.atan2((double)(-f), (double)f1) * 180.0F / (float)Math.PI));
++        public void stop() {
++            if (Shulker.this.getTarget() == null) {
++                Shulker.this.setRawPeekAmount(0);
++            }
++
+         }
+ 
+         @Override
+-        protected Optional<Float> getXRotD() {
+-            return Optional.of(0.0F);
++        public void tick() {
++            --this.peekTime;
+         }
+     }
+ 
+-    class ShulkerNearestAttackGoal extends NearestAttackableTargetGoal<Player> {
+-        public ShulkerNearestAttackGoal(Shulker shulker) {
+-            super(shulker, Player.class, true);
++    private class ShulkerNearestAttackGoal extends NearestAttackableTargetGoal<Player> {
++
++        public ShulkerNearestAttackGoal(Shulker entityshulker) {
++            super(entityshulker, Player.class, true);
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            return Shulker.this.level().getDifficulty() != Difficulty.PEACEFUL && super.canUse();
++            return Shulker.this.level().getDifficulty() == Difficulty.PEACEFUL ? false : super.canUse();
+         }
+ 
+         @Override
+         protected AABB getTargetSearchArea(double targetDistance) {
+-            Direction attachFace = ((Shulker)this.mob).getAttachFace();
+-            if (attachFace.getAxis() == Direction.Axis.X) {
+-                return this.mob.getBoundingBox().inflate(4.0, targetDistance, targetDistance);
+-            } else {
+-                return attachFace.getAxis() == Direction.Axis.Z
+-                    ? this.mob.getBoundingBox().inflate(targetDistance, targetDistance, 4.0)
+-                    : this.mob.getBoundingBox().inflate(targetDistance, 4.0, targetDistance);
+-            }
++            Direction enumdirection = ((Shulker) this.mob).getAttachFace();
++
++            return enumdirection.getAxis() == Direction.Axis.X ? this.mob.getBoundingBox().inflate(4.0D, targetDistance, targetDistance) : (enumdirection.getAxis() == Direction.Axis.Z ? this.mob.getBoundingBox().inflate(targetDistance, targetDistance, 4.0D) : this.mob.getBoundingBox().inflate(targetDistance, 4.0D, targetDistance));
+         }
+     }
+ 
+-    class ShulkerPeekGoal extends Goal {
+-        private int peekTime;
++    private static class ShulkerDefenseAttackGoal extends NearestAttackableTargetGoal<LivingEntity> {
+ 
+-        @Override
+-        public boolean canUse() {
+-            return Shulker.this.getTarget() == null
+-                && Shulker.this.random.nextInt(reducedTickDelay(40)) == 0
+-                && Shulker.this.canStayAt(Shulker.this.blockPosition(), Shulker.this.getAttachFace());
++        public ShulkerDefenseAttackGoal(Shulker shulker) {
++            super(shulker, LivingEntity.class, 10, true, false, (entityliving) -> {
++                return entityliving instanceof IMonster;
++            });
+         }
+ 
+         @Override
+-        public boolean canContinueToUse() {
+-            return Shulker.this.getTarget() == null && this.peekTime > 0;
++        public boolean canUse() {
++            return this.mob.getTeam() == null ? false : super.canUse();
+         }
+ 
+         @Override
+-        public void start() {
+-            this.peekTime = this.adjustedTickDelay(20 * (1 + Shulker.this.random.nextInt(3)));
+-            Shulker.this.setRawPeekAmount(30);
++        protected AABB getTargetSearchArea(double targetDistance) {
++            Direction enumdirection = ((Shulker) this.mob).getAttachFace();
++
++            return enumdirection.getAxis() == Direction.Axis.X ? this.mob.getBoundingBox().inflate(4.0D, targetDistance, targetDistance) : (enumdirection.getAxis() == Direction.Axis.Z ? this.mob.getBoundingBox().inflate(targetDistance, targetDistance, 4.0D) : this.mob.getBoundingBox().inflate(targetDistance, 4.0D, targetDistance));
+         }
++    }
+ 
+-        @Override
+-        public void stop() {
+-            if (Shulker.this.getTarget() == null) {
+-                Shulker.this.setRawPeekAmount(0);
+-            }
++    private static class ShulkerBodyRotationControl extends BodyRotationControl {
++
++        public ShulkerBodyRotationControl(Mob mob) {
++            super(mob);
+         }
+ 
+         @Override
+-        public void tick() {
+-            this.peekTime--;
+-        }
++        public void clientTick() {}
+     }
+ }

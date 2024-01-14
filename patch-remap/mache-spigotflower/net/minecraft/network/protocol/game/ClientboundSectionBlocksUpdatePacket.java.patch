@@ -1,0 +1,109 @@
+--- a/net/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket.java
++++ b/net/minecraft/network/protocol/game/ClientboundSectionBlocksUpdatePacket.java
+@@ -8,7 +8,7 @@
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.world.level.block.Block;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.chunk.LevelChunkSection;
+ 
+ public class ClientboundSectionBlocksUpdatePacket implements Packet<ClientGamePacketListener> {
+@@ -16,66 +16,72 @@
+     private static final int POS_IN_SECTION_BITS = 12;
+     private final SectionPos sectionPos;
+     private final short[] positions;
+-    private final BlockState[] states;
++    private final IBlockData[] states;
+ 
+-    public ClientboundSectionBlocksUpdatePacket(SectionPos sectionpos, ShortSet shortset, LevelChunkSection levelchunksection) {
+-        this.sectionPos = sectionpos;
+-        int i = shortset.size();
++    public ClientboundSectionBlocksUpdatePacket(SectionPos sectionPos, ShortSet positions, LevelChunkSection section) {
++        this.sectionPos = sectionPos;
++        int i = positions.size();
+ 
+         this.positions = new short[i];
+-        this.states = new BlockState[i];
++        this.states = new IBlockData[i];
+         int j = 0;
+ 
+-        for (ShortIterator shortiterator = shortset.iterator(); shortiterator.hasNext(); ++j) {
++        for (ShortIterator shortiterator = positions.iterator(); shortiterator.hasNext(); ++j) {
+             short short0 = (Short) shortiterator.next();
+ 
+             this.positions[j] = short0;
+-            this.states[j] = levelchunksection.getBlockState(SectionPos.sectionRelativeX(short0), SectionPos.sectionRelativeY(short0), SectionPos.sectionRelativeZ(short0));
++            this.states[j] = (section != null) ? section.getBlockState(SectionPos.sectionRelativeX(short0), SectionPos.sectionRelativeY(short0), SectionPos.sectionRelativeZ(short0)) : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(); // CraftBukkit - SPIGOT-6076, Mojang bug when empty chunk section notified
+         }
+ 
+     }
+ 
+-    public ClientboundSectionBlocksUpdatePacket(FriendlyByteBuf friendlybytebuf) {
+-        this.sectionPos = SectionPos.of(friendlybytebuf.readLong());
+-        int i = friendlybytebuf.readVarInt();
++    // CraftBukkit start - Add constructor
++    public ClientboundSectionBlocksUpdatePacket(SectionPos sectionposition, ShortSet shortset, IBlockData[] states) {
++        this.sectionPos = sectionposition;
++        this.positions = shortset.toShortArray();
++        this.states = states;
++    }
++    // CraftBukkit end
+ 
++    public ClientboundSectionBlocksUpdatePacket(FriendlyByteBuf buffer) {
++        this.sectionPos = SectionPos.of(buffer.readLong());
++        int i = buffer.readVarInt();
++
+         this.positions = new short[i];
+-        this.states = new BlockState[i];
++        this.states = new IBlockData[i];
+ 
+         for (int j = 0; j < i; ++j) {
+-            long k = friendlybytebuf.readVarLong();
++            long k = buffer.readVarLong();
+ 
+             this.positions[j] = (short) ((int) (k & 4095L));
+-            this.states[j] = (BlockState) Block.BLOCK_STATE_REGISTRY.byId((int) (k >>> 12));
++            this.states[j] = (IBlockData) Block.BLOCK_STATE_REGISTRY.byId((int) (k >>> 12));
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void write(FriendlyByteBuf friendlybytebuf) {
+-        friendlybytebuf.writeLong(this.sectionPos.asLong());
+-        friendlybytebuf.writeVarInt(this.positions.length);
++    public void write(FriendlyByteBuf buffer) {
++        buffer.writeLong(this.sectionPos.asLong());
++        buffer.writeVarInt(this.positions.length);
+ 
+         for (int i = 0; i < this.positions.length; ++i) {
+-            friendlybytebuf.writeVarLong((long) Block.getId(this.states[i]) << 12 | (long) this.positions[i]);
++            buffer.writeVarLong((long) Block.getId(this.states[i]) << 12 | (long) this.positions[i]);
+         }
+ 
+     }
+ 
+-    @Override
+-    public void handle(ClientGamePacketListener clientgamepacketlistener) {
+-        clientgamepacketlistener.handleChunkBlocksUpdate(this);
++    public void handle(ClientGamePacketListener handler) {
++        handler.handleChunkBlocksUpdate(this);
+     }
+ 
+-    public void runUpdates(BiConsumer<BlockPos, BlockState> biconsumer) {
+-        BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
++    public void runUpdates(BiConsumer<BlockPos, IBlockData> consumer) {
++        BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+ 
+         for (int i = 0; i < this.positions.length; ++i) {
+             short short0 = this.positions[i];
+ 
+-            blockpos_mutableblockpos.set(this.sectionPos.relativeToBlockX(short0), this.sectionPos.relativeToBlockY(short0), this.sectionPos.relativeToBlockZ(short0));
+-            biconsumer.accept(blockpos_mutableblockpos, this.states[i]);
++            blockposition_mutableblockposition.set(this.sectionPos.relativeToBlockX(short0), this.sectionPos.relativeToBlockY(short0), this.sectionPos.relativeToBlockZ(short0));
++            consumer.accept(blockposition_mutableblockposition, this.states[i]);
+         }
+ 
+     }

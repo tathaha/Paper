@@ -1,0 +1,184 @@
+--- a/net/minecraft/stats/ServerStatsCounter.java
++++ b/net/minecraft/stats/ServerStatsCounter.java
+@@ -1,3 +1,4 @@
++// mc-dev import
+ package net.minecraft.stats;
+ 
+ import com.google.common.collect.Maps;
+@@ -44,12 +45,12 @@
+     private final File file;
+     private final Set<Stat<?>> dirty = Sets.newHashSet();
+ 
+-    public ServerStatsCounter(MinecraftServer minecraftserver, File file) {
+-        this.server = minecraftserver;
++    public ServerStatsCounter(MinecraftServer server, File file) {
++        this.server = server;
+         this.file = file;
+         if (file.isFile()) {
+             try {
+-                this.parseLocal(minecraftserver.getFixerUpper(), FileUtils.readFileToString(file));
++                this.parseLocal(server.getFixerUpper(), FileUtils.readFileToString(file));
+             } catch (IOException ioexception) {
+                 ServerStatsCounter.LOGGER.error("Couldn't read statistics file {}", file, ioexception);
+             } catch (JsonParseException jsonparseexception) {
+@@ -69,9 +70,8 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void setValue(Player player, Stat<?> stat, int i) {
+-        super.setValue(player, stat, i);
++    public void setValue(Player player, Stat<?> stat, int value) {
++        super.setValue(player, stat, value);
+         this.dirty.add(stat);
+     }
+ 
+@@ -82,9 +82,9 @@
+         return set;
+     }
+ 
+-    public void parseLocal(DataFixer datafixer, String s) {
++    public void parseLocal(DataFixer fixerUpper, String json) {
+         try {
+-            JsonReader jsonreader = new JsonReader(new StringReader(s));
++            JsonReader jsonreader = new JsonReader(new StringReader(json));
+ 
+             label48:
+             {
+@@ -93,15 +93,15 @@
+                     JsonElement jsonelement = Streams.parse(jsonreader);
+ 
+                     if (!jsonelement.isJsonNull()) {
+-                        CompoundTag compoundtag = fromJson(jsonelement.getAsJsonObject());
++                        CompoundTag nbttagcompound = fromJson(jsonelement.getAsJsonObject());
+ 
+-                        compoundtag = DataFixTypes.STATS.updateToCurrentVersion(datafixer, compoundtag, NbtUtils.getDataVersion(compoundtag, 1343));
+-                        if (!compoundtag.contains("stats", 10)) {
++                        nbttagcompound = DataFixTypes.STATS.updateToCurrentVersion(fixerUpper, nbttagcompound, NbtUtils.getDataVersion(nbttagcompound, 1343));
++                        if (!nbttagcompound.contains("stats", 10)) {
+                             break label48;
+                         }
+ 
+-                        CompoundTag compoundtag1 = compoundtag.getCompound("stats");
+-                        Iterator iterator = compoundtag1.getAllKeys().iterator();
++                        CompoundTag nbttagcompound1 = nbttagcompound.getCompound("stats");
++                        Iterator iterator = nbttagcompound1.getAllKeys().iterator();
+ 
+                         while (true) {
+                             if (!iterator.hasNext()) {
+@@ -110,22 +110,22 @@
+ 
+                             String s1 = (String) iterator.next();
+ 
+-                            if (compoundtag1.contains(s1, 10)) {
+-                                Util.ifElse(BuiltInRegistries.STAT_TYPE.getOptional(new ResourceLocation(s1)), (stattype) -> {
+-                                    CompoundTag compoundtag2 = compoundtag1.getCompound(s1);
+-                                    Iterator iterator1 = compoundtag2.getAllKeys().iterator();
++                            if (nbttagcompound1.contains(s1, 10)) {
++                                Util.ifElse(BuiltInRegistries.STAT_TYPE.getOptional(new ResourceLocation(s1)), (statisticwrapper) -> {
++                                    CompoundTag nbttagcompound2 = nbttagcompound1.getCompound(s1);
++                                    Iterator iterator1 = nbttagcompound2.getAllKeys().iterator();
+ 
+                                     while (iterator1.hasNext()) {
+                                         String s2 = (String) iterator1.next();
+ 
+-                                        if (compoundtag2.contains(s2, 99)) {
+-                                            Util.ifElse(this.getStat(stattype, s2), (stat) -> {
+-                                                this.stats.put(stat, compoundtag2.getInt(s2));
++                                        if (nbttagcompound2.contains(s2, 99)) {
++                                            Util.ifElse(this.getStat(statisticwrapper, s2), (statistic) -> {
++                                                this.stats.put(statistic, nbttagcompound2.getInt(s2));
+                                             }, () -> {
+                                                 ServerStatsCounter.LOGGER.warn("Invalid statistic in {}: Don't know what {} is", this.file, s2);
+                                             });
+                                         } else {
+-                                            ServerStatsCounter.LOGGER.warn("Invalid statistic value in {}: Don't know what {} is for key {}", new Object[]{this.file, compoundtag2.get(s2), s2});
++                                            ServerStatsCounter.LOGGER.warn("Invalid statistic value in {}: Don't know what {} is for key {}", new Object[]{this.file, nbttagcompound2.get(s2), s2});
+                                         }
+                                     }
+ 
+@@ -158,36 +158,35 @@
+ 
+     }
+ 
+-    private <T> Optional<Stat<T>> getStat(StatType<T> stattype, String s) {
+-        Optional optional = Optional.ofNullable(ResourceLocation.tryParse(s));
+-        Registry registry = stattype.getRegistry();
++    private <T> Optional<Stat<T>> getStat(StatType<T> type, String location) {
++        // CraftBukkit - decompile error start
++        Optional<ResourceLocation> optional = Optional.ofNullable(ResourceLocation.tryParse(location));
++        Registry<T> iregistry = type.getRegistry();
+ 
+-        Objects.requireNonNull(registry);
+-        optional = optional.flatMap(registry::getOptional);
+-        Objects.requireNonNull(stattype);
+-        return optional.map(stattype::get);
++        return optional.flatMap(iregistry::getOptional).map(type::get);
++        // CraftBukkit - decompile error end
+     }
+ 
+-    private static CompoundTag fromJson(JsonObject jsonobject) {
+-        CompoundTag compoundtag = new CompoundTag();
+-        Iterator iterator = jsonobject.entrySet().iterator();
++    private static CompoundTag fromJson(JsonObject json) {
++        CompoundTag nbttagcompound = new CompoundTag();
++        Iterator iterator = json.entrySet().iterator();
+ 
+         while (iterator.hasNext()) {
+             Entry<String, JsonElement> entry = (Entry) iterator.next();
+             JsonElement jsonelement = (JsonElement) entry.getValue();
+ 
+             if (jsonelement.isJsonObject()) {
+-                compoundtag.put((String) entry.getKey(), fromJson(jsonelement.getAsJsonObject()));
++                nbttagcompound.put((String) entry.getKey(), fromJson(jsonelement.getAsJsonObject()));
+             } else if (jsonelement.isJsonPrimitive()) {
+                 JsonPrimitive jsonprimitive = jsonelement.getAsJsonPrimitive();
+ 
+                 if (jsonprimitive.isNumber()) {
+-                    compoundtag.putInt((String) entry.getKey(), jsonprimitive.getAsInt());
++                    nbttagcompound.putInt((String) entry.getKey(), jsonprimitive.getAsInt());
+                 }
+             }
+         }
+ 
+-        return compoundtag;
++        return nbttagcompound;
+     }
+ 
+     protected String toJson() {
+@@ -196,11 +195,11 @@
+ 
+         while (objectiterator.hasNext()) {
+             it.unimi.dsi.fastutil.objects.Object2IntMap.Entry<Stat<?>> it_unimi_dsi_fastutil_objects_object2intmap_entry = (it.unimi.dsi.fastutil.objects.Object2IntMap.Entry) objectiterator.next();
+-            Stat<?> stat = (Stat) it_unimi_dsi_fastutil_objects_object2intmap_entry.getKey();
++            Stat<?> statistic = (Stat) it_unimi_dsi_fastutil_objects_object2intmap_entry.getKey();
+ 
+-            ((JsonObject) map.computeIfAbsent(stat.getType(), (stattype) -> {
++            ((JsonObject) map.computeIfAbsent(statistic.getType(), (statisticwrapper) -> {
+                 return new JsonObject();
+-            })).addProperty(getKey(stat).toString(), it_unimi_dsi_fastutil_objects_object2intmap_entry.getIntValue());
++            })).addProperty(getKey(statistic).toString(), it_unimi_dsi_fastutil_objects_object2intmap_entry.getIntValue());
+         }
+ 
+         JsonObject jsonobject = new JsonObject();
+@@ -227,16 +226,16 @@
+         this.dirty.addAll(this.stats.keySet());
+     }
+ 
+-    public void sendStats(ServerPlayer serverplayer) {
++    public void sendStats(ServerPlayer player) {
+         Object2IntMap<Stat<?>> object2intmap = new Object2IntOpenHashMap();
+         Iterator iterator = this.getDirty().iterator();
+ 
+         while (iterator.hasNext()) {
+-            Stat<?> stat = (Stat) iterator.next();
++            Stat<?> statistic = (Stat) iterator.next();
+ 
+-            object2intmap.put(stat, this.getValue(stat));
++            object2intmap.put(statistic, this.getValue(statistic));
+         }
+ 
+-        serverplayer.connection.send(new ClientboundAwardStatsPacket(object2intmap));
++        player.connection.send(new ClientboundAwardStatsPacket(object2intmap));
+     }
+ }

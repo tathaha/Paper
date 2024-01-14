@@ -1,0 +1,121 @@
+--- a/net/minecraft/world/level/block/InfestedBlock.java
++++ b/net/minecraft/world/level/block/InfestedBlock.java
+@@ -3,7 +3,7 @@
+ import com.google.common.collect.Maps;
+ import com.mojang.serialization.MapCodec;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import com.mojang.serialization.codecs.RecordCodecBuilder.Instance;
++import java.util.Iterator;
+ import java.util.Map;
+ import java.util.function.Supplier;
+ import net.minecraft.core.BlockPos;
+@@ -16,72 +16,82 @@
+ import net.minecraft.world.item.enchantment.Enchantments;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.properties.Property;
++import org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason; // CraftBukkit
+ 
+ public class InfestedBlock extends Block {
+-    public static final MapCodec<InfestedBlock> CODEC = RecordCodecBuilder.mapCodec(
+-        instance -> instance.group(BuiltInRegistries.BLOCK.byNameCodec().fieldOf("host").forGetter(InfestedBlock::getHostBlock), propertiesCodec())
+-                .apply(instance, InfestedBlock::new)
+-    );
++
++    public static final MapCodec<InfestedBlock> CODEC = RecordCodecBuilder.mapCodec((instance) -> {
++        return instance.group(BuiltInRegistries.BLOCK.byNameCodec().fieldOf("host").forGetter(InfestedBlock::getHostBlock), propertiesCodec()).apply(instance, InfestedBlock::new);
++    });
+     private final Block hostBlock;
+     private static final Map<Block, Block> BLOCK_BY_HOST_BLOCK = Maps.newIdentityHashMap();
+-    private static final Map<BlockState, BlockState> HOST_TO_INFESTED_STATES = Maps.newIdentityHashMap();
+-    private static final Map<BlockState, BlockState> INFESTED_TO_HOST_STATES = Maps.newIdentityHashMap();
++    private static final Map<IBlockData, IBlockData> HOST_TO_INFESTED_STATES = Maps.newIdentityHashMap();
++    private static final Map<IBlockData, IBlockData> INFESTED_TO_HOST_STATES = Maps.newIdentityHashMap();
+ 
+     @Override
+     public MapCodec<? extends InfestedBlock> codec() {
+-        return CODEC;
++        return InfestedBlock.CODEC;
+     }
+ 
+     public InfestedBlock(Block hostBlock, BlockBehaviour.Properties properties) {
+         super(properties.destroyTime(hostBlock.defaultDestroyTime() / 2.0F).explosionResistance(0.75F));
+         this.hostBlock = hostBlock;
+-        BLOCK_BY_HOST_BLOCK.put(hostBlock, this);
++        InfestedBlock.BLOCK_BY_HOST_BLOCK.put(hostBlock, this);
+     }
+ 
+     public Block getHostBlock() {
+         return this.hostBlock;
+     }
+ 
+-    public static boolean isCompatibleHostBlock(BlockState state) {
+-        return BLOCK_BY_HOST_BLOCK.containsKey(state.getBlock());
++    public static boolean isCompatibleHostBlock(IBlockData state) {
++        return InfestedBlock.BLOCK_BY_HOST_BLOCK.containsKey(state.getBlock());
+     }
+ 
+     private void spawnInfestation(ServerLevel level, BlockPos pos) {
+-        Silverfish silverfish = EntityType.SILVERFISH.create(level);
+-        if (silverfish != null) {
+-            silverfish.moveTo((double)pos.getX() + 0.5, (double)pos.getY(), (double)pos.getZ() + 0.5, 0.0F, 0.0F);
+-            level.addFreshEntity(silverfish);
+-            silverfish.spawnAnim();
++        Silverfish entitysilverfish = (Silverfish) EntityType.SILVERFISH.create(level);
++
++        if (entitysilverfish != null) {
++            entitysilverfish.moveTo((double) pos.getX() + 0.5D, (double) pos.getY(), (double) pos.getZ() + 0.5D, 0.0F, 0.0F);
++            level.addFreshEntity(entitysilverfish, SpawnReason.SILVERFISH_BLOCK); // CraftBukkit - add SpawnReason
++            entitysilverfish.spawnAnim();
+         }
++
+     }
+ 
+     @Override
+-    public void spawnAfterBreak(BlockState state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
++    public void spawnAfterBreak(IBlockData state, ServerLevel level, BlockPos pos, ItemStack stack, boolean dropExperience) {
+         super.spawnAfterBreak(state, level, pos, stack, dropExperience);
+         if (level.getGameRules().getBoolean(GameRules.RULE_DOBLOCKDROPS) && EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, stack) == 0) {
+             this.spawnInfestation(level, pos);
+         }
++
+     }
+ 
+-    public static BlockState infestedStateByHost(BlockState host) {
+-        return getNewStateWithProperties(HOST_TO_INFESTED_STATES, host, () -> BLOCK_BY_HOST_BLOCK.get(host.getBlock()).defaultBlockState());
++    public static IBlockData infestedStateByHost(IBlockData host) {
++        return getNewStateWithProperties(InfestedBlock.HOST_TO_INFESTED_STATES, host, () -> {
++            return ((Block) InfestedBlock.BLOCK_BY_HOST_BLOCK.get(host.getBlock())).defaultBlockState();
++        });
+     }
+ 
+-    public BlockState hostStateByInfested(BlockState infested) {
+-        return getNewStateWithProperties(INFESTED_TO_HOST_STATES, infested, () -> this.getHostBlock().defaultBlockState());
++    public IBlockData hostStateByInfested(IBlockData infested) {
++        return getNewStateWithProperties(InfestedBlock.INFESTED_TO_HOST_STATES, infested, () -> {
++            return this.getHostBlock().defaultBlockState();
++        });
+     }
+ 
+-    private static BlockState getNewStateWithProperties(Map<BlockState, BlockState> stateMap, BlockState state, Supplier<BlockState> supplier) {
+-        return stateMap.computeIfAbsent(state, blockState -> {
+-            BlockState blockState1 = supplier.get();
++    private static IBlockData getNewStateWithProperties(Map<IBlockData, IBlockData> stateMap, IBlockData state, Supplier<IBlockData> supplier) {
++        return (IBlockData) stateMap.computeIfAbsent(state, (iblockdata1) -> {
++            IBlockData iblockdata2 = (IBlockData) supplier.get();
+ 
+-            for (Property property : blockState.getProperties()) {
+-                blockState1 = blockState1.hasProperty(property) ? blockState1.setValue(property, blockState.getValue(property)) : blockState1;
++            Property iblockstate;
++
++            for (Iterator iterator = iblockdata1.getProperties().iterator(); iterator.hasNext(); iblockdata2 = iblockdata2.hasProperty(iblockstate) ? (IBlockData) iblockdata2.setValue(iblockstate, iblockdata1.getValue(iblockstate)) : iblockdata2) {
++                iblockstate = (Property) iterator.next();
+             }
+ 
+-            return blockState1;
++            return iblockdata2;
+         });
+     }
+ }

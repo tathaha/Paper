@@ -1,0 +1,239 @@
+--- a/net/minecraft/world/level/block/LeverBlock.java
++++ b/net/minecraft/world/level/block/LeverBlock.java
+@@ -4,11 +4,11 @@
+ import java.util.function.BiConsumer;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.particles.DustParticleOptions;
++import net.minecraft.core.particles.ParticleParamRedstone;
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.util.RandomSource;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.player.Player;
+@@ -18,7 +18,7 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelAccessor;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.AttachFace;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+@@ -27,6 +27,7 @@
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.shapes.CollisionContext;
+ import net.minecraft.world.phys.shapes.VoxelShape;
++import org.bukkit.event.block.BlockRedstoneEvent; // CraftBukkit
+ 
+ public class LeverBlock extends FaceAttachedHorizontalDirectionalBlock {
+ 
+@@ -45,22 +46,20 @@
+     protected static final VoxelShape DOWN_AABB_X = Block.box(4.0D, 10.0D, 5.0D, 12.0D, 16.0D, 11.0D);
+ 
+     @Override
+-    @Override
+     public MapCodec<LeverBlock> codec() {
+         return LeverBlock.CODEC;
+     }
+ 
+-    protected LeverBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.registerDefaultState((BlockState) ((BlockState) ((BlockState) ((BlockState) this.stateDefinition.any()).setValue(LeverBlock.FACING, Direction.NORTH)).setValue(LeverBlock.POWERED, false)).setValue(LeverBlock.FACE, AttachFace.WALL));
++    protected LeverBlock(BlockBehaviour.Properties properties) {
++        super(properties);
++        this.registerDefaultState((IBlockData) ((IBlockData) ((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(LeverBlock.FACING, Direction.NORTH)).setValue(LeverBlock.POWERED, false)).setValue(LeverBlock.FACE, AttachFace.WALL));
+     }
+ 
+     @Override
+-    @Override
+-    public VoxelShape getShape(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, CollisionContext collisioncontext) {
+-        switch ((AttachFace) blockstate.getValue(LeverBlock.FACE)) {
++    public VoxelShape getShape(IBlockData state, BlockGetter level, BlockPos pos, CollisionContext context) {
++        switch ((AttachFace) state.getValue(LeverBlock.FACE)) {
+             case FLOOR:
+-                switch (((Direction) blockstate.getValue(LeverBlock.FACING)).getAxis()) {
++                switch (((Direction) state.getValue(LeverBlock.FACING)).getAxis()) {
+                     case X:
+                         return LeverBlock.UP_AABB_X;
+                     case Z:
+@@ -68,7 +67,7 @@
+                         return LeverBlock.UP_AABB_Z;
+                 }
+             case WALL:
+-                switch ((Direction) blockstate.getValue(LeverBlock.FACING)) {
++                switch ((Direction) state.getValue(LeverBlock.FACING)) {
+                     case EAST:
+                         return LeverBlock.EAST_AABB;
+                     case WEST:
+@@ -81,7 +80,7 @@
+                 }
+             case CEILING:
+             default:
+-                switch (((Direction) blockstate.getValue(LeverBlock.FACING)).getAxis()) {
++                switch (((Direction) state.getValue(LeverBlock.FACING)).getAxis()) {
+                     case X:
+                         return LeverBlock.DOWN_AABB_X;
+                     case Z:
+@@ -92,101 +91,107 @@
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult use(BlockState blockstate, Level level, BlockPos blockpos, Player player, InteractionHand interactionhand, BlockHitResult blockhitresult) {
+-        BlockState blockstate1;
++    public InteractionResult use(IBlockData state, Level level, BlockPos pos, Player player, EnumHand hand, BlockHitResult hit) {
++        IBlockData iblockdata1;
+ 
+         if (level.isClientSide) {
+-            blockstate1 = (BlockState) blockstate.cycle(LeverBlock.POWERED);
+-            if ((Boolean) blockstate1.getValue(LeverBlock.POWERED)) {
+-                makeParticle(blockstate1, level, blockpos, 1.0F);
++            iblockdata1 = (IBlockData) state.cycle(LeverBlock.POWERED);
++            if ((Boolean) iblockdata1.getValue(LeverBlock.POWERED)) {
++                makeParticle(iblockdata1, level, pos, 1.0F);
+             }
+ 
+             return InteractionResult.SUCCESS;
+         } else {
+-            blockstate1 = this.pull(blockstate, level, blockpos);
+-            float f = (Boolean) blockstate1.getValue(LeverBlock.POWERED) ? 0.6F : 0.5F;
++            // CraftBukkit start - Interact Lever
++            boolean powered = state.getValue(LeverBlock.POWERED); // Old powered state
++            org.bukkit.block.Block block = level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ());
++            int old = (powered) ? 15 : 0;
++            int current = (!powered) ? 15 : 0;
+ 
+-            level.playSound((Player) null, blockpos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.3F, f);
+-            level.gameEvent((Entity) player, (Boolean) blockstate1.getValue(LeverBlock.POWERED) ? GameEvent.BLOCK_ACTIVATE : GameEvent.BLOCK_DEACTIVATE, blockpos);
++            BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(block, old, current);
++            level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++            if ((eventRedstone.getNewCurrent() > 0) != (!powered)) {
++                return InteractionResult.SUCCESS;
++            }
++            // CraftBukkit end
++
++            iblockdata1 = this.pull(state, level, pos);
++            float f = (Boolean) iblockdata1.getValue(LeverBlock.POWERED) ? 0.6F : 0.5F;
++
++            level.playSound((Player) null, pos, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 0.3F, f);
++            level.gameEvent((Entity) player, (Boolean) iblockdata1.getValue(LeverBlock.POWERED) ? GameEvent.BLOCK_ACTIVATE : GameEvent.BLOCK_DEACTIVATE, pos);
+             return InteractionResult.CONSUME;
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public void onExplosionHit(BlockState blockstate, Level level, BlockPos blockpos, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
+-        if (explosion.getBlockInteraction() == Explosion.BlockInteraction.TRIGGER_BLOCK && !level.isClientSide()) {
+-            this.pull(blockstate, level, blockpos);
++    public void onExplosionHit(IBlockData iblockdata, Level world, BlockPos blockposition, Explosion explosion, BiConsumer<ItemStack, BlockPos> biconsumer) {
++        if (explosion.getBlockInteraction() == Explosion.Effect.TRIGGER_BLOCK && !world.isClientSide()) {
++            this.pull(iblockdata, world, blockposition);
+         }
+ 
+-        super.onExplosionHit(blockstate, level, blockpos, explosion, biconsumer);
++        super.onExplosionHit(iblockdata, world, blockposition, explosion, biconsumer);
+     }
+ 
+-    public BlockState pull(BlockState blockstate, Level level, BlockPos blockpos) {
+-        blockstate = (BlockState) blockstate.cycle(LeverBlock.POWERED);
+-        level.setBlock(blockpos, blockstate, 3);
+-        this.updateNeighbours(blockstate, level, blockpos);
+-        return blockstate;
++    public IBlockData pull(IBlockData state, Level level, BlockPos pos) {
++        state = (IBlockData) state.cycle(LeverBlock.POWERED);
++        level.setBlock(pos, state, 3);
++        this.updateNeighbours(state, level, pos);
++        return state;
+     }
+ 
+-    private static void makeParticle(BlockState blockstate, LevelAccessor levelaccessor, BlockPos blockpos, float f) {
+-        Direction direction = ((Direction) blockstate.getValue(LeverBlock.FACING)).getOpposite();
+-        Direction direction1 = getConnectedDirection(blockstate).getOpposite();
+-        double d0 = (double) blockpos.getX() + 0.5D + 0.1D * (double) direction.getStepX() + 0.2D * (double) direction1.getStepX();
+-        double d1 = (double) blockpos.getY() + 0.5D + 0.1D * (double) direction.getStepY() + 0.2D * (double) direction1.getStepY();
+-        double d2 = (double) blockpos.getZ() + 0.5D + 0.1D * (double) direction.getStepZ() + 0.2D * (double) direction1.getStepZ();
++    private static void makeParticle(IBlockData state, LevelAccessor level, BlockPos pos, float alpha) {
++        Direction enumdirection = ((Direction) state.getValue(LeverBlock.FACING)).getOpposite();
++        Direction enumdirection1 = getConnectedDirection(state).getOpposite();
++        double d0 = (double) pos.getX() + 0.5D + 0.1D * (double) enumdirection.getStepX() + 0.2D * (double) enumdirection1.getStepX();
++        double d1 = (double) pos.getY() + 0.5D + 0.1D * (double) enumdirection.getStepY() + 0.2D * (double) enumdirection1.getStepY();
++        double d2 = (double) pos.getZ() + 0.5D + 0.1D * (double) enumdirection.getStepZ() + 0.2D * (double) enumdirection1.getStepZ();
+ 
+-        levelaccessor.addParticle(new DustParticleOptions(DustParticleOptions.REDSTONE_PARTICLE_COLOR, f), d0, d1, d2, 0.0D, 0.0D, 0.0D);
++        level.addParticle(new ParticleParamRedstone(ParticleParamRedstone.REDSTONE_PARTICLE_COLOR, alpha), d0, d1, d2, 0.0D, 0.0D, 0.0D);
+     }
+ 
+     @Override
+-    @Override
+-    public void animateTick(BlockState blockstate, Level level, BlockPos blockpos, RandomSource randomsource) {
+-        if ((Boolean) blockstate.getValue(LeverBlock.POWERED) && randomsource.nextFloat() < 0.25F) {
+-            makeParticle(blockstate, level, blockpos, 0.5F);
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(LeverBlock.POWERED) && random.nextFloat() < 0.25F) {
++            makeParticle(state, level, pos, 0.5F);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!flag && !blockstate.is(blockstate1.getBlock())) {
+-            if ((Boolean) blockstate.getValue(LeverBlock.POWERED)) {
+-                this.updateNeighbours(blockstate, level, blockpos);
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean isMoving) {
++        if (!isMoving && !state.is(newState.getBlock())) {
++            if ((Boolean) state.getValue(LeverBlock.POWERED)) {
++                this.updateNeighbours(state, level, pos);
+             }
+ 
+-            super.onRemove(blockstate, level, blockpos, blockstate1, flag);
++            super.onRemove(state, level, pos, newState, isMoving);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public int getSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return (Boolean) blockstate.getValue(LeverBlock.POWERED) ? 15 : 0;
++    public int getSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return (Boolean) blockState.getValue(LeverBlock.POWERED) ? 15 : 0;
+     }
+ 
+     @Override
+-    @Override
+-    public int getDirectSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return (Boolean) blockstate.getValue(LeverBlock.POWERED) && getConnectedDirection(blockstate) == direction ? 15 : 0;
++    public int getDirectSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return (Boolean) blockState.getValue(LeverBlock.POWERED) && getConnectedDirection(blockState) == side ? 15 : 0;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isSignalSource(BlockState blockstate) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ 
+-    private void updateNeighbours(BlockState blockstate, Level level, BlockPos blockpos) {
+-        level.updateNeighborsAt(blockpos, this);
+-        level.updateNeighborsAt(blockpos.relative(getConnectedDirection(blockstate).getOpposite()), this);
++    private void updateNeighbours(IBlockData state, Level level, BlockPos pos) {
++        level.updateNeighborsAt(pos, this);
++        level.updateNeighborsAt(pos.relative(getConnectedDirection(state).getOpposite()), this);
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(LeverBlock.FACE, LeverBlock.FACING, LeverBlock.POWERED);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(LeverBlock.FACE, LeverBlock.FACING, LeverBlock.POWERED);
+     }
+ }

@@ -1,0 +1,204 @@
+--- a/net/minecraft/world/item/crafting/ShapelessRecipe.java
++++ b/net/minecraft/world/item/crafting/ShapelessRecipe.java
+@@ -3,31 +3,54 @@
+ import com.mojang.serialization.Codec;
+ import com.mojang.serialization.DataResult;
+ import com.mojang.serialization.codecs.RecordCodecBuilder;
+-import com.mojang.serialization.codecs.RecordCodecBuilder.Instance;
+-import java.util.List;
++import it.unimi.dsi.fastutil.ints.IntList;
++import java.util.Iterator;
+ import net.minecraft.core.NonNullList;
+ import net.minecraft.core.RegistryAccess;
+ import net.minecraft.network.FriendlyByteBuf;
+ import net.minecraft.util.ExtraCodecs;
+ import net.minecraft.world.entity.player.StackedContents;
+-import net.minecraft.world.inventory.CraftingContainer;
++import net.minecraft.world.inventory.InventoryCrafting;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.level.Level;
++// CraftBukkit start
++import org.bukkit.NamespacedKey;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.craftbukkit.inventory.CraftRecipe;
++import org.bukkit.craftbukkit.inventory.CraftShapelessRecipe;
++// CraftBukkit end
+ 
+-public class ShapelessRecipe implements CraftingRecipe {
++public class ShapelessRecipe implements RecipeCrafting {
++
+     final String group;
+     final CraftingBookCategory category;
+     final ItemStack result;
+     final NonNullList<Ingredient> ingredients;
+ 
+-    public ShapelessRecipe(String string, CraftingBookCategory craftingBookCategory, ItemStack itemStack, NonNullList<Ingredient> list) {
+-        this.group = string;
+-        this.category = craftingBookCategory;
+-        this.result = itemStack;
+-        this.ingredients = list;
++    public ShapelessRecipe(String s, CraftingBookCategory craftingbookcategory, ItemStack itemstack, NonNullList<Ingredient> nonnulllist) {
++        this.group = s;
++        this.category = craftingbookcategory;
++        this.result = itemstack;
++        this.ingredients = nonnulllist;
+     }
+ 
++    // CraftBukkit start
++    @SuppressWarnings("unchecked")
+     @Override
++    public org.bukkit.inventory.ShapelessRecipe toBukkitRecipe(NamespacedKey id) {
++        CraftItemStack result = CraftItemStack.asCraftMirror(this.result);
++        CraftShapelessRecipe recipe = new CraftShapelessRecipe(id, result, this);
++        recipe.setGroup(this.group);
++        recipe.setCategory(CraftRecipe.getCategory(this.category()));
++
++        for (Ingredient list : this.ingredients) {
++            recipe.addIngredient(CraftRecipe.toBukkit(list));
++        }
++        return recipe;
++    }
++    // CraftBukkit end
++
++    @Override
+     public RecipeSerializer<?> getSerializer() {
+         return RecipeSerializer.SHAPELESS_RECIPE;
+     }
+@@ -52,24 +75,23 @@
+         return this.ingredients;
+     }
+ 
+-    @Override
+-    public boolean matches(CraftingContainer inv, Level level) {
+-        StackedContents stackedContents = new StackedContents();
++    public boolean matches(InventoryCrafting inv, Level level) {
++        StackedContents autorecipestackmanager = new StackedContents();
+         int i = 0;
+ 
+-        for (int i1 = 0; i1 < inv.getContainerSize(); i1++) {
+-            ItemStack item = inv.getItem(i1);
+-            if (!item.isEmpty()) {
+-                i++;
+-                stackedContents.accountStack(item, 1);
++        for (int j = 0; j < inv.getContainerSize(); ++j) {
++            ItemStack itemstack = inv.getItem(j);
++
++            if (!itemstack.isEmpty()) {
++                ++i;
++                autorecipestackmanager.accountStack(itemstack, 1);
+             }
+         }
+ 
+-        return i == this.ingredients.size() && stackedContents.canCraft(this, null);
++        return i == this.ingredients.size() && autorecipestackmanager.canCraft(this, (IntList) null);
+     }
+ 
+-    @Override
+-    public ItemStack assemble(CraftingContainer container, RegistryAccess registryAccess) {
++    public ItemStack assemble(InventoryCrafting container, RegistryAccess registryAccess) {
+         return this.result.copy();
+     }
+ 
+@@ -79,60 +101,64 @@
+     }
+ 
+     public static class Serializer implements RecipeSerializer<ShapelessRecipe> {
+-        private static final Codec<ShapelessRecipe> CODEC = RecordCodecBuilder.create(
+-            instance -> instance.group(
+-                        ExtraCodecs.strictOptionalField(Codec.STRING, "group", "").forGetter(shapelessRecipe -> shapelessRecipe.group),
+-                        CraftingBookCategory.CODEC.fieldOf("category").orElse(CraftingBookCategory.MISC).forGetter(shapelessRecipe -> shapelessRecipe.category),
+-                        ItemStack.ITEM_WITH_COUNT_CODEC.fieldOf("result").forGetter(shapelessRecipe -> shapelessRecipe.result),
+-                        Ingredient.CODEC_NONEMPTY
+-                            .listOf()
+-                            .fieldOf("ingredients")
+-                            .flatXmap(
+-                                list -> {
+-                                    Ingredient[] ingredients = list.stream().filter(ingredient -> !ingredient.isEmpty()).toArray(Ingredient[]::new);
+-                                    if (ingredients.length == 0) {
+-                                        return DataResult.error(() -> "No ingredients for shapeless recipe");
+-                                    } else {
+-                                        return ingredients.length > 9
+-                                            ? DataResult.error(() -> "Too many ingredients for shapeless recipe")
+-                                            : DataResult.success(NonNullList.of(Ingredient.EMPTY, ingredients));
+-                                    }
+-                                },
+-                                DataResult::success
+-                            )
+-                            .forGetter(shapelessRecipe -> shapelessRecipe.ingredients)
+-                    )
+-                    .apply(instance, ShapelessRecipe::new)
+-        );
+ 
++        private static final Codec<ShapelessRecipe> CODEC = RecordCodecBuilder.create((instance) -> {
++            return instance.group(ExtraCodecs.strictOptionalField(Codec.STRING, "group", "").forGetter((shapelessrecipes) -> {
++                return shapelessrecipes.group;
++            }), CraftingBookCategory.CODEC.fieldOf("category").orElse(CraftingBookCategory.MISC).forGetter((shapelessrecipes) -> {
++                return shapelessrecipes.category;
++            }), ItemStack.ITEM_WITH_COUNT_CODEC.fieldOf("result").forGetter((shapelessrecipes) -> {
++                return shapelessrecipes.result;
++            }), Ingredient.CODEC_NONEMPTY.listOf().fieldOf("ingredients").flatXmap((list) -> {
++                Ingredient[] arecipeitemstack = (Ingredient[]) list.stream().filter((recipeitemstack) -> {
++                    return !recipeitemstack.isEmpty();
++                }).toArray((i) -> {
++                    return new Ingredient[i];
++                });
++
++                return arecipeitemstack.length == 0 ? DataResult.error(() -> {
++                    return "No ingredients for shapeless recipe";
++                }) : (arecipeitemstack.length > 9 ? DataResult.error(() -> {
++                    return "Too many ingredients for shapeless recipe";
++                }) : DataResult.success(NonNullList.of(Ingredient.EMPTY, arecipeitemstack)));
++            }, DataResult::success).forGetter((shapelessrecipes) -> {
++                return shapelessrecipes.ingredients;
++            })).apply(instance, ShapelessRecipe::new);
++        });
++
++        public Serializer() {}
++
+         @Override
+         public Codec<ShapelessRecipe> codec() {
+-            return CODEC;
++            return ShapelessRecipe.Serializer.CODEC;
+         }
+ 
+         @Override
+-        public ShapelessRecipe fromNetwork(FriendlyByteBuf friendlyByteBuf) {
+-            String utf = friendlyByteBuf.readUtf();
+-            CraftingBookCategory craftingBookCategory = friendlyByteBuf.readEnum(CraftingBookCategory.class);
+-            int varInt = friendlyByteBuf.readVarInt();
+-            NonNullList<Ingredient> list = NonNullList.withSize(varInt, Ingredient.EMPTY);
++        public ShapelessRecipe fromNetwork(FriendlyByteBuf packetdataserializer) {
++            String s = packetdataserializer.readUtf();
++            CraftingBookCategory craftingbookcategory = (CraftingBookCategory) packetdataserializer.readEnum(CraftingBookCategory.class);
++            int i = packetdataserializer.readVarInt();
++            NonNullList<Ingredient> nonnulllist = NonNullList.withSize(i, Ingredient.EMPTY);
+ 
+-            for (int i = 0; i < list.size(); i++) {
+-                list.set(i, Ingredient.fromNetwork(friendlyByteBuf));
++            for (int j = 0; j < nonnulllist.size(); ++j) {
++                nonnulllist.set(j, Ingredient.fromNetwork(packetdataserializer));
+             }
+ 
+-            ItemStack item = friendlyByteBuf.readItem();
+-            return new ShapelessRecipe(utf, craftingBookCategory, item, list);
++            ItemStack itemstack = packetdataserializer.readItem();
++
++            return new ShapelessRecipe(s, craftingbookcategory, itemstack, nonnulllist);
+         }
+ 
+-        @Override
+         public void toNetwork(FriendlyByteBuf buffer, ShapelessRecipe recipe) {
+             buffer.writeUtf(recipe.group);
+             buffer.writeEnum(recipe.category);
+             buffer.writeVarInt(recipe.ingredients.size());
++            Iterator iterator = recipe.ingredients.iterator();
+ 
+-            for (Ingredient ingredient : recipe.ingredients) {
+-                ingredient.toNetwork(buffer);
++            while (iterator.hasNext()) {
++                Ingredient recipeitemstack = (Ingredient) iterator.next();
++
++                recipeitemstack.toNetwork(buffer);
+             }
+ 
+             buffer.writeItem(recipe.result);

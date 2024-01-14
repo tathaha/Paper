@@ -1,0 +1,66 @@
+--- a/net/minecraft/world/level/block/LightningRodBlock.java
++++ b/net/minecraft/world/level/block/LightningRodBlock.java
+@@ -30,6 +32,10 @@
+ import net.minecraft.world.level.material.Fluids;
+ import net.minecraft.world.phys.BlockHitResult;
+ import net.minecraft.world.phys.Vec3;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.block.BlockRedstoneEvent;
++// CraftBukkit end
+ 
+ public class LightningRodBlock extends RodBlock implements SimpleWaterloggedBlock {
+     public static final MapCodec<LightningRodBlock> CODEC = simpleCodec(LightningRodBlock::new);
+@@ -82,8 +88,20 @@
+         return state.getValue(POWERED) && state.getValue(FACING) == direction ? 15 : 0;
+     }
+ 
+-    public void onLightningStrike(BlockState state, Level level, BlockPos pos) {
+-        level.setBlock(pos, state.setValue(POWERED, Boolean.valueOf(true)), 3);
++    public void onLightningStrike(IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        boolean powered = state.getValue(LightningRodBlock.POWERED);
++        int old = (powered) ? 15 : 0;
++        int current = (!powered) ? 15 : 0;
++
++        BlockRedstoneEvent eventRedstone = new BlockRedstoneEvent(CraftBlock.at(level, pos), old, current);
++        level.getCraftServer().getPluginManager().callEvent(eventRedstone);
++
++        if (eventRedstone.getNewCurrent() <= 0) {
++            return;
++        }
++        // CraftBukkit end
++        level.setBlock(pos, (IBlockData) state.setValue(LightningRodBlock.POWERED, true), 3);
+         this.updateNeighbours(state, level, pos);
+         level.scheduleTick(pos, this, 8);
+         level.levelEvent(3002, pos, state.getValue(FACING).getAxis().ordinal());
+@@ -129,16 +146,19 @@
+     }
+ 
+     @Override
+-    public void onProjectileHit(Level level, BlockState state, BlockHitResult hit, Projectile projectile) {
+-        if (level.isThundering() && projectile instanceof ThrownTrident && ((ThrownTrident)projectile).isChanneling()) {
+-            BlockPos blockPos = hit.getBlockPos();
+-            if (level.canSeeSky(blockPos)) {
+-                LightningBolt lightningBolt = EntityType.LIGHTNING_BOLT.create(level);
+-                if (lightningBolt != null) {
+-                    lightningBolt.moveTo(Vec3.atBottomCenterOf(blockPos.above()));
+-                    Entity owner = projectile.getOwner();
+-                    lightningBolt.setCause(owner instanceof ServerPlayer ? (ServerPlayer)owner : null);
+-                    level.addFreshEntity(lightningBolt);
++    public void onProjectileHit(Level level, IBlockData state, BlockHitResult hit, Projectile projectile) {
++        if (level.isThundering() && projectile instanceof ThrownTrident && ((ThrownTrident) projectile).isChanneling()) {
++            BlockPos blockposition = hit.getBlockPos();
++
++            if (level.canSeeSky(blockposition)) {
++                LightningBolt entitylightning = (LightningBolt) EntityType.LIGHTNING_BOLT.create(level);
++
++                if (entitylightning != null) {
++                    entitylightning.moveTo(Vec3.atBottomCenterOf(blockposition.above()));
++                    Entity entity = projectile.getOwner();
++
++                    entitylightning.setCause(entity instanceof ServerPlayer ? (ServerPlayer) entity : null);
++                    ((ServerLevel) level).strikeLightning(entitylightning, org.bukkit.event.weather.LightningStrikeEvent.Cause.TRIDENT); // CraftBukkit
+                 }
+ 
+                 level.playSound(null, blockPos, SoundEvents.TRIDENT_THUNDER, SoundSource.WEATHER, 5.0F, 1.0F);

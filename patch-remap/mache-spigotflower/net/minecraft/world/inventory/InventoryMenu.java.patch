@@ -1,0 +1,324 @@
+--- a/net/minecraft/world/inventory/InventoryMenu.java
++++ b/net/minecraft/world/inventory/InventoryMenu.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.world.inventory;
+ 
+ import com.mojang.datafixers.util.Pair;
++import net.minecraft.network.chat.Component;
+ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.world.Container;
+ import net.minecraft.world.entity.EquipmentSlot;
+@@ -12,8 +13,11 @@
+ import net.minecraft.world.item.crafting.Recipe;
+ import net.minecraft.world.item.crafting.RecipeHolder;
+ import net.minecraft.world.item.enchantment.EnchantmentHelper;
++import org.bukkit.craftbukkit.inventory.CraftInventoryCrafting;
++import org.bukkit.craftbukkit.inventory.CraftInventoryView;
++// CraftBukkit end
+ 
+-public class InventoryMenu extends RecipeBookMenu<CraftingContainer> {
++public class InventoryMenu extends RecipeBookMenu<InventoryCrafting> {
+ 
+     public static final int CONTAINER_ID = 0;
+     public static final int RESULT_SLOT = 0;
+@@ -34,16 +38,29 @@
+     public static final ResourceLocation EMPTY_ARMOR_SLOT_SHIELD = new ResourceLocation("item/empty_armor_slot_shield");
+     static final ResourceLocation[] TEXTURE_EMPTY_SLOTS = new ResourceLocation[]{InventoryMenu.EMPTY_ARMOR_SLOT_BOOTS, InventoryMenu.EMPTY_ARMOR_SLOT_LEGGINGS, InventoryMenu.EMPTY_ARMOR_SLOT_CHESTPLATE, InventoryMenu.EMPTY_ARMOR_SLOT_HELMET};
+     private static final EquipmentSlot[] SLOT_IDS = new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+-    private final CraftingContainer craftSlots = new TransientCraftingContainer(this, 2, 2);
+-    private final ResultContainer resultSlots = new ResultContainer();
++    // CraftBukkit start
++    private final TransientCraftingContainer craftSlots;
++    private final ResultContainer resultSlots;
++    // CraftBukkit end
+     public final boolean active;
+     private final Player owner;
++    // CraftBukkit start
++    private CraftInventoryView bukkitEntity = null;
++    private Inventory player;
++    // CraftBukkit end
+ 
+-    public InventoryMenu(Inventory inventory, boolean flag, final Player player) {
++    public InventoryMenu(Inventory playerInventory, boolean active, final Player owner) {
+         super((MenuType) null, 0);
+-        this.active = flag;
+-        this.owner = player;
+-        this.addSlot(new ResultSlot(inventory.player, this.craftSlots, this.resultSlots, 0, 154, 28));
++        this.active = active;
++        this.owner = owner;
++        // CraftBukkit start
++        this.resultSlots = new ResultContainer(); // CraftBukkit - moved to before InventoryCrafting construction
++        this.craftSlots = new TransientCraftingContainer(this, 2, 2, playerInventory.player); // CraftBukkit - pass player
++        this.craftSlots.resultInventory = this.resultSlots; // CraftBukkit - let InventoryCrafting know about its result slot
++        this.player = playerInventory; // CraftBukkit - save player
++        setTitle(Component.translatable("container.crafting")); // SPIGOT-4722: Allocate title for player inventory
++        // CraftBukkit end
++        this.addSlot(new ResultSlot(playerInventory.player, this.craftSlots, this.resultSlots, 0, 154, 28));
+ 
+         int i;
+         int j;
+@@ -55,105 +72,93 @@
+         }
+ 
+         for (i = 0; i < 4; ++i) {
+-            final EquipmentSlot equipmentslot = InventoryMenu.SLOT_IDS[i];
++            final EquipmentSlot enumitemslot = InventoryMenu.SLOT_IDS[i];
+ 
+-            this.addSlot(new Slot(inventory, 39 - i, 8, 8 + i * 18) {
++            this.addSlot(new Slot(playerInventory, 39 - i, 8, 8 + i * 18) {
+                 @Override
+-                @Override
+                 public void setByPlayer(ItemStack itemstack, ItemStack itemstack1) {
+-                    InventoryMenu.onEquipItem(player, equipmentslot, itemstack, itemstack1);
++                    InventoryMenu.onEquipItem(owner, enumitemslot, itemstack, itemstack1);
+                     super.setByPlayer(itemstack, itemstack1);
+                 }
+ 
+                 @Override
+-                @Override
+                 public int getMaxStackSize() {
+                     return 1;
+                 }
+ 
+                 @Override
+-                @Override
+-                public boolean mayPlace(ItemStack itemstack) {
+-                    return equipmentslot == Mob.getEquipmentSlotForItem(itemstack);
++                public boolean mayPlace(ItemStack stack) {
++                    return enumitemslot == Mob.getEquipmentSlotForItem(stack);
+                 }
+ 
+                 @Override
+-                @Override
+-                public boolean mayPickup(Player player1) {
++                public boolean mayPickup(Player player) {
+                     ItemStack itemstack = this.getItem();
+ 
+-                    return !itemstack.isEmpty() && !player1.isCreative() && EnchantmentHelper.hasBindingCurse(itemstack) ? false : super.mayPickup(player1);
++                    return !itemstack.isEmpty() && !player.isCreative() && EnchantmentHelper.hasBindingCurse(itemstack) ? false : super.mayPickup(player);
+                 }
+ 
+                 @Override
+-                @Override
+                 public Pair<ResourceLocation, ResourceLocation> getNoItemIcon() {
+-                    return Pair.of(InventoryMenu.BLOCK_ATLAS, InventoryMenu.TEXTURE_EMPTY_SLOTS[equipmentslot.getIndex()]);
++                    return Pair.of(InventoryMenu.BLOCK_ATLAS, InventoryMenu.TEXTURE_EMPTY_SLOTS[enumitemslot.getIndex()]);
+                 }
+             });
+         }
+ 
+         for (i = 0; i < 3; ++i) {
+             for (j = 0; j < 9; ++j) {
+-                this.addSlot(new Slot(inventory, j + (i + 1) * 9, 8 + j * 18, 84 + i * 18));
++                this.addSlot(new Slot(playerInventory, j + (i + 1) * 9, 8 + j * 18, 84 + i * 18));
+             }
+         }
+ 
+         for (i = 0; i < 9; ++i) {
+-            this.addSlot(new Slot(inventory, i, 8 + i * 18, 142));
++            this.addSlot(new Slot(playerInventory, i, 8 + i * 18, 142));
+         }
+ 
+-        this.addSlot(new Slot(inventory, 40, 77, 62) {
++        this.addSlot(new Slot(playerInventory, 40, 77, 62) {
+             @Override
+-            @Override
+             public void setByPlayer(ItemStack itemstack, ItemStack itemstack1) {
+-                InventoryMenu.onEquipItem(player, EquipmentSlot.OFFHAND, itemstack, itemstack1);
++                InventoryMenu.onEquipItem(owner, EquipmentSlot.OFFHAND, itemstack, itemstack1);
+                 super.setByPlayer(itemstack, itemstack1);
+             }
+ 
+             @Override
+-            @Override
+             public Pair<ResourceLocation, ResourceLocation> getNoItemIcon() {
+                 return Pair.of(InventoryMenu.BLOCK_ATLAS, InventoryMenu.EMPTY_ARMOR_SLOT_SHIELD);
+             }
+         });
+     }
+ 
+-    static void onEquipItem(Player player, EquipmentSlot equipmentslot, ItemStack itemstack, ItemStack itemstack1) {
+-        player.onEquipItem(equipmentslot, itemstack1, itemstack);
++    static void onEquipItem(Player player, EquipmentSlot slot, ItemStack newItem, ItemStack oldItem) {
++        player.onEquipItem(slot, oldItem, newItem);
+     }
+ 
+-    public static boolean isHotbarSlot(int i) {
+-        return i >= 36 && i < 45 || i == 45;
++    public static boolean isHotbarSlot(int index) {
++        return index >= 36 && index < 45 || index == 45;
+     }
+ 
+     @Override
+-    @Override
+-    public void fillCraftSlotsStackedContents(StackedContents stackedcontents) {
+-        this.craftSlots.fillStackedContents(stackedcontents);
++    public void fillCraftSlotsStackedContents(StackedContents itemHelper) {
++        this.craftSlots.fillStackedContents(itemHelper);
+     }
+ 
+     @Override
+-    @Override
+     public void clearCraftingContent() {
+         this.resultSlots.clearContent();
+         this.craftSlots.clearContent();
+     }
+ 
+     @Override
+-    @Override
+-    public boolean recipeMatches(RecipeHolder<? extends Recipe<CraftingContainer>> recipeholder) {
++    public boolean recipeMatches(RecipeHolder<? extends Recipe<InventoryCrafting>> recipeholder) {
+         return recipeholder.value().matches(this.craftSlots, this.owner.level());
+     }
+ 
+     @Override
+-    @Override
+-    public void slotsChanged(Container container) {
++    public void slotsChanged(Container inventory) {
+         CraftingMenu.slotChangedCraftingGrid(this, this.owner.level(), this.owner, this.craftSlots, this.resultSlots);
+     }
+ 
+     @Override
+-    @Override
+     public void removed(Player player) {
+         super.removed(player);
+         this.resultSlots.clearContent();
+@@ -163,52 +168,50 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean stillValid(Player player) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public ItemStack quickMoveStack(Player player, int i) {
++    public ItemStack quickMoveStack(Player player, int index) {
+         ItemStack itemstack = ItemStack.EMPTY;
+-        Slot slot = (Slot) this.slots.get(i);
++        Slot slot = (Slot) this.slots.get(index);
+ 
+         if (slot.hasItem()) {
+             ItemStack itemstack1 = slot.getItem();
+ 
+             itemstack = itemstack1.copy();
+-            EquipmentSlot equipmentslot = Mob.getEquipmentSlotForItem(itemstack);
++            EquipmentSlot enumitemslot = Mob.getEquipmentSlotForItem(itemstack);
+ 
+-            if (i == 0) {
++            if (index == 0) {
+                 if (!this.moveItemStackTo(itemstack1, 9, 45, true)) {
+                     return ItemStack.EMPTY;
+                 }
+ 
+                 slot.onQuickCraft(itemstack1, itemstack);
+-            } else if (i >= 1 && i < 5) {
++            } else if (index >= 1 && index < 5) {
+                 if (!this.moveItemStackTo(itemstack1, 9, 45, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (i >= 5 && i < 9) {
++            } else if (index >= 5 && index < 9) {
+                 if (!this.moveItemStackTo(itemstack1, 9, 45, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (equipmentslot.getType() == EquipmentSlot.Type.ARMOR && !((Slot) this.slots.get(8 - equipmentslot.getIndex())).hasItem()) {
+-                int j = 8 - equipmentslot.getIndex();
++            } else if (enumitemslot.getType() == EquipmentSlot.Function.ARMOR && !((Slot) this.slots.get(8 - enumitemslot.getIndex())).hasItem()) {
++                int j = 8 - enumitemslot.getIndex();
+ 
+                 if (!this.moveItemStackTo(itemstack1, j, j + 1, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (equipmentslot == EquipmentSlot.OFFHAND && !((Slot) this.slots.get(45)).hasItem()) {
++            } else if (enumitemslot == EquipmentSlot.OFFHAND && !((Slot) this.slots.get(45)).hasItem()) {
+                 if (!this.moveItemStackTo(itemstack1, 45, 46, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (i >= 9 && i < 36) {
++            } else if (index >= 9 && index < 36) {
+                 if (!this.moveItemStackTo(itemstack1, 36, 45, false)) {
+                     return ItemStack.EMPTY;
+                 }
+-            } else if (i >= 36 && i < 45) {
++            } else if (index >= 36 && index < 45) {
+                 if (!this.moveItemStackTo(itemstack1, 9, 36, false)) {
+                     return ItemStack.EMPTY;
+                 }
+@@ -227,7 +230,7 @@
+             }
+ 
+             slot.onTake(player, itemstack1);
+-            if (i == 0) {
++            if (index == 0) {
+                 player.drop(itemstack1, false);
+             }
+         }
+@@ -236,48 +239,54 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canTakeItemForPickAll(ItemStack itemstack, Slot slot) {
+-        return slot.container != this.resultSlots && super.canTakeItemForPickAll(itemstack, slot);
++    public boolean canTakeItemForPickAll(ItemStack stack, Slot slot) {
++        return slot.container != this.resultSlots && super.canTakeItemForPickAll(stack, slot);
+     }
+ 
+     @Override
+-    @Override
+     public int getResultSlotIndex() {
+         return 0;
+     }
+ 
+     @Override
+-    @Override
+     public int getGridWidth() {
+         return this.craftSlots.getWidth();
+     }
+ 
+     @Override
+-    @Override
+     public int getGridHeight() {
+         return this.craftSlots.getHeight();
+     }
+ 
+     @Override
+-    @Override
+     public int getSize() {
+         return 5;
+     }
+ 
+-    public CraftingContainer getCraftSlots() {
++    public InventoryCrafting getCraftSlots() {
+         return this.craftSlots;
+     }
+ 
+     @Override
+-    @Override
+     public RecipeBookType getRecipeBookType() {
+         return RecipeBookType.CRAFTING;
+     }
+ 
+     @Override
++    public boolean shouldMoveToInventory(int slotIndex) {
++        return slotIndex != this.getResultSlotIndex();
++    }
++
++    // CraftBukkit start
+     @Override
+-    public boolean shouldMoveToInventory(int i) {
+-        return i != this.getResultSlotIndex();
++    public CraftInventoryView getBukkitView() {
++        if (bukkitEntity != null) {
++            return bukkitEntity;
++        }
++
++        CraftInventoryCrafting inventory = new CraftInventoryCrafting(this.craftSlots, this.resultSlots);
++        bukkitEntity = new CraftInventoryView(this.player.player.getBukkitEntity(), inventory, this);
++        return bukkitEntity;
+     }
++    // CraftBukkit end
+ }

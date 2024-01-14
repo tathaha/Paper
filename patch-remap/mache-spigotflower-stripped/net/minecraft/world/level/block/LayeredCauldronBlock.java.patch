@@ -1,0 +1,100 @@
+--- a/net/minecraft/world/level/block/LayeredCauldronBlock.java
++++ b/net/minecraft/world/level/block/LayeredCauldronBlock.java
+@@ -15,6 +15,11 @@
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.level.material.Fluid;
+ import net.minecraft.world.level.material.Fluids;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlockState;
++import org.bukkit.craftbukkit.block.CraftBlockStates;
++import org.bukkit.event.block.CauldronLevelChangeEvent;
++// CraftBukkit end
+ 
+ public class LayeredCauldronBlock extends AbstractCauldronBlock {
+ 
+@@ -63,13 +64,16 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void entityInside(BlockState blockstate, Level level, BlockPos blockpos, Entity entity) {
+-        if (!level.isClientSide && entity.isOnFire() && this.isEntityInsideContent(blockstate, blockpos, entity)) {
+-            entity.clearFire();
+-            if (entity.mayInteract(level, blockpos)) {
+-                this.handleEntityOnFireInside(blockstate, level, blockpos);
++    public void entityInside(IBlockData state, Level level, BlockPos pos, Entity entity) {
++        if (!level.isClientSide && entity.isOnFire() && this.isEntityInsideContent(state, pos, entity)) {
++            // CraftBukkit start
++            if (entity.mayInteract(level, pos)) {
++                if (!lowerFillLevel(state, level, pos, entity, CauldronLevelChangeEvent.ChangeReason.EXTINGUISH)) {
++                    return;
++                }
+             }
++            entity.clearFire();
++            // CraftBukkit end
+         }
+ 
+     }
+@@ -83,22 +87,41 @@
+ 
+     }
+ 
+-    public static void lowerFillLevel(BlockState blockstate, Level level, BlockPos blockpos) {
+-        int i = (Integer) blockstate.getValue(LayeredCauldronBlock.LEVEL) - 1;
+-        BlockState blockstate1 = i == 0 ? Blocks.CAULDRON.defaultBlockState() : (BlockState) blockstate.setValue(LayeredCauldronBlock.LEVEL, i);
++    public static void lowerFillLevel(IBlockData state, Level level, BlockPos pos) {
++        // CraftBukkit start
++        lowerFillLevel(state, level, pos, null, CauldronLevelChangeEvent.ChangeReason.UNKNOWN);
++    }
+ 
+         level.setBlockAndUpdate(blockpos, blockstate1);
+         level.gameEvent(GameEvent.BLOCK_CHANGE, blockpos, GameEvent.Context.of(blockstate1));
+     }
+ 
++    // CraftBukkit start
++    public static boolean changeLevel(IBlockData iblockdata, Level world, BlockPos blockposition, IBlockData newBlock, Entity entity, CauldronLevelChangeEvent.ChangeReason reason) {
++        CraftBlockState newState = CraftBlockStates.getBlockState(world, blockposition);
++        newState.setData(newBlock);
++
++        CauldronLevelChangeEvent event = new CauldronLevelChangeEvent(
++                world.getWorld().getBlockAt(blockposition.getX(), blockposition.getY(), blockposition.getZ()),
++                (entity == null) ? null : entity.getBukkitEntity(), reason, newState
++        );
++        world.getCraftServer().getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            return false;
++        }
++        newState.update(true);
++        world.gameEvent(GameEvent.BLOCK_CHANGE, blockposition, GameEvent.Context.of(newBlock));
++        return true;
++    }
++    // CraftBukkit end
++
+     @Override
+     @Override
+     public void handlePrecipitation(BlockState blockstate, Level level, BlockPos blockpos, Biome.Precipitation biome_precipitation) {
+         if (CauldronBlock.shouldHandlePrecipitation(level, biome_precipitation) && (Integer) blockstate.getValue(LayeredCauldronBlock.LEVEL) != 3 && biome_precipitation == this.precipitationType) {
+             BlockState blockstate1 = (BlockState) blockstate.cycle(LayeredCauldronBlock.LEVEL);
+ 
+-            level.setBlockAndUpdate(blockpos, blockstate1);
+-            level.gameEvent(GameEvent.BLOCK_CHANGE, blockpos, GameEvent.Context.of(blockstate1));
++            changeLevel(state, level, pos, iblockdata1, null, CauldronLevelChangeEvent.ChangeReason.NATURAL_FILL); // CraftBukkit
+         }
+     }
+ 
+@@ -120,9 +142,12 @@
+         if (!this.isFull(blockstate)) {
+             BlockState blockstate1 = (BlockState) blockstate.setValue(LayeredCauldronBlock.LEVEL, (Integer) blockstate.getValue(LayeredCauldronBlock.LEVEL) + 1);
+ 
+-            level.setBlockAndUpdate(blockpos, blockstate1);
+-            level.gameEvent(GameEvent.BLOCK_CHANGE, blockpos, GameEvent.Context.of(blockstate1));
+-            level.levelEvent(1047, blockpos, 0);
++            // CraftBukkit start
++            if (!changeLevel(state, level, pos, iblockdata1, null, CauldronLevelChangeEvent.ChangeReason.NATURAL_FILL)) {
++                return;
++            }
++            // CraftBukkit end
++            level.levelEvent(1047, pos, 0);
+         }
+     }
+ }

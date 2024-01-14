@@ -1,0 +1,86 @@
+--- a/net/minecraft/world/entity/animal/MushroomCow.java
++++ b/net/minecraft/world/entity/animal/MushroomCow.java
+@@ -42,6 +42,13 @@
+ import net.minecraft.world.level.block.state.BlockState;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ 
++// CraftBukkit start
++import org.bukkit.Bukkit;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityDropItemEvent;
++import org.bukkit.event.entity.EntityTransformEvent;
++// CraftBukkit end
++
+ public class MushroomCow extends Cow implements Shearable, VariantHolder<MushroomCow.MushroomType> {
+     private static final EntityDataAccessor<String> DATA_TYPE = SynchedEntityData.defineId(MushroomCow.class, EntityDataSerializers.STRING);
+     private static final int MUTATE_CHANCE = 1024;
+@@ -108,7 +120,12 @@
+ 
+             this.playSound(soundEvent, 1.0F, 1.0F);
+             return InteractionResult.sidedSuccess(this.level().isClientSide);
+-        } else if (itemInHand.is(Items.SHEARS) && this.readyForShearing()) {
++        } else if (itemstack.is(Items.SHEARS) && this.readyForShearing()) {
++            // CraftBukkit start
++            if (!CraftEventFactory.handlePlayerShearEntityEvent(player, this, itemstack, hand)) {
++                return InteractionResult.PASS;
++            }
++            // CraftBukkit end
+             this.shear(SoundSource.PLAYERS);
+             this.gameEvent(GameEvent.SHEAR, player);
+             if (!this.level().isClientSide) {
+@@ -167,13 +169,14 @@
+     public void shear(SoundSource category) {
+         this.level().playSound(null, this, SoundEvents.MOOSHROOM_SHEAR, category, 1.0F, 1.0F);
+         if (!this.level().isClientSide()) {
+-            Cow cow = EntityType.COW.create(this.level());
+-            if (cow != null) {
+-                ((ServerLevel)this.level()).sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY(0.5), this.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
+-                this.discard();
+-                cow.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
+-                cow.setHealth(this.getHealth());
+-                cow.yBodyRot = this.yBodyRot;
++            Cow entitycow = (Cow) EntityType.COW.create(this.level());
++
++            if (entitycow != null) {
++                ((ServerLevel) this.level()).sendParticles(ParticleTypes.EXPLOSION, this.getX(), this.getY(0.5D), this.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
++                // this.discard(); // CraftBukkit - moved down
++                entitycow.moveTo(this.getX(), this.getY(), this.getZ(), this.getYRot(), this.getXRot());
++                entitycow.setHealth(this.getHealth());
++                entitycow.yBodyRot = this.yBodyRot;
+                 if (this.hasCustomName()) {
+                     cow.setCustomName(this.getCustomName());
+                     cow.setCustomNameVisible(this.isCustomNameVisible());
+@@ -183,14 +186,26 @@
+                     cow.setPersistenceRequired();
+                 }
+ 
+-                cow.setInvulnerable(this.isInvulnerable());
+-                this.level().addFreshEntity(cow);
++                entitycow.setInvulnerable(this.isInvulnerable());
++                // CraftBukkit start
++                if (CraftEventFactory.callEntityTransformEvent(this, entitycow, EntityTransformEvent.TransformReason.SHEARED).isCancelled()) {
++                    return;
++                }
++                this.level().addFreshEntity(entitycow, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.SHEARED);
+ 
+-                for (int i = 0; i < 5; i++) {
+-                    this.level()
+-                        .addFreshEntity(
+-                            new ItemEntity(this.level(), this.getX(), this.getY(1.0), this.getZ(), new ItemStack(this.getVariant().blockState.getBlock()))
+-                        );
++                this.discard(); // CraftBukkit - from above
++                // CraftBukkit end
++
++                for (int i = 0; i < 5; ++i) {
++                    // CraftBukkit start
++                    ItemEntity entityitem = new ItemEntity(this.level(), this.getX(), this.getY(1.0D), this.getZ(), new ItemStack(this.getVariant().blockState.getBlock()));
++                    EntityDropItemEvent event = new EntityDropItemEvent(this.getBukkitEntity(), (org.bukkit.entity.Item) entityitem.getBukkitEntity());
++                    Bukkit.getPluginManager().callEvent(event);
++                    if (event.isCancelled()) {
++                        continue;
++                    }
++                    this.level().addFreshEntity(entityitem);
++                    // CraftBukkit end
+                 }
+             }
+         }

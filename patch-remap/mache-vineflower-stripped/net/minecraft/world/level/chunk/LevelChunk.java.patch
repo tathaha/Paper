@@ -1,0 +1,235 @@
+--- a/net/minecraft/world/level/chunk/LevelChunk.java
++++ b/net/minecraft/world/level/chunk/LevelChunk.java
+@@ -70,9 +73,9 @@
+             return "<null>";
+         }
+     };
+-    private final Map<BlockPos, LevelChunk.RebindableTickingBlockEntityWrapper> tickersInLevel = Maps.newHashMap();
+-    private boolean loaded;
+-    final Level level;
++    private final Map<BlockPos, LevelChunk.RebindableTickingBlockEntityWrapper> tickersInLevel;
++    public boolean loaded;
++    public final ServerLevel level; // CraftBukkit - type
+     @Nullable
+     private Supplier<FullChunkStatus> fullStatus;
+     @Nullable
+@@ -85,20 +88,13 @@
+         this(level, pos, UpgradeData.EMPTY, new LevelChunkTicks<>(), new LevelChunkTicks<>(), 0L, null, null, null);
+     }
+ 
+-    public LevelChunk(
+-        Level level,
+-        ChunkPos pos,
+-        UpgradeData data,
+-        LevelChunkTicks<Block> blockTicks,
+-        LevelChunkTicks<Fluid> fluidTicks,
+-        long inhabitedTime,
+-        @Nullable LevelChunkSection[] sections,
+-        @Nullable LevelChunk.PostLoadProcessor postLoad,
+-        @Nullable BlendingData blendingData
+-    ) {
+-        super(pos, data, level, level.registryAccess().registryOrThrow(Registries.BIOME), inhabitedTime, sections, blendingData);
+-        this.level = level;
+-        this.gameEventListenerRegistrySections = new Int2ObjectOpenHashMap<>();
++    public LevelChunk(Level level, ChunkPos pos, UpgradeData data, LevelChunkTicks<Block> blockTicks, LevelChunkTicks<Fluid> fluidTicks, long inhabitedTime, @Nullable LevelChunkSection[] achunksection, @Nullable LevelChunk.PostLoadProcessor sections, @Nullable BlendingData postLoad) {
++        super(pos, data, level, level.registryAccess().registryOrThrow(Registries.BIOME), inhabitedTime, achunksection, postLoad);
++        this.tickersInLevel = Maps.newHashMap();
++        this.level = (ServerLevel) level; // CraftBukkit - type
++        this.gameEventListenerRegistrySections = new Int2ObjectOpenHashMap();
++        Heightmap.Types[] aheightmap_type = Heightmap.Types.values();
++        int j = aheightmap_type.length;
+ 
+         for (Heightmap.Types types : Heightmap.Types.values()) {
+             if (ChunkStatus.FULL.heightmapsAfter().contains(types)) {
+@@ -111,6 +109,11 @@
+         this.fluidTicks = fluidTicks;
+     }
+ 
++    // CraftBukkit start
++    public boolean mustNotSave;
++    public boolean needsDecoration;
++    // CraftBukkit end
++
+     public LevelChunk(ServerLevel level, ProtoChunk chunk, @Nullable LevelChunk.PostLoadProcessor postLoad) {
+         this(
+             level,
+@@ -146,6 +145,10 @@
+         this.skyLightSources = chunk.skyLightSources;
+         this.setLightCorrect(chunk.isLightCorrect());
+         this.unsaved = true;
++        this.needsDecoration = true; // CraftBukkit
++        // CraftBukkit start
++        this.persistentDataContainer = chunk.persistentDataContainer; // SPIGOT-6814: copy PDC to account for 1.17 to 1.18 chunk upgrading.
++        // CraftBukkit end
+     }
+ 
+     @Override
+@@ -231,13 +253,21 @@
+         }
+     }
+ 
++    // CraftBukkit start
+     @Nullable
+     @Override
+-    public BlockState setBlockState(BlockPos pos, BlockState state, boolean isMoving) {
+-        int y = pos.getY();
+-        LevelChunkSection section = this.getSection(this.getSectionIndex(y));
+-        boolean hasOnlyAir = section.hasOnlyAir();
+-        if (hasOnlyAir && state.isAir()) {
++    public IBlockData setBlockState(BlockPos pos, IBlockData state, boolean isMoving) {
++        return this.setBlockState(pos, state, isMoving, true);
++    }
++
++    @Nullable
++    public IBlockData setBlockState(BlockPos blockposition, IBlockData iblockdata, boolean flag, boolean doPlace) {
++        // CraftBukkit end
++        int i = blockposition.getY();
++        LevelChunkSection chunksection = this.getSection(this.getSectionIndex(i));
++        boolean flag1 = chunksection.hasOnlyAir();
++
++        if (flag1 && iblockdata.isAir()) {
+             return null;
+         } else {
+             int i = pos.getX() & 15;
+@@ -276,8 +311,9 @@
+                 if (!section.getBlockState(i, i1, i2).is(block)) {
+                     return null;
+                 } else {
+-                    if (!this.level.isClientSide) {
+-                        state.onPlace(this.level, pos, blockState, isMoving);
++                    // CraftBukkit - Don't place while processing the BlockPlaceEvent, unless it's a BlockContainer. Prevents blocks such as TNT from activating when cancelled.
++                    if (!this.level.isClientSide && doPlace && (!this.level.captureBlockStates || block instanceof net.minecraft.world.level.block.BaseEntityBlock)) {
++                        iblockdata.onPlace(this.level, blockposition, iblockdata1, flag);
+                     }
+ 
+                     if (state.hasBlockEntity()) {
+@@ -318,14 +356,22 @@
+     }
+ 
+     @Nullable
+-    public BlockEntity getBlockEntity(BlockPos pos, LevelChunk.EntityCreationType creationType) {
+-        BlockEntity blockEntity = this.blockEntities.get(pos);
+-        if (blockEntity == null) {
+-            CompoundTag compoundTag = this.pendingBlockEntities.remove(pos);
+-            if (compoundTag != null) {
+-                BlockEntity blockEntity1 = this.promotePendingBlockEntity(pos, compoundTag);
+-                if (blockEntity1 != null) {
+-                    return blockEntity1;
++    public BlockEntity getBlockEntity(BlockPos pos, LevelChunk.EnumTileEntityState creationType) {
++        // CraftBukkit start
++        BlockEntity tileentity = level.capturedTileEntities.get(pos);
++        if (tileentity == null) {
++            tileentity = (BlockEntity) this.blockEntities.get(pos);
++        }
++        // CraftBukkit end
++
++        if (tileentity == null) {
++            CompoundTag nbttagcompound = (CompoundTag) this.pendingBlockEntities.remove(pos);
++
++            if (nbttagcompound != null) {
++                BlockEntity tileentity1 = this.promotePendingBlockEntity(pos, nbttagcompound);
++
++                if (tileentity1 != null) {
++                    return tileentity1;
+                 }
+             }
+         }
+@@ -378,6 +439,14 @@
+             if (blockEntity1 != null && blockEntity1 != blockEntity) {
+                 blockEntity1.setRemoved();
+             }
++
++            // CraftBukkit start
++        } else {
++            System.out.println("Attempted to place a tile entity (" + blockEntity + ") at " + blockEntity.getBlockPos().getX() + "," + blockEntity.getBlockPos().getY() + "," + blockEntity.getBlockPos().getZ()
++                + " (" + getBlockState(blockposition) + ") where there was no entity tile!");
++            System.out.println("Chunk coordinates: " + (this.chunkPos.x * 16) + "," + (this.chunkPos.z * 16));
++            new Exception().printStackTrace();
++            // CraftBukkit end
+         }
+     }
+ 
+@@ -403,10 +474,21 @@
+     @Override
+     public void removeBlockEntity(BlockPos pos) {
+         if (this.isInLevel()) {
+-            BlockEntity blockEntity = this.blockEntities.remove(pos);
+-            if (blockEntity != null) {
+-                if (this.level instanceof ServerLevel serverLevel) {
+-                    this.removeGameEventListener(blockEntity, serverLevel);
++            BlockEntity tileentity = (BlockEntity) this.blockEntities.remove(pos);
++
++            // CraftBukkit start - SPIGOT-5561: Also remove from pending map
++            if (!pendingBlockEntities.isEmpty()) {
++                pendingBlockEntities.remove(pos);
++            }
++            // CraftBukkit end
++
++            if (tileentity != null) {
++                Level world = this.level;
++
++                if (world instanceof ServerLevel) {
++                    ServerLevel worldserver = (ServerLevel) world;
++
++                    this.removeGameEventListener(tileentity, worldserver);
+                 }
+ 
+                 blockEntity.setRemoved();
+@@ -446,6 +535,57 @@
+         }
+     }
+ 
++    // CraftBukkit start
++    public void loadCallback() {
++        org.bukkit.Server server = this.level.getCraftServer();
++        if (server != null) {
++            /*
++             * If it's a new world, the first few chunks are generated inside
++             * the World constructor. We can't reliably alter that, so we have
++             * no way of creating a CraftWorld/CraftServer at that point.
++             */
++            org.bukkit.Chunk bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);
++            server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkLoadEvent(bukkitChunk, this.needsDecoration));
++
++            if (this.needsDecoration) {
++                this.needsDecoration = false;
++                java.util.Random random = new java.util.Random();
++                random.setSeed(level.getSeed());
++                long xRand = random.nextLong() / 2L * 2L + 1L;
++                long zRand = random.nextLong() / 2L * 2L + 1L;
++                random.setSeed((long) this.chunkPos.x * xRand + (long) this.chunkPos.z * zRand ^ level.getSeed());
++
++                org.bukkit.World world = this.level.getWorld();
++                if (world != null) {
++                    this.level.populating = true;
++                    try {
++                        for (org.bukkit.generator.BlockPopulator populator : world.getPopulators()) {
++                            populator.populate(world, random, bukkitChunk);
++                        }
++                    } finally {
++                        this.level.populating = false;
++                    }
++                }
++                server.getPluginManager().callEvent(new org.bukkit.event.world.ChunkPopulateEvent(bukkitChunk));
++            }
++        }
++    }
++
++    public void unloadCallback() {
++        org.bukkit.Server server = this.level.getCraftServer();
++        org.bukkit.Chunk bukkitChunk = new org.bukkit.craftbukkit.CraftChunk(this);
++        org.bukkit.event.world.ChunkUnloadEvent unloadEvent = new org.bukkit.event.world.ChunkUnloadEvent(bukkitChunk, this.isUnsaved());
++        server.getPluginManager().callEvent(unloadEvent);
++        // note: saving can be prevented, but not forced if no saving is actually required
++        this.mustNotSave = !unloadEvent.isSaveChunk();
++    }
++
++    @Override
++    public boolean isUnsaved() {
++        return super.isUnsaved() && !this.mustNotSave;
++    }
++    // CraftBukkit end
++
+     public boolean isEmpty() {
+         return false;
+     }

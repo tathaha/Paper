@@ -1,0 +1,125 @@
+--- a/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
++++ b/net/minecraft/core/dispenser/ShearsDispenseItemBehavior.java
+@@ -18,24 +18,52 @@
+ import net.minecraft.world.level.block.BeehiveBlock;
+ import net.minecraft.world.level.block.DispenserBlock;
+ import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.phys.AABB;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.block.BlockDispenseEvent;
++// CraftBukkit end
+ 
+ public class ShearsDispenseItemBehavior extends OptionalDispenseItemBehavior {
+ 
+     public ShearsDispenseItemBehavior() {}
+ 
+     @Override
+-    @Override
+-    protected ItemStack execute(BlockSource blocksource, ItemStack itemstack) {
+-        ServerLevel serverlevel = blocksource.level();
++    protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
++        ServerLevel worldserver = sourceblock.level();
++        // CraftBukkit start
++        org.bukkit.block.Block bukkitBlock = CraftBlock.at(worldserver, sourceblock.pos());
++        CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack);
+ 
+-        if (!serverlevel.isClientSide()) {
+-            BlockPos blockpos = blocksource.pos().relative((Direction) blocksource.state().getValue(DispenserBlock.FACING));
++        BlockDispenseEvent event = new BlockDispenseEvent(bukkitBlock, craftItem.clone(), new org.bukkit.util.Vector(0, 0, 0));
++        if (!DispenserBlock.eventFired) {
++            worldserver.getCraftServer().getPluginManager().callEvent(event);
++        }
+ 
+-            this.setSuccess(tryShearBeehive(serverlevel, blockpos) || tryShearLivingEntity(serverlevel, blockpos));
+-            if (this.isSuccess() && itemstack.hurt(1, serverlevel.getRandom(), (ServerPlayer) null)) {
++        if (event.isCancelled()) {
++            return itemstack;
++        }
++
++        if (!event.getItem().equals(craftItem)) {
++            // Chain to handler for new item
++            ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++            DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++            if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior != this) {
++                idispensebehavior.dispense(sourceblock, eventStack);
++                return itemstack;
++            }
++        }
++        // CraftBukkit end
++
++        if (!worldserver.isClientSide()) {
++            BlockPos blockposition = sourceblock.pos().relative((Direction) sourceblock.state().getValue(DispenserBlock.FACING));
++
++            this.setSuccess(tryShearBeehive(worldserver, blockposition) || tryShearLivingEntity(worldserver, blockposition, bukkitBlock, craftItem)); // CraftBukkit
++            if (this.isSuccess() && itemstack.hurt(1, worldserver.getRandom(), (ServerPlayer) null)) {
+                 itemstack.setCount(0);
+             }
+         }
+@@ -43,19 +71,19 @@
+         return itemstack;
+     }
+ 
+-    private static boolean tryShearBeehive(ServerLevel serverlevel, BlockPos blockpos) {
+-        BlockState blockstate = serverlevel.getBlockState(blockpos);
++    private static boolean tryShearBeehive(ServerLevel level, BlockPos pos) {
++        IBlockData iblockdata = level.getBlockState(pos);
+ 
+-        if (blockstate.is(BlockTags.BEEHIVES, (blockbehaviour_blockstatebase) -> {
+-            return blockbehaviour_blockstatebase.hasProperty(BeehiveBlock.HONEY_LEVEL) && blockbehaviour_blockstatebase.getBlock() instanceof BeehiveBlock;
++        if (iblockdata.is(BlockTags.BEEHIVES, (blockbase_blockdata) -> {
++            return blockbase_blockdata.hasProperty(BeehiveBlock.HONEY_LEVEL) && blockbase_blockdata.getBlock() instanceof BeehiveBlock;
+         })) {
+-            int i = (Integer) blockstate.getValue(BeehiveBlock.HONEY_LEVEL);
++            int i = (Integer) iblockdata.getValue(BeehiveBlock.HONEY_LEVEL);
+ 
+             if (i >= 5) {
+-                serverlevel.playSound((Player) null, blockpos, SoundEvents.BEEHIVE_SHEAR, SoundSource.BLOCKS, 1.0F, 1.0F);
+-                BeehiveBlock.dropHoneycomb(serverlevel, blockpos);
+-                ((BeehiveBlock) blockstate.getBlock()).releaseBeesAndResetHoneyLevel(serverlevel, blockstate, blockpos, (Player) null, BeehiveBlockEntity.BeeReleaseStatus.BEE_RELEASED);
+-                serverlevel.gameEvent((Entity) null, GameEvent.SHEAR, blockpos);
++                level.playSound((Player) null, pos, SoundEvents.BEEHIVE_SHEAR, SoundSource.BLOCKS, 1.0F, 1.0F);
++                BeehiveBlock.dropHoneycomb(level, pos);
++                ((BeehiveBlock) iblockdata.getBlock()).releaseBeesAndResetHoneyLevel(level, iblockdata, pos, (Player) null, BeehiveBlockEntity.ReleaseStatus.BEE_RELEASED);
++                level.gameEvent((Entity) null, GameEvent.SHEAR, pos);
+                 return true;
+             }
+         }
+@@ -63,19 +91,24 @@
+         return false;
+     }
+ 
+-    private static boolean tryShearLivingEntity(ServerLevel serverlevel, BlockPos blockpos) {
+-        List<LivingEntity> list = serverlevel.getEntitiesOfClass(LivingEntity.class, new AABB(blockpos), EntitySelector.NO_SPECTATORS);
++    private static boolean tryShearLivingEntity(ServerLevel worldserver, BlockPos blockposition, org.bukkit.block.Block bukkitBlock, CraftItemStack craftItem) { // CraftBukkit - add args
++        List<LivingEntity> list = worldserver.getEntitiesOfClass(LivingEntity.class, new AABB(blockposition), EntitySelector.NO_SPECTATORS);
+         Iterator iterator = list.iterator();
+ 
+         while (iterator.hasNext()) {
+-            LivingEntity livingentity = (LivingEntity) iterator.next();
++            LivingEntity entityliving = (LivingEntity) iterator.next();
+ 
+-            if (livingentity instanceof Shearable) {
+-                Shearable shearable = (Shearable) livingentity;
++            if (entityliving instanceof Shearable) {
++                Shearable ishearable = (Shearable) entityliving;
+ 
+-                if (shearable.readyForShearing()) {
+-                    shearable.shear(SoundSource.BLOCKS);
+-                    serverlevel.gameEvent((Entity) null, GameEvent.SHEAR, blockpos);
++                if (ishearable.readyForShearing()) {
++                    // CraftBukkit start
++                    if (CraftEventFactory.callBlockShearEntityEvent(entityliving, bukkitBlock, craftItem).isCancelled()) {
++                        continue;
++                    }
++                    // CraftBukkit end
++                    ishearable.shear(SoundSource.BLOCKS);
++                    worldserver.gameEvent((Entity) null, GameEvent.SHEAR, blockposition);
+                     return true;
+                 }
+             }

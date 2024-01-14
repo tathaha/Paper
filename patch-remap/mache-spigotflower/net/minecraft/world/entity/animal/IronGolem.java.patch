@@ -1,0 +1,368 @@
+--- a/net/minecraft/world/entity/animal/IronGolem.java
++++ b/net/minecraft/world/entity/animal/IronGolem.java
+@@ -17,7 +17,7 @@
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.util.TimeUtil;
+ import net.minecraft.util.valueproviders.UniformInt;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.entity.Entity;
+@@ -39,14 +39,14 @@
+ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+ import net.minecraft.world.entity.ai.goal.target.ResetUniversalAngerTargetGoal;
+ import net.minecraft.world.entity.monster.Creeper;
+-import net.minecraft.world.entity.monster.Enemy;
++import net.minecraft.world.entity.monster.IMonster;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.LevelReader;
+ import net.minecraft.world.level.NaturalSpawner;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.material.Fluids;
+ import net.minecraft.world.phys.Vec3;
+ 
+@@ -61,13 +61,12 @@
+     @Nullable
+     private UUID persistentAngerTarget;
+ 
+-    public IronGolem(EntityType<? extends IronGolem> entitytype, Level level) {
+-        super(entitytype, level);
++    public IronGolem(EntityType<? extends IronGolem> entityType, Level level) {
++        super(entityType, level);
+         this.setMaxUpStep(1.0F);
+     }
+ 
+     @Override
+-    @Override
+     protected void registerGoals() {
+         this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.0D, true));
+         this.goalSelector.addGoal(2, new MoveTowardsTargetGoal(this, 0.9D, 32.0F));
+@@ -79,14 +78,13 @@
+         this.targetSelector.addGoal(1, new DefendVillageTargetGoal(this));
+         this.targetSelector.addGoal(2, new HurtByTargetGoal(this, new Class[0]));
+         this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Player.class, 10, true, false, this::isAngryAt));
+-        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Mob.class, 5, false, false, (livingentity) -> {
+-            return livingentity instanceof Enemy && !(livingentity instanceof Creeper);
++        this.targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Mob.class, 5, false, false, (entityliving) -> {
++            return entityliving instanceof IMonster && !(entityliving instanceof Creeper);
+         }));
+         this.targetSelector.addGoal(4, new ResetUniversalAngerTargetGoal<>(this, false));
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+         this.entityData.define(IronGolem.DATA_FLAGS_ID, (byte) 0);
+@@ -97,23 +95,20 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected int decreaseAirSupply(int i) {
+-        return i;
++    protected int decreaseAirSupply(int air) {
++        return air;
+     }
+ 
+     @Override
+-    @Override
+     protected void doPush(Entity entity) {
+-        if (entity instanceof Enemy && !(entity instanceof Creeper) && this.getRandom().nextInt(20) == 0) {
+-            this.setTarget((LivingEntity) entity);
++        if (entity instanceof IMonster && !(entity instanceof Creeper) && this.getRandom().nextInt(20) == 0) {
++            this.setTarget((LivingEntity) entity, org.bukkit.event.entity.EntityTargetLivingEntityEvent.TargetReason.COLLISION, true); // CraftBukkit - set reason
+         }
+ 
+         super.doPush(entity);
+     }
+ 
+     @Override
+-    @Override
+     public void aiStep() {
+         super.aiStep();
+         if (this.attackAnimationTick > 0) {
+@@ -131,60 +126,51 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean canSpawnSprintParticle() {
+         return this.getDeltaMovement().horizontalDistanceSqr() > 2.500000277905201E-7D && this.random.nextInt(5) == 0;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean canAttackType(EntityType<?> entitytype) {
+-        return this.isPlayerCreated() && entitytype == EntityType.PLAYER ? false : (entitytype == EntityType.CREEPER ? false : super.canAttackType(entitytype));
++    public boolean canAttackType(EntityType<?> type) {
++        return this.isPlayerCreated() && type == EntityType.PLAYER ? false : (type == EntityType.CREEPER ? false : super.canAttackType(type));
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putBoolean("PlayerCreated", this.isPlayerCreated());
+-        this.addPersistentAngerSaveData(compoundtag);
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putBoolean("PlayerCreated", this.isPlayerCreated());
++        this.addPersistentAngerSaveData(compound);
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.setPlayerCreated(compoundtag.getBoolean("PlayerCreated"));
+-        this.readPersistentAngerSaveData(this.level(), compoundtag);
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.setPlayerCreated(compound.getBoolean("PlayerCreated"));
++        this.readPersistentAngerSaveData(this.level(), compound);
+     }
+ 
+     @Override
+-    @Override
+     public void startPersistentAngerTimer() {
+         this.setRemainingPersistentAngerTime(IronGolem.PERSISTENT_ANGER_TIME.sample(this.random));
+     }
+ 
+     @Override
+-    @Override
+-    public void setRemainingPersistentAngerTime(int i) {
+-        this.remainingPersistentAngerTime = i;
++    public void setRemainingPersistentAngerTime(int time) {
++        this.remainingPersistentAngerTime = time;
+     }
+ 
+     @Override
+-    @Override
+     public int getRemainingPersistentAngerTime() {
+         return this.remainingPersistentAngerTime;
+     }
+ 
+     @Override
+-    @Override
+-    public void setPersistentAngerTarget(@Nullable UUID uuid) {
+-        this.persistentAngerTarget = uuid;
++    public void setPersistentAngerTarget(@Nullable UUID target) {
++        this.persistentAngerTarget = target;
+     }
+ 
+     @Nullable
+     @Override
+-    @Override
+     public UUID getPersistentAngerTarget() {
+         return this.persistentAngerTarget;
+     }
+@@ -194,7 +180,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean doHurtTarget(Entity entity) {
+         this.attackAnimationTick = 10;
+         this.level().broadcastEntityEvent(this, (byte) 4);
+@@ -206,9 +191,9 @@
+             double d0;
+ 
+             if (entity instanceof LivingEntity) {
+-                LivingEntity livingentity = (LivingEntity) entity;
++                LivingEntity entityliving = (LivingEntity) entity;
+ 
+-                d0 = livingentity.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE);
++                d0 = entityliving.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE);
+             } else {
+                 d0 = 0.0D;
+             }
+@@ -225,12 +210,11 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
+-        IronGolem.Crackiness irongolem_crackiness = this.getCrackiness();
+-        boolean flag = super.hurt(damagesource, f);
++    public boolean hurt(DamageSource source, float amount) {
++        IronGolem.Crackiness entityirongolem_cracklevel = this.getCrackiness();
++        boolean flag = super.hurt(source, amount);
+ 
+-        if (flag && this.getCrackiness() != irongolem_crackiness) {
++        if (flag && this.getCrackiness() != entityirongolem_cracklevel) {
+             this.playSound(SoundEvents.IRON_GOLEM_DAMAGE, 1.0F, 1.0F);
+         }
+ 
+@@ -242,17 +226,16 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void handleEntityEvent(byte b0) {
+-        if (b0 == 4) {
++    public void handleEntityEvent(byte id) {
++        if (id == 4) {
+             this.attackAnimationTick = 10;
+             this.playSound(SoundEvents.IRON_GOLEM_ATTACK, 1.0F, 1.0F);
+-        } else if (b0 == 11) {
++        } else if (id == 11) {
+             this.offerFlowerTick = 400;
+-        } else if (b0 == 34) {
++        } else if (id == 34) {
+             this.offerFlowerTick = 0;
+         } else {
+-            super.handleEntityEvent(b0);
++            super.handleEntityEvent(id);
+         }
+ 
+     }
+@@ -261,8 +244,8 @@
+         return this.attackAnimationTick;
+     }
+ 
+-    public void offerFlower(boolean flag) {
+-        if (flag) {
++    public void offerFlower(boolean offeringFlower) {
++        if (offeringFlower) {
+             this.offerFlowerTick = 400;
+             this.level().broadcastEntityEvent(this, (byte) 11);
+         } else {
+@@ -273,21 +256,18 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected SoundEvent getHurtSound(DamageSource damagesource) {
++    protected SoundEvent getHurtSound(DamageSource damageSource) {
+         return SoundEvents.IRON_GOLEM_HURT;
+     }
+ 
+     @Override
+-    @Override
+     protected SoundEvent getDeathSound() {
+         return SoundEvents.IRON_GOLEM_DEATH;
+     }
+ 
+     @Override
+-    @Override
+-    protected InteractionResult mobInteract(Player player, InteractionHand interactionhand) {
+-        ItemStack itemstack = player.getItemInHand(interactionhand);
++    protected InteractionResult mobInteract(Player player, EnumHand hand) {
++        ItemStack itemstack = player.getItemInHand(hand);
+ 
+         if (!itemstack.is(Items.IRON_INGOT)) {
+             return InteractionResult.PASS;
+@@ -311,8 +291,7 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void playStepSound(BlockPos blockpos, BlockState blockstate) {
++    protected void playStepSound(BlockPos pos, IBlockData block) {
+         this.playSound(SoundEvents.IRON_GOLEM_STEP, 1.0F, 1.0F);
+     }
+ 
+@@ -324,10 +303,10 @@
+         return ((Byte) this.entityData.get(IronGolem.DATA_FLAGS_ID) & 1) != 0;
+     }
+ 
+-    public void setPlayerCreated(boolean flag) {
++    public void setPlayerCreated(boolean playerCreated) {
+         byte b0 = (Byte) this.entityData.get(IronGolem.DATA_FLAGS_ID);
+ 
+-        if (flag) {
++        if (playerCreated) {
+             this.entityData.set(IronGolem.DATA_FLAGS_ID, (byte) (b0 | 1));
+         } else {
+             this.entityData.set(IronGolem.DATA_FLAGS_ID, (byte) (b0 & -2));
+@@ -336,36 +315,33 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void die(DamageSource damagesource) {
+-        super.die(damagesource);
++    public void die(DamageSource cause) {
++        super.die(cause);
+     }
+ 
+     @Override
+-    @Override
+-    public boolean checkSpawnObstruction(LevelReader levelreader) {
+-        BlockPos blockpos = this.blockPosition();
+-        BlockPos blockpos1 = blockpos.below();
+-        BlockState blockstate = levelreader.getBlockState(blockpos1);
++    public boolean checkSpawnObstruction(LevelReader level) {
++        BlockPos blockposition = this.blockPosition();
++        BlockPos blockposition1 = blockposition.below();
++        IBlockData iblockdata = level.getBlockState(blockposition1);
+ 
+-        if (!blockstate.entityCanStandOn(levelreader, blockpos1, this)) {
++        if (!iblockdata.entityCanStandOn(level, blockposition1, this)) {
+             return false;
+         } else {
+             for (int i = 1; i < 3; ++i) {
+-                BlockPos blockpos2 = blockpos.above(i);
+-                BlockState blockstate1 = levelreader.getBlockState(blockpos2);
++                BlockPos blockposition2 = blockposition.above(i);
++                IBlockData iblockdata1 = level.getBlockState(blockposition2);
+ 
+-                if (!NaturalSpawner.isValidEmptySpawnBlock(levelreader, blockpos2, blockstate1, blockstate1.getFluidState(), EntityType.IRON_GOLEM)) {
++                if (!NaturalSpawner.isValidEmptySpawnBlock(level, blockposition2, iblockdata1, iblockdata1.getFluidState(), EntityType.IRON_GOLEM)) {
+                     return false;
+                 }
+             }
+ 
+-            return NaturalSpawner.isValidEmptySpawnBlock(levelreader, blockpos, levelreader.getBlockState(blockpos), Fluids.EMPTY.defaultFluidState(), EntityType.IRON_GOLEM) && levelreader.isUnobstructed(this);
++            return NaturalSpawner.isValidEmptySpawnBlock(level, blockposition, level.getBlockState(blockposition), Fluids.EMPTY.defaultFluidState(), EntityType.IRON_GOLEM) && level.isUnobstructed(this);
+         }
+     }
+ 
+     @Override
+-    @Override
+     public Vec3 getLeashOffset() {
+         return new Vec3(0.0D, (double) (0.875F * this.getEyeHeight()), (double) (this.getBbWidth() * 0.4F));
+     }
+@@ -374,8 +350,8 @@
+ 
+         NONE(1.0F), LOW(0.75F), MEDIUM(0.5F), HIGH(0.25F);
+ 
+-        private static final List<IronGolem.Crackiness> BY_DAMAGE = (List) Stream.of(values()).sorted(Comparator.comparingDouble((irongolem_crackiness) -> {
+-            return (double) irongolem_crackiness.fraction;
++        private static final List<IronGolem.Crackiness> BY_DAMAGE = (List) Stream.of(values()).sorted(Comparator.comparingDouble((entityirongolem_cracklevel) -> {
++            return (double) entityirongolem_cracklevel.fraction;
+         })).collect(ImmutableList.toImmutableList());
+         private final float fraction;
+ 
+@@ -383,20 +359,20 @@
+             this.fraction = f;
+         }
+ 
+-        public static IronGolem.Crackiness byFraction(float f) {
++        public static IronGolem.Crackiness byFraction(float fraction) {
+             Iterator iterator = IronGolem.Crackiness.BY_DAMAGE.iterator();
+ 
+-            IronGolem.Crackiness irongolem_crackiness;
++            IronGolem.Crackiness entityirongolem_cracklevel;
+ 
+             do {
+                 if (!iterator.hasNext()) {
+                     return IronGolem.Crackiness.NONE;
+                 }
+ 
+-                irongolem_crackiness = (IronGolem.Crackiness) iterator.next();
+-            } while (f >= irongolem_crackiness.fraction);
++                entityirongolem_cracklevel = (IronGolem.Crackiness) iterator.next();
++            } while (fraction >= entityirongolem_cracklevel.fraction);
+ 
+-            return irongolem_crackiness;
++            return entityirongolem_cracklevel;
+         }
+     }
+ }

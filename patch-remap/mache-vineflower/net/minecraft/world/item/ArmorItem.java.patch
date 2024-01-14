@@ -1,0 +1,176 @@
+--- a/net/minecraft/world/item/ArmorItem.java
++++ b/net/minecraft/world/item/ArmorItem.java
+@@ -1,18 +1,19 @@
+ package net.minecraft.world.item;
+ 
+ import com.google.common.collect.ImmutableMultimap;
+-import com.google.common.collect.Multimap;
+ import com.google.common.collect.ImmutableMultimap.Builder;
++import com.google.common.collect.Multimap;
+ import java.util.EnumMap;
+ import java.util.List;
+ import java.util.UUID;
+ import net.minecraft.Util;
+ import net.minecraft.core.BlockPos;
+-import net.minecraft.core.dispenser.BlockSource;
++import net.minecraft.core.Direction;
+ import net.minecraft.core.dispenser.DefaultDispenseItemBehavior;
+ import net.minecraft.core.dispenser.DispenseItemBehavior;
++import net.minecraft.core.dispenser.SourceBlock;
+ import net.minecraft.sounds.SoundEvent;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResultHolder;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EquipmentSlot;
+@@ -25,18 +26,24 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.DispenserBlock;
+ import net.minecraft.world.phys.AABB;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.block.BlockDispenseArmorEvent;
++// CraftBukkit end
+ 
+ public class ArmorItem extends Item implements Equipable {
+-    private static final EnumMap<ArmorItem.Type, UUID> ARMOR_MODIFIER_UUID_PER_TYPE = Util.make(new EnumMap<>(ArmorItem.Type.class), map -> {
+-        map.put(ArmorItem.Type.BOOTS, UUID.fromString("845DB27C-C624-495F-8C9F-6020A9A58B6B"));
+-        map.put(ArmorItem.Type.LEGGINGS, UUID.fromString("D8499B04-0E66-4726-AB29-64469D734E0D"));
+-        map.put(ArmorItem.Type.CHESTPLATE, UUID.fromString("9F3D476D-C118-4544-8365-64846904B48E"));
+-        map.put(ArmorItem.Type.HELMET, UUID.fromString("2AD3F246-FEE1-4E67-B886-69FD380BB150"));
++
++    private static final EnumMap<ArmorItem.Type, UUID> ARMOR_MODIFIER_UUID_PER_TYPE = (EnumMap) Util.make(new EnumMap(ArmorItem.Type.class), (enummap) -> {
++        enummap.put(ArmorItem.Type.BOOTS, UUID.fromString("845DB27C-C624-495F-8C9F-6020A9A58B6B"));
++        enummap.put(ArmorItem.Type.LEGGINGS, UUID.fromString("D8499B04-0E66-4726-AB29-64469D734E0D"));
++        enummap.put(ArmorItem.Type.CHESTPLATE, UUID.fromString("9F3D476D-C118-4544-8365-64846904B48E"));
++        enummap.put(ArmorItem.Type.HELMET, UUID.fromString("2AD3F246-FEE1-4E67-B886-69FD380BB150"));
+     });
+     public static final DispenseItemBehavior DISPENSE_ITEM_BEHAVIOR = new DefaultDispenseItemBehavior() {
+         @Override
+-        protected ItemStack execute(BlockSource blockSource, ItemStack itemStack) {
+-            return ArmorItem.dispenseArmor(blockSource, itemStack) ? itemStack : super.execute(blockSource, itemStack);
++        protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
++            return ArmorItem.dispenseArmor(sourceblock, itemstack) ? itemstack : super.execute(sourceblock, itemstack);
+         }
+     };
+     protected final ArmorItem.Type type;
+@@ -46,24 +53,49 @@
+     protected final ArmorMaterial material;
+     private final Multimap<Attribute, AttributeModifier> defaultModifiers;
+ 
+-    public static boolean dispenseArmor(BlockSource blockSource, ItemStack itemStack) {
+-        BlockPos blockPos = blockSource.pos().relative(blockSource.state().getValue(DispenserBlock.FACING));
+-        List<LivingEntity> entitiesOfClass = blockSource.level()
+-            .getEntitiesOfClass(
+-                LivingEntity.class, new AABB(blockPos), EntitySelector.NO_SPECTATORS.and(new EntitySelector.MobCanWearArmorEntitySelector(itemStack))
+-            );
+-        if (entitiesOfClass.isEmpty()) {
++    public static boolean dispenseArmor(SourceBlock sourceblock, ItemStack itemstack) {
++        BlockPos blockposition = sourceblock.pos().relative((Direction) sourceblock.state().getValue(DispenserBlock.FACING));
++        List<LivingEntity> list = sourceblock.level().getEntitiesOfClass(LivingEntity.class, new AABB(blockposition), EntitySelector.NO_SPECTATORS.and(new EntitySelector.MobCanWearArmorEntitySelector(itemstack)));
++
++        if (list.isEmpty()) {
+             return false;
+         } else {
+-            LivingEntity livingEntity = entitiesOfClass.get(0);
+-            EquipmentSlot equipmentSlotForItem = Mob.getEquipmentSlotForItem(itemStack);
+-            ItemStack itemStack1 = itemStack.split(1);
+-            livingEntity.setItemSlot(equipmentSlotForItem, itemStack1);
+-            if (livingEntity instanceof Mob) {
+-                ((Mob)livingEntity).setDropChance(equipmentSlotForItem, 2.0F);
+-                ((Mob)livingEntity).setPersistenceRequired();
++            LivingEntity entityliving = (LivingEntity) list.get(0);
++            EquipmentSlot enumitemslot = Mob.getEquipmentSlotForItem(itemstack);
++            ItemStack itemstack1 = itemstack.split(1);
++            // CraftBukkit start
++            Level world = sourceblock.level();
++            org.bukkit.block.Block block = CraftBlock.at(world, sourceblock.pos());
++            CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
++
++            BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityliving.getBukkitEntity());
++            if (!DispenserBlock.eventFired) {
++                world.getCraftServer().getPluginManager().callEvent(event);
+             }
+ 
++            if (event.isCancelled()) {
++                itemstack.grow(1);
++                return false;
++            }
++
++            if (!event.getItem().equals(craftItem)) {
++                itemstack.grow(1);
++                // Chain to handler for new item
++                ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++                DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++                if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior != ArmorItem.DISPENSE_ITEM_BEHAVIOR) {
++                    idispensebehavior.dispense(sourceblock, eventStack);
++                    return true;
++                }
++            }
++
++            entityliving.setItemSlot(enumitemslot, CraftItemStack.asNMSCopy(event.getItem()));
++            // CraftBukkit end
++            if (entityliving instanceof Mob) {
++                ((Mob) entityliving).setDropChance(enumitemslot, 2.0F);
++                ((Mob) entityliving).setPersistenceRequired();
++            }
++
+             return true;
+         }
+     }
+@@ -75,16 +107,14 @@
+         this.defense = material.getDefenseForType(type);
+         this.toughness = material.getToughness();
+         this.knockbackResistance = material.getKnockbackResistance();
+-        DispenserBlock.registerBehavior(this, DISPENSE_ITEM_BEHAVIOR);
++        DispenserBlock.registerBehavior(this, ArmorItem.DISPENSE_ITEM_BEHAVIOR);
+         Builder<Attribute, AttributeModifier> builder = ImmutableMultimap.builder();
+-        UUID uUID = ARMOR_MODIFIER_UUID_PER_TYPE.get(type);
+-        builder.put(Attributes.ARMOR, new AttributeModifier(uUID, "Armor modifier", (double)this.defense, AttributeModifier.Operation.ADDITION));
+-        builder.put(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(uUID, "Armor toughness", (double)this.toughness, AttributeModifier.Operation.ADDITION));
++        UUID uuid = (UUID) ArmorItem.ARMOR_MODIFIER_UUID_PER_TYPE.get(type);
++
++        builder.put(Attributes.ARMOR, new AttributeModifier(uuid, "Armor modifier", (double) this.defense, AttributeModifier.Operation.ADDITION));
++        builder.put(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(uuid, "Armor toughness", (double) this.toughness, AttributeModifier.Operation.ADDITION));
+         if (material == ArmorMaterials.NETHERITE) {
+-            builder.put(
+-                Attributes.KNOCKBACK_RESISTANCE,
+-                new AttributeModifier(uUID, "Armor knockback resistance", (double)this.knockbackResistance, AttributeModifier.Operation.ADDITION)
+-            );
++            builder.put(Attributes.KNOCKBACK_RESISTANCE, new AttributeModifier(uuid, "Armor knockback resistance", (double) this.knockbackResistance, AttributeModifier.Operation.ADDITION));
+         }
+ 
+         this.defaultModifiers = builder.build();
+@@ -109,7 +139,7 @@
+     }
+ 
+     @Override
+-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
++    public InteractionResultHolder<ItemStack> use(Level level, Player player, EnumHand hand) {
+         return this.swapWithEquipmentSlot(this, level, player, hand);
+     }
+ 
+@@ -137,17 +167,15 @@
+     }
+ 
+     public static enum Type {
+-        HELMET(EquipmentSlot.HEAD, "helmet"),
+-        CHESTPLATE(EquipmentSlot.CHEST, "chestplate"),
+-        LEGGINGS(EquipmentSlot.LEGS, "leggings"),
+-        BOOTS(EquipmentSlot.FEET, "boots");
+ 
++        HELMET(EquipmentSlot.HEAD, "helmet"), CHESTPLATE(EquipmentSlot.CHEST, "chestplate"), LEGGINGS(EquipmentSlot.LEGS, "leggings"), BOOTS(EquipmentSlot.FEET, "boots");
++
+         private final EquipmentSlot slot;
+         private final String name;
+ 
+-        private Type(EquipmentSlot slot, String name) {
+-            this.slot = slot;
+-            this.name = name;
++        private Type(EquipmentSlot enumitemslot, String s) {
++            this.slot = enumitemslot;
++            this.name = s;
+         }
+ 
+         public EquipmentSlot getSlot() {

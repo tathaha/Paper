@@ -1,0 +1,187 @@
+--- a/net/minecraft/world/item/ArmorItem.java
++++ b/net/minecraft/world/item/ArmorItem.java
+@@ -9,11 +9,11 @@
+ import net.minecraft.Util;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.dispenser.BlockSource;
+ import net.minecraft.core.dispenser.DefaultDispenseItemBehavior;
+ import net.minecraft.core.dispenser.DispenseItemBehavior;
++import net.minecraft.core.dispenser.SourceBlock;
+ import net.minecraft.sounds.SoundEvent;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResultHolder;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EquipmentSlot;
+@@ -26,6 +26,11 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.DispenserBlock;
+ import net.minecraft.world.phys.AABB;
++// CraftBukkit start
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.craftbukkit.inventory.CraftItemStack;
++import org.bukkit.event.block.BlockDispenseArmorEvent;
++// CraftBukkit end
+ 
+ public class ArmorItem extends Item implements Equipable {
+ 
+@@ -37,9 +42,8 @@
+     });
+     public static final DispenseItemBehavior DISPENSE_ITEM_BEHAVIOR = new DefaultDispenseItemBehavior() {
+         @Override
+-        @Override
+-        protected ItemStack execute(BlockSource blocksource, ItemStack itemstack) {
+-            return ArmorItem.dispenseArmor(blocksource, itemstack) ? itemstack : super.execute(blocksource, itemstack);
++        protected ItemStack execute(SourceBlock sourceblock, ItemStack itemstack) {
++            return ArmorItem.dispenseArmor(sourceblock, itemstack) ? itemstack : super.execute(sourceblock, itemstack);
+         }
+     };
+     protected final ArmorItem.Type type;
+@@ -49,41 +53,67 @@
+     protected final ArmorMaterial material;
+     private final Multimap<Attribute, AttributeModifier> defaultModifiers;
+ 
+-    public static boolean dispenseArmor(BlockSource blocksource, ItemStack itemstack) {
+-        BlockPos blockpos = blocksource.pos().relative((Direction) blocksource.state().getValue(DispenserBlock.FACING));
+-        List<LivingEntity> list = blocksource.level().getEntitiesOfClass(LivingEntity.class, new AABB(blockpos), EntitySelector.NO_SPECTATORS.and(new EntitySelector.MobCanWearArmorEntitySelector(itemstack)));
++    public static boolean dispenseArmor(SourceBlock sourceblock, ItemStack itemstack) {
++        BlockPos blockposition = sourceblock.pos().relative((Direction) sourceblock.state().getValue(DispenserBlock.FACING));
++        List<LivingEntity> list = sourceblock.level().getEntitiesOfClass(LivingEntity.class, new AABB(blockposition), EntitySelector.NO_SPECTATORS.and(new EntitySelector.MobCanWearArmorEntitySelector(itemstack)));
+ 
+         if (list.isEmpty()) {
+             return false;
+         } else {
+-            LivingEntity livingentity = (LivingEntity) list.get(0);
+-            EquipmentSlot equipmentslot = Mob.getEquipmentSlotForItem(itemstack);
++            LivingEntity entityliving = (LivingEntity) list.get(0);
++            EquipmentSlot enumitemslot = Mob.getEquipmentSlotForItem(itemstack);
+             ItemStack itemstack1 = itemstack.split(1);
++            // CraftBukkit start
++            Level world = sourceblock.level();
++            org.bukkit.block.Block block = CraftBlock.at(world, sourceblock.pos());
++            CraftItemStack craftItem = CraftItemStack.asCraftMirror(itemstack1);
+ 
+-            livingentity.setItemSlot(equipmentslot, itemstack1);
+-            if (livingentity instanceof Mob) {
+-                ((Mob) livingentity).setDropChance(equipmentslot, 2.0F);
+-                ((Mob) livingentity).setPersistenceRequired();
++            BlockDispenseArmorEvent event = new BlockDispenseArmorEvent(block, craftItem.clone(), (org.bukkit.craftbukkit.entity.CraftLivingEntity) entityliving.getBukkitEntity());
++            if (!DispenserBlock.eventFired) {
++                world.getCraftServer().getPluginManager().callEvent(event);
+             }
+ 
++            if (event.isCancelled()) {
++                itemstack.grow(1);
++                return false;
++            }
++
++            if (!event.getItem().equals(craftItem)) {
++                itemstack.grow(1);
++                // Chain to handler for new item
++                ItemStack eventStack = CraftItemStack.asNMSCopy(event.getItem());
++                DispenseItemBehavior idispensebehavior = (DispenseItemBehavior) DispenserBlock.DISPENSER_REGISTRY.get(eventStack.getItem());
++                if (idispensebehavior != DispenseItemBehavior.NOOP && idispensebehavior != ArmorItem.DISPENSE_ITEM_BEHAVIOR) {
++                    idispensebehavior.dispense(sourceblock, eventStack);
++                    return true;
++                }
++            }
++
++            entityliving.setItemSlot(enumitemslot, CraftItemStack.asNMSCopy(event.getItem()));
++            // CraftBukkit end
++            if (entityliving instanceof Mob) {
++                ((Mob) entityliving).setDropChance(enumitemslot, 2.0F);
++                ((Mob) entityliving).setPersistenceRequired();
++            }
++
+             return true;
+         }
+     }
+ 
+-    public ArmorItem(ArmorMaterial armormaterial, ArmorItem.Type armoritem_type, Item.Properties item_properties) {
+-        super(item_properties.defaultDurability(armormaterial.getDurabilityForType(armoritem_type)));
+-        this.material = armormaterial;
+-        this.type = armoritem_type;
+-        this.defense = armormaterial.getDefenseForType(armoritem_type);
+-        this.toughness = armormaterial.getToughness();
+-        this.knockbackResistance = armormaterial.getKnockbackResistance();
++    public ArmorItem(ArmorMaterial material, ArmorItem.Type type, Item.Properties properties) {
++        super(properties.defaultDurability(material.getDurabilityForType(type)));
++        this.material = material;
++        this.type = type;
++        this.defense = material.getDefenseForType(type);
++        this.toughness = material.getToughness();
++        this.knockbackResistance = material.getKnockbackResistance();
+         DispenserBlock.registerBehavior(this, ArmorItem.DISPENSE_ITEM_BEHAVIOR);
+         Builder<Attribute, AttributeModifier> builder = ImmutableMultimap.builder();
+-        UUID uuid = (UUID) ArmorItem.ARMOR_MODIFIER_UUID_PER_TYPE.get(armoritem_type);
++        UUID uuid = (UUID) ArmorItem.ARMOR_MODIFIER_UUID_PER_TYPE.get(type);
+ 
+         builder.put(Attributes.ARMOR, new AttributeModifier(uuid, "Armor modifier", (double) this.defense, AttributeModifier.Operation.ADDITION));
+         builder.put(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(uuid, "Armor toughness", (double) this.toughness, AttributeModifier.Operation.ADDITION));
+-        if (armormaterial == ArmorMaterials.NETHERITE) {
++        if (material == ArmorMaterials.NETHERITE) {
+             builder.put(Attributes.KNOCKBACK_RESISTANCE, new AttributeModifier(uuid, "Armor knockback resistance", (double) this.knockbackResistance, AttributeModifier.Operation.ADDITION));
+         }
+ 
+@@ -95,7 +125,6 @@
+     }
+ 
+     @Override
+-    @Override
+     public int getEnchantmentValue() {
+         return this.material.getEnchantmentValue();
+     }
+@@ -105,21 +134,18 @@
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isValidRepairItem(ItemStack itemstack, ItemStack itemstack1) {
+-        return this.material.getRepairIngredient().test(itemstack1) || super.isValidRepairItem(itemstack, itemstack1);
++    public boolean isValidRepairItem(ItemStack toRepair, ItemStack repair) {
++        return this.material.getRepairIngredient().test(repair) || super.isValidRepairItem(toRepair, repair);
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand interactionhand) {
+-        return this.swapWithEquipmentSlot(this, level, player, interactionhand);
++    public InteractionResultHolder<ItemStack> use(Level level, Player player, EnumHand hand) {
++        return this.swapWithEquipmentSlot(this, level, player, hand);
+     }
+ 
+     @Override
+-    @Override
+-    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot equipmentslot) {
+-        return equipmentslot == this.type.getSlot() ? this.defaultModifiers : super.getDefaultAttributeModifiers(equipmentslot);
++    public Multimap<Attribute, AttributeModifier> getDefaultAttributeModifiers(EquipmentSlot equipmentSlot) {
++        return equipmentSlot == this.type.getSlot() ? this.defaultModifiers : super.getDefaultAttributeModifiers(equipmentSlot);
+     }
+ 
+     public int getDefense() {
+@@ -131,13 +157,11 @@
+     }
+ 
+     @Override
+-    @Override
+     public EquipmentSlot getEquipmentSlot() {
+         return this.type.getSlot();
+     }
+ 
+     @Override
+-    @Override
+     public SoundEvent getEquipSound() {
+         return this.getMaterial().getEquipSound();
+     }
+@@ -149,8 +173,8 @@
+         private final EquipmentSlot slot;
+         private final String name;
+ 
+-        private Type(EquipmentSlot equipmentslot, String s) {
+-            this.slot = equipmentslot;
++        private Type(EquipmentSlot enumitemslot, String s) {
++            this.slot = enumitemslot;
+             this.name = s;
+         }
+ 

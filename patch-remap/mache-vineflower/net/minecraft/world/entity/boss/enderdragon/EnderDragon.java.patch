@@ -1,0 +1,1290 @@
+--- a/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
++++ b/net/minecraft/world/entity/boss/enderdragon/EnderDragon.java
+@@ -2,6 +2,7 @@
+ 
+ import com.google.common.collect.Lists;
+ import com.mojang.logging.LogUtils;
++import java.util.Iterator;
+ import java.util.List;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+@@ -24,10 +25,10 @@
+ import net.minecraft.world.entity.EntityDimensions;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.entity.ExperienceOrb;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.Mob;
+-import net.minecraft.world.entity.MoverType;
+ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+ import net.minecraft.world.entity.ai.attributes.Attributes;
+ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+@@ -35,11 +36,11 @@
+ import net.minecraft.world.entity.boss.enderdragon.phases.DragonPhaseInstance;
+ import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhase;
+ import net.minecraft.world.entity.boss.enderdragon.phases.EnderDragonPhaseManager;
+-import net.minecraft.world.entity.monster.Enemy;
++import net.minecraft.world.entity.monster.IMonster;
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.level.GameRules;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.dimension.end.EndDragonFight;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ import net.minecraft.world.level.levelgen.Heightmap;
+@@ -47,15 +48,28 @@
+ import net.minecraft.world.level.pathfinder.BinaryHeap;
+ import net.minecraft.world.level.pathfinder.Node;
+ import net.minecraft.world.level.pathfinder.Path;
+-import net.minecraft.world.phys.AABB;
+-import net.minecraft.world.phys.Vec3;
+ import org.joml.Vector3f;
+ import org.slf4j.Logger;
+ 
+-public class EnderDragon extends Mob implements Enemy {
++// CraftBukkit start
++import net.minecraft.world.item.ItemStack;
++import net.minecraft.world.level.Explosion;
++import net.minecraft.world.level.block.Block;
++import net.minecraft.world.level.block.entity.BlockEntity;
++import net.minecraft.world.level.storage.loot.LootParams;
++import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
++import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.Vec3;
++import org.bukkit.craftbukkit.block.CraftBlock;
++import org.bukkit.event.entity.EntityExplodeEvent;
++import org.bukkit.event.entity.EntityRegainHealthEvent;
++// CraftBukkit end
++
++public class EnderDragon extends Mob implements IMonster {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+     public static final EntityDataAccessor<Integer> DATA_PHASE = SynchedEntityData.defineId(EnderDragon.class, EntityDataSerializers.INT);
+-    private static final TargetingConditions CRYSTAL_DESTROY_TARGETING = TargetingConditions.forCombat().range(64.0);
++    private static final TargetingConditions CRYSTAL_DESTROY_TARGETING = TargetingConditions.forCombat().range(64.0D);
+     private static final int GROWL_INTERVAL_MIN = 200;
+     private static final int GROWL_INTERVAL_MAX = 400;
+     private static final float SITTING_ALLOWED_DAMAGE_PERCENTAGE = 0.25F;
+@@ -63,7 +77,7 @@
+     private static final String DRAGON_PHASE_KEY = "DragonPhase";
+     public final double[][] positions = new double[64][3];
+     public int posPointer = -1;
+-    private final EnderDragonPart[] subEntities;
++    public final EnderDragonPart[] subEntities;
+     public final EnderDragonPart head;
+     private final EnderDragonPart neck;
+     private final EnderDragonPart body;
+@@ -81,16 +95,22 @@
+     public EndCrystal nearestCrystal;
+     @Nullable
+     private EndDragonFight dragonFight;
+-    private BlockPos fightOrigin = BlockPos.ZERO;
++    private BlockPos fightOrigin;
+     private final EnderDragonPhaseManager phaseManager;
+-    private int growlTime = 100;
++    private int growlTime;
+     private float sittingDamageReceived;
+-    private final Node[] nodes = new Node[24];
+-    private final int[] nodeAdjacency = new int[24];
+-    private final BinaryHeap openSet = new BinaryHeap();
++    private final Node[] nodes;
++    private final int[] nodeAdjacency;
++    private final BinaryHeap openSet;
++    private final Explosion explosionSource; // CraftBukkit - reusable source for CraftTNTPrimed.getSource()
+ 
+     public EnderDragon(EntityType<? extends EnderDragon> entityType, Level level) {
+         super(EntityType.ENDER_DRAGON, level);
++        this.fightOrigin = BlockPos.ZERO;
++        this.growlTime = 100;
++        this.nodes = new Node[24];
++        this.nodeAdjacency = new int[24];
++        this.openSet = new BinaryHeap();
+         this.head = new EnderDragonPart(this, "head", 1.0F, 1.0F);
+         this.neck = new EnderDragonPart(this, "neck", 3.0F, 3.0F);
+         this.body = new EnderDragonPart(this, "body", 5.0F, 3.0F);
+@@ -104,6 +124,7 @@
+         this.noPhysics = true;
+         this.noCulling = true;
+         this.phaseManager = new EnderDragonPhaseManager(this);
++        this.explosionSource = new Explosion(level, this, null, null, Double.NaN, Double.NaN, Double.NaN, Float.NaN, true, Explosion.Effect.DESTROY, ParticleTypes.EXPLOSION, ParticleTypes.EXPLOSION_EMITTER, SoundEvents.GENERIC_EXPLODE); // CraftBukkit
+     }
+ 
+     public void setDragonFight(EndDragonFight dragonFight) {
+@@ -119,37 +140,29 @@
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+-        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 200.0);
++        return Mob.createMobAttributes().add(Attributes.MAX_HEALTH, 200.0D);
+     }
+ 
+     @Override
+     public boolean isFlapping() {
+-        float cos = Mth.cos(this.flapTime * (float) (Math.PI * 2));
+-        float cos1 = Mth.cos(this.oFlapTime * (float) (Math.PI * 2));
+-        return cos1 <= -0.3F && cos >= -0.3F;
++        float f = Mth.cos(this.flapTime * 6.2831855F);
++        float f1 = Mth.cos(this.oFlapTime * 6.2831855F);
++
++        return f1 <= -0.3F && f >= -0.3F;
+     }
+ 
+     @Override
+     public void onFlap() {
+         if (this.level().isClientSide && !this.isSilent()) {
+-            this.level()
+-                .playLocalSound(
+-                    this.getX(),
+-                    this.getY(),
+-                    this.getZ(),
+-                    SoundEvents.ENDER_DRAGON_FLAP,
+-                    this.getSoundSource(),
+-                    5.0F,
+-                    0.8F + this.random.nextFloat() * 0.3F,
+-                    false
+-                );
++            this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ENDER_DRAGON_FLAP, this.getSoundSource(), 5.0F, 0.8F + this.random.nextFloat() * 0.3F, false);
+         }
++
+     }
+ 
+     @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+-        this.getEntityData().define(DATA_PHASE, EnderDragonPhase.HOVERING.getId());
++        this.getEntityData().define(EnderDragon.DATA_PHASE, EnderDragonPhase.HOVERING.getId());
+     }
+ 
+     public double[] getLatencyPos(int bufferIndexOffset, float partialTicks) {
+@@ -158,17 +171,18 @@
+         }
+ 
+         partialTicks = 1.0F - partialTicks;
+-        int i = this.posPointer - bufferIndexOffset & 63;
+-        int i1 = this.posPointer - bufferIndexOffset - 1 & 63;
+-        double[] doubles = new double[3];
+-        double d = this.positions[i][0];
+-        double d1 = Mth.wrapDegrees(this.positions[i1][0] - d);
+-        doubles[0] = d + d1 * (double)partialTicks;
+-        d = this.positions[i][1];
+-        d1 = this.positions[i1][1] - d;
+-        doubles[1] = d + d1 * (double)partialTicks;
+-        doubles[2] = Mth.lerp((double)partialTicks, this.positions[i][2], this.positions[i1][2]);
+-        return doubles;
++        int j = this.posPointer - bufferIndexOffset & 63;
++        int k = this.posPointer - bufferIndexOffset - 1 & 63;
++        double[] adouble = new double[3];
++        double d0 = this.positions[j][0];
++        double d1 = Mth.wrapDegrees(this.positions[k][0] - d0);
++
++        adouble[0] = d0 + d1 * (double) partialTicks;
++        d0 = this.positions[j][1];
++        d1 = this.positions[k][1] - d0;
++        adouble[1] = d0 + d1 * (double) partialTicks;
++        adouble[2] = Mth.lerp((double) partialTicks, this.positions[j][2], this.positions[k][2]);
++        return adouble;
+     }
+ 
+     @Override
+@@ -177,45 +191,46 @@
+         if (this.level().isClientSide) {
+             this.setHealth(this.getHealth());
+             if (!this.isSilent() && !this.phaseManager.getCurrentPhase().isSitting() && --this.growlTime < 0) {
+-                this.level()
+-                    .playLocalSound(
+-                        this.getX(),
+-                        this.getY(),
+-                        this.getZ(),
+-                        SoundEvents.ENDER_DRAGON_GROWL,
+-                        this.getSoundSource(),
+-                        2.5F,
+-                        0.8F + this.random.nextFloat() * 0.3F,
+-                        false
+-                    );
++                this.level().playLocalSound(this.getX(), this.getY(), this.getZ(), SoundEvents.ENDER_DRAGON_GROWL, this.getSoundSource(), 2.5F, 0.8F + this.random.nextFloat() * 0.3F, false);
+                 this.growlTime = 200 + this.random.nextInt(200);
+             }
+         }
+ 
+-        if (this.dragonFight == null && this.level() instanceof ServerLevel serverLevel) {
+-            EndDragonFight dragonFight = serverLevel.getDragonFight();
+-            if (dragonFight != null && this.getUUID().equals(dragonFight.getDragonUUID())) {
+-                this.dragonFight = dragonFight;
++        if (this.dragonFight == null) {
++            Level world = this.level();
++
++            if (world instanceof ServerLevel) {
++                ServerLevel worldserver = (ServerLevel) world;
++                EndDragonFight enderdragonbattle = worldserver.getDragonFight();
++
++                if (enderdragonbattle != null && this.getUUID().equals(enderdragonbattle.getDragonUUID())) {
++                    this.dragonFight = enderdragonbattle;
++                }
+             }
+         }
+ 
+         this.oFlapTime = this.flapTime;
++        float f;
++
+         if (this.isDeadOrDying()) {
+-            float f = (this.random.nextFloat() - 0.5F) * 8.0F;
+-            float f1 = (this.random.nextFloat() - 0.5F) * 4.0F;
++            float f1 = (this.random.nextFloat() - 0.5F) * 8.0F;
++
++            f = (this.random.nextFloat() - 0.5F) * 4.0F;
+             float f2 = (this.random.nextFloat() - 0.5F) * 8.0F;
+-            this.level().addParticle(ParticleTypes.EXPLOSION, this.getX() + (double)f, this.getY() + 2.0 + (double)f1, this.getZ() + (double)f2, 0.0, 0.0, 0.0);
++
++            this.level().addParticle(ParticleTypes.EXPLOSION, this.getX() + (double) f1, this.getY() + 2.0D + (double) f, this.getZ() + (double) f2, 0.0D, 0.0D, 0.0D);
+         } else {
+             this.checkCrystals();
+-            Vec3 deltaMovement = this.getDeltaMovement();
+-            float f1 = 0.2F / ((float)deltaMovement.horizontalDistance() * 10.0F + 1.0F);
+-            float var28 = f1 * (float)Math.pow(2.0, deltaMovement.y);
++            Vec3 vec3d = this.getDeltaMovement();
++
++            f = 0.2F / ((float) vec3d.horizontalDistance() * 10.0F + 1.0F);
++            f *= (float) Math.pow(2.0D, vec3d.y);
+             if (this.phaseManager.getCurrentPhase().isSitting()) {
+                 this.flapTime += 0.1F;
+             } else if (this.inWall) {
+-                this.flapTime += var28 * 0.5F;
++                this.flapTime += f * 0.5F;
+             } else {
+-                this.flapTime += var28;
++                this.flapTime += f;
+             }
+ 
+             this.setYRot(Mth.wrapDegrees(this.getYRot()));
+@@ -223,8 +238,8 @@
+                 this.flapTime = 0.5F;
+             } else {
+                 if (this.posPointer < 0) {
+-                    for (int i = 0; i < this.positions.length; i++) {
+-                        this.positions[i][0] = (double)this.getYRot();
++                    for (int i = 0; i < this.positions.length; ++i) {
++                        this.positions[i][0] = (double) this.getYRot();
+                         this.positions[i][1] = this.getY();
+                     }
+                 }
+@@ -233,163 +248,163 @@
+                     this.posPointer = 0;
+                 }
+ 
+-                this.positions[this.posPointer][0] = (double)this.getYRot();
++                this.positions[this.posPointer][0] = (double) this.getYRot();
+                 this.positions[this.posPointer][1] = this.getY();
++                float f3;
++                float f4;
++                float f5;
++
+                 if (this.level().isClientSide) {
+                     if (this.lerpSteps > 0) {
+                         this.lerpPositionAndRotationStep(this.lerpSteps, this.lerpX, this.lerpY, this.lerpZ, this.lerpYRot, this.lerpXRot);
+-                        this.lerpSteps--;
++                        --this.lerpSteps;
+                     }
+ 
+                     this.phaseManager.getCurrentPhase().doClientTick();
+                 } else {
+-                    DragonPhaseInstance currentPhase = this.phaseManager.getCurrentPhase();
+-                    currentPhase.doServerTick();
+-                    if (this.phaseManager.getCurrentPhase() != currentPhase) {
+-                        currentPhase = this.phaseManager.getCurrentPhase();
+-                        currentPhase.doServerTick();
++                    DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
++
++                    idragoncontroller.doServerTick();
++                    if (this.phaseManager.getCurrentPhase() != idragoncontroller) {
++                        idragoncontroller = this.phaseManager.getCurrentPhase();
++                        idragoncontroller.doServerTick();
+                     }
+ 
+-                    Vec3 flyTargetLocation = currentPhase.getFlyTargetLocation();
+-                    if (flyTargetLocation != null) {
+-                        double d = flyTargetLocation.x - this.getX();
+-                        double d1 = flyTargetLocation.y - this.getY();
+-                        double d2 = flyTargetLocation.z - this.getZ();
+-                        double d3 = d * d + d1 * d1 + d2 * d2;
+-                        float flySpeed = currentPhase.getFlySpeed();
+-                        double squareRoot = Math.sqrt(d * d + d2 * d2);
+-                        if (squareRoot > 0.0) {
+-                            d1 = Mth.clamp(d1 / squareRoot, (double)(-flySpeed), (double)flySpeed);
++                    Vec3 vec3d1 = idragoncontroller.getFlyTargetLocation();
++
++                    if (vec3d1 != null && idragoncontroller.getPhase() != EnderDragonPhase.HOVERING) { // CraftBukkit - Don't move when hovering
++                        double d0 = vec3d1.x - this.getX();
++                        double d1 = vec3d1.y - this.getY();
++                        double d2 = vec3d1.z - this.getZ();
++                        double d3 = d0 * d0 + d1 * d1 + d2 * d2;
++                        float f6 = idragoncontroller.getFlySpeed();
++                        double d4 = Math.sqrt(d0 * d0 + d2 * d2);
++
++                        if (d4 > 0.0D) {
++                            d1 = Mth.clamp(d1 / d4, (double) (-f6), (double) f6);
+                         }
+ 
+-                        this.setDeltaMovement(this.getDeltaMovement().add(0.0, d1 * 0.01, 0.0));
++                        this.setDeltaMovement(this.getDeltaMovement().add(0.0D, d1 * 0.01D, 0.0D));
+                         this.setYRot(Mth.wrapDegrees(this.getYRot()));
+-                        Vec3 vec3 = flyTargetLocation.subtract(this.getX(), this.getY(), this.getZ()).normalize();
+-                        Vec3 vec31 = new Vec3(
+-                                (double)Mth.sin(this.getYRot() * (float) (Math.PI / 180.0)),
+-                                this.getDeltaMovement().y,
+-                                (double)(-Mth.cos(this.getYRot() * (float) (Math.PI / 180.0)))
+-                            )
+-                            .normalize();
+-                        float max = Math.max(((float)vec31.dot(vec3) + 0.5F) / 1.5F, 0.0F);
+-                        if (Math.abs(d) > 1.0E-5F || Math.abs(d2) > 1.0E-5F) {
+-                            float f3 = Mth.clamp(Mth.wrapDegrees(180.0F - (float)Mth.atan2(d, d2) * (180.0F / (float)Math.PI) - this.getYRot()), -50.0F, 50.0F);
++                        Vec3 vec3d2 = vec3d1.subtract(this.getX(), this.getY(), this.getZ()).normalize();
++                        Vec3 vec3d3 = (new Vec3((double) Mth.sin(this.getYRot() * 0.017453292F), this.getDeltaMovement().y, (double) (-Mth.cos(this.getYRot() * 0.017453292F)))).normalize();
++
++                        f3 = Math.max(((float) vec3d3.dot(vec3d2) + 0.5F) / 1.5F, 0.0F);
++                        if (Math.abs(d0) > 9.999999747378752E-6D || Math.abs(d2) > 9.999999747378752E-6D) {
++                            f4 = Mth.clamp(Mth.wrapDegrees(180.0F - (float) Mth.atan2(d0, d2) * 57.295776F - this.getYRot()), -50.0F, 50.0F);
+                             this.yRotA *= 0.8F;
+-                            this.yRotA = this.yRotA + f3 * currentPhase.getTurnSpeed();
++                            this.yRotA += f4 * idragoncontroller.getTurnSpeed();
+                             this.setYRot(this.getYRot() + this.yRotA * 0.1F);
+                         }
+ 
+-                        float f3 = (float)(2.0 / (d3 + 1.0));
+-                        float f4 = 0.06F;
+-                        this.moveRelative(0.06F * (max * f3 + (1.0F - f3)), new Vec3(0.0, 0.0, -1.0));
++                        f4 = (float) (2.0D / (d3 + 1.0D));
++                        f5 = 0.06F;
++                        this.moveRelative(0.06F * (f3 * f4 + (1.0F - f4)), new Vec3(0.0D, 0.0D, -1.0D));
+                         if (this.inWall) {
+-                            this.move(MoverType.SELF, this.getDeltaMovement().scale(0.8F));
++                            this.move(EnumMoveType.SELF, this.getDeltaMovement().scale(0.800000011920929D));
+                         } else {
+-                            this.move(MoverType.SELF, this.getDeltaMovement());
++                            this.move(EnumMoveType.SELF, this.getDeltaMovement());
+                         }
+ 
+-                        Vec3 vec32 = this.getDeltaMovement().normalize();
+-                        double d4 = 0.8 + 0.15 * (vec32.dot(vec31) + 1.0) / 2.0;
+-                        this.setDeltaMovement(this.getDeltaMovement().multiply(d4, 0.91F, d4));
++                        Vec3 vec3d4 = this.getDeltaMovement().normalize();
++                        double d5 = 0.8D + 0.15D * (vec3d4.dot(vec3d3) + 1.0D) / 2.0D;
++
++                        this.setDeltaMovement(this.getDeltaMovement().multiply(d5, 0.9100000262260437D, d5));
+                     }
+                 }
+ 
+                 this.yBodyRot = this.getYRot();
+-                Vec3[] vec3s = new Vec3[this.subEntities.length];
++                Vec3[] avec3d = new Vec3[this.subEntities.length];
+ 
+-                for (int i1 = 0; i1 < this.subEntities.length; i1++) {
+-                    vec3s[i1] = new Vec3(this.subEntities[i1].getX(), this.subEntities[i1].getY(), this.subEntities[i1].getZ());
++                for (int j = 0; j < this.subEntities.length; ++j) {
++                    avec3d[j] = new Vec3(this.subEntities[j].getX(), this.subEntities[j].getY(), this.subEntities[j].getZ());
+                 }
+ 
+-                float f5 = (float)(this.getLatencyPos(5, 1.0F)[1] - this.getLatencyPos(10, 1.0F)[1]) * 10.0F * (float) (Math.PI / 180.0);
+-                float cos = Mth.cos(f5);
+-                float sin = Mth.sin(f5);
+-                float f6 = this.getYRot() * (float) (Math.PI / 180.0);
+-                float sin1 = Mth.sin(f6);
+-                float cos1 = Mth.cos(f6);
+-                this.tickPart(this.body, (double)(sin1 * 0.5F), 0.0, (double)(-cos1 * 0.5F));
+-                this.tickPart(this.wing1, (double)(cos1 * 4.5F), 2.0, (double)(sin1 * 4.5F));
+-                this.tickPart(this.wing2, (double)(cos1 * -4.5F), 2.0, (double)(sin1 * -4.5F));
++                float f7 = (float) (this.getLatencyPos(5, 1.0F)[1] - this.getLatencyPos(10, 1.0F)[1]) * 10.0F * 0.017453292F;
++                float f8 = Mth.cos(f7);
++                float f9 = Mth.sin(f7);
++                float f10 = this.getYRot() * 0.017453292F;
++                float f11 = Mth.sin(f10);
++                float f12 = Mth.cos(f10);
++
++                this.tickPart(this.body, (double) (f11 * 0.5F), 0.0D, (double) (-f12 * 0.5F));
++                this.tickPart(this.wing1, (double) (f12 * 4.5F), 2.0D, (double) (f11 * 4.5F));
++                this.tickPart(this.wing2, (double) (f12 * -4.5F), 2.0D, (double) (f11 * -4.5F));
+                 if (!this.level().isClientSide && this.hurtTime == 0) {
+-                    this.knockBack(
+-                        this.level()
+-                            .getEntities(this, this.wing1.getBoundingBox().inflate(4.0, 2.0, 4.0).move(0.0, -2.0, 0.0), EntitySelector.NO_CREATIVE_OR_SPECTATOR)
+-                    );
+-                    this.knockBack(
+-                        this.level()
+-                            .getEntities(this, this.wing2.getBoundingBox().inflate(4.0, 2.0, 4.0).move(0.0, -2.0, 0.0), EntitySelector.NO_CREATIVE_OR_SPECTATOR)
+-                    );
+-                    this.hurt(this.level().getEntities(this, this.head.getBoundingBox().inflate(1.0), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
+-                    this.hurt(this.level().getEntities(this, this.neck.getBoundingBox().inflate(1.0), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
++                    this.knockBack(this.level().getEntities((Entity) this, this.wing1.getBoundingBox().inflate(4.0D, 2.0D, 4.0D).move(0.0D, -2.0D, 0.0D), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
++                    this.knockBack(this.level().getEntities((Entity) this, this.wing2.getBoundingBox().inflate(4.0D, 2.0D, 4.0D).move(0.0D, -2.0D, 0.0D), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
++                    this.hurt(this.level().getEntities((Entity) this, this.head.getBoundingBox().inflate(1.0D), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
++                    this.hurt(this.level().getEntities((Entity) this, this.neck.getBoundingBox().inflate(1.0D), EntitySelector.NO_CREATIVE_OR_SPECTATOR));
+                 }
+ 
+-                float sin2 = Mth.sin(this.getYRot() * (float) (Math.PI / 180.0) - this.yRotA * 0.01F);
+-                float cos2 = Mth.cos(this.getYRot() * (float) (Math.PI / 180.0) - this.yRotA * 0.01F);
+-                float headYOffset = this.getHeadYOffset();
+-                this.tickPart(this.head, (double)(sin2 * 6.5F * cos), (double)(headYOffset + sin * 6.5F), (double)(-cos2 * 6.5F * cos));
+-                this.tickPart(this.neck, (double)(sin2 * 5.5F * cos), (double)(headYOffset + sin * 5.5F), (double)(-cos2 * 5.5F * cos));
+-                double[] latencyPos = this.getLatencyPos(5, 1.0F);
++                float f13 = Mth.sin(this.getYRot() * 0.017453292F - this.yRotA * 0.01F);
++                float f14 = Mth.cos(this.getYRot() * 0.017453292F - this.yRotA * 0.01F);
++                float f15 = this.getHeadYOffset();
+ 
+-                for (int i2 = 0; i2 < 3; i2++) {
+-                    EnderDragonPart enderDragonPart = null;
+-                    if (i2 == 0) {
+-                        enderDragonPart = this.tail1;
++                this.tickPart(this.head, (double) (f13 * 6.5F * f8), (double) (f15 + f9 * 6.5F), (double) (-f14 * 6.5F * f8));
++                this.tickPart(this.neck, (double) (f13 * 5.5F * f8), (double) (f15 + f9 * 5.5F), (double) (-f14 * 5.5F * f8));
++                double[] adouble = this.getLatencyPos(5, 1.0F);
++
++                int k;
++
++                for (k = 0; k < 3; ++k) {
++                    EnderDragonPart entitycomplexpart = null;
++
++                    if (k == 0) {
++                        entitycomplexpart = this.tail1;
+                     }
+ 
+-                    if (i2 == 1) {
+-                        enderDragonPart = this.tail2;
++                    if (k == 1) {
++                        entitycomplexpart = this.tail2;
+                     }
+ 
+-                    if (i2 == 2) {
+-                        enderDragonPart = this.tail3;
++                    if (k == 2) {
++                        entitycomplexpart = this.tail3;
+                     }
+ 
+-                    double[] latencyPos1 = this.getLatencyPos(12 + i2 * 2, 1.0F);
+-                    float f7 = this.getYRot() * (float) (Math.PI / 180.0) + this.rotWrap(latencyPos1[0] - latencyPos[0]) * (float) (Math.PI / 180.0);
+-                    float maxx = Mth.sin(f7);
+-                    float f3 = Mth.cos(f7);
+-                    float f4 = 1.5F;
+-                    float f8 = (float)(i2 + 1) * 2.0F;
+-                    this.tickPart(
+-                        enderDragonPart,
+-                        (double)(-(sin1 * 1.5F + maxx * f8) * cos),
+-                        latencyPos1[1] - latencyPos[1] - (double)((f8 + 1.5F) * sin) + 1.5,
+-                        (double)((cos1 * 1.5F + f3 * f8) * cos)
+-                    );
++                    double[] adouble1 = this.getLatencyPos(12 + k * 2, 1.0F);
++                    float f16 = this.getYRot() * 0.017453292F + this.rotWrap(adouble1[0] - adouble[0]) * 0.017453292F;
++
++                    f3 = Mth.sin(f16);
++                    f4 = Mth.cos(f16);
++                    f5 = 1.5F;
++                    float f17 = (float) (k + 1) * 2.0F;
++
++                    this.tickPart(entitycomplexpart, (double) (-(f11 * 1.5F + f3 * f17) * f8), adouble1[1] - adouble[1] - (double) ((f17 + 1.5F) * f9) + 1.5D, (double) ((f12 * 1.5F + f4 * f17) * f8));
+                 }
+ 
+                 if (!this.level().isClientSide) {
+-                    this.inWall = this.checkWalls(this.head.getBoundingBox())
+-                        | this.checkWalls(this.neck.getBoundingBox())
+-                        | this.checkWalls(this.body.getBoundingBox());
++                    this.inWall = this.checkWalls(this.head.getBoundingBox()) | this.checkWalls(this.neck.getBoundingBox()) | this.checkWalls(this.body.getBoundingBox());
+                     if (this.dragonFight != null) {
+                         this.dragonFight.updateDragon(this);
+                     }
+                 }
+ 
+-                for (int i2 = 0; i2 < this.subEntities.length; i2++) {
+-                    this.subEntities[i2].xo = vec3s[i2].x;
+-                    this.subEntities[i2].yo = vec3s[i2].y;
+-                    this.subEntities[i2].zo = vec3s[i2].z;
+-                    this.subEntities[i2].xOld = vec3s[i2].x;
+-                    this.subEntities[i2].yOld = vec3s[i2].y;
+-                    this.subEntities[i2].zOld = vec3s[i2].z;
++                for (k = 0; k < this.subEntities.length; ++k) {
++                    this.subEntities[k].xo = avec3d[k].x;
++                    this.subEntities[k].yo = avec3d[k].y;
++                    this.subEntities[k].zo = avec3d[k].z;
++                    this.subEntities[k].xOld = avec3d[k].x;
++                    this.subEntities[k].yOld = avec3d[k].y;
++                    this.subEntities[k].zOld = avec3d[k].z;
+                 }
++
+             }
+         }
+     }
+ 
+-    private void tickPart(EnderDragonPart part, double offsetX, double offsetY, double offsetZ) {
+-        part.setPos(this.getX() + offsetX, this.getY() + offsetY, this.getZ() + offsetZ);
++    private void tickPart(EnderDragonPart part, double offsetX, double d1, double offsetY) {
++        part.setPos(this.getX() + offsetX, this.getY() + d1, this.getZ() + offsetY);
+     }
+ 
+     private float getHeadYOffset() {
+         if (this.phaseManager.getCurrentPhase().isSitting()) {
+             return -1.0F;
+         } else {
+-            double[] latencyPos = this.getLatencyPos(5, 1.0F);
+-            double[] latencyPos1 = this.getLatencyPos(0, 1.0F);
+-            return (float)(latencyPos[1] - latencyPos1[1]);
++            double[] adouble = this.getLatencyPos(5, 1.0F);
++            double[] adouble1 = this.getLatencyPos(0, 1.0F);
++
++            return (float) (adouble[1] - adouble1[1]);
+         }
+     }
+ 
+@@ -398,76 +413,105 @@
+             if (this.nearestCrystal.isRemoved()) {
+                 this.nearestCrystal = null;
+             } else if (this.tickCount % 10 == 0 && this.getHealth() < this.getMaxHealth()) {
+-                this.setHealth(this.getHealth() + 1.0F);
++                // CraftBukkit start
++                EntityRegainHealthEvent event = new EntityRegainHealthEvent(this.getBukkitEntity(), 1.0F, EntityRegainHealthEvent.RegainReason.ENDER_CRYSTAL);
++                this.level().getCraftServer().getPluginManager().callEvent(event);
++
++                if (!event.isCancelled()) {
++                    this.setHealth((float) (this.getHealth() + event.getAmount()));
++                }
++                // CraftBukkit end
+             }
+         }
+ 
+         if (this.random.nextInt(10) == 0) {
+-            List<EndCrystal> entitiesOfClass = this.level().getEntitiesOfClass(EndCrystal.class, this.getBoundingBox().inflate(32.0));
+-            EndCrystal endCrystal = null;
+-            double d = Double.MAX_VALUE;
++            List<EndCrystal> list = this.level().getEntitiesOfClass(EndCrystal.class, this.getBoundingBox().inflate(32.0D));
++            EndCrystal entityendercrystal = null;
++            double d0 = Double.MAX_VALUE;
++            Iterator iterator = list.iterator();
+ 
+-            for (EndCrystal endCrystal1 : entitiesOfClass) {
+-                double d1 = endCrystal1.distanceToSqr(this);
+-                if (d1 < d) {
+-                    d = d1;
+-                    endCrystal = endCrystal1;
++            while (iterator.hasNext()) {
++                EndCrystal entityendercrystal1 = (EndCrystal) iterator.next();
++                double d1 = entityendercrystal1.distanceToSqr((Entity) this);
++
++                if (d1 < d0) {
++                    d0 = d1;
++                    entityendercrystal = entityendercrystal1;
+                 }
+             }
+ 
+-            this.nearestCrystal = endCrystal;
++            this.nearestCrystal = entityendercrystal;
+         }
++
+     }
+ 
+     private void knockBack(List<Entity> entities) {
+-        double d = (this.body.getBoundingBox().minX + this.body.getBoundingBox().maxX) / 2.0;
+-        double d1 = (this.body.getBoundingBox().minZ + this.body.getBoundingBox().maxZ) / 2.0;
++        double d0 = (this.body.getBoundingBox().minX + this.body.getBoundingBox().maxX) / 2.0D;
++        double d1 = (this.body.getBoundingBox().minZ + this.body.getBoundingBox().maxZ) / 2.0D;
++        Iterator iterator = entities.iterator();
+ 
+-        for (Entity entity : entities) {
++        while (iterator.hasNext()) {
++            Entity entity = (Entity) iterator.next();
++
+             if (entity instanceof LivingEntity) {
+-                double d2 = entity.getX() - d;
++                double d2 = entity.getX() - d0;
+                 double d3 = entity.getZ() - d1;
+-                double max = Math.max(d2 * d2 + d3 * d3, 0.1);
+-                entity.push(d2 / max * 4.0, 0.2F, d3 / max * 4.0);
+-                if (!this.phaseManager.getCurrentPhase().isSitting() && ((LivingEntity)entity).getLastHurtByMobTimestamp() < entity.tickCount - 2) {
++                double d4 = Math.max(d2 * d2 + d3 * d3, 0.1D);
++
++                entity.push(d2 / d4 * 4.0D, 0.20000000298023224D, d3 / d4 * 4.0D);
++                if (!this.phaseManager.getCurrentPhase().isSitting() && ((LivingEntity) entity).getLastHurtByMobTimestamp() < entity.tickCount - 2) {
+                     entity.hurt(this.damageSources().mobAttack(this), 5.0F);
+                     this.doEnchantDamageEffects(this, entity);
+                 }
+             }
+         }
++
+     }
+ 
+     private void hurt(List<Entity> entities) {
+-        for (Entity entity : entities) {
++        Iterator iterator = entities.iterator();
++
++        while (iterator.hasNext()) {
++            Entity entity = (Entity) iterator.next();
++
+             if (entity instanceof LivingEntity) {
+                 entity.hurt(this.damageSources().mobAttack(this), 10.0F);
+                 this.doEnchantDamageEffects(this, entity);
+             }
+         }
++
+     }
+ 
+     private float rotWrap(double angle) {
+-        return (float)Mth.wrapDegrees(angle);
++        return (float) Mth.wrapDegrees(angle);
+     }
+ 
+     private boolean checkWalls(AABB area) {
+-        int floor = Mth.floor(area.minX);
+-        int floor1 = Mth.floor(area.minY);
+-        int floor2 = Mth.floor(area.minZ);
+-        int floor3 = Mth.floor(area.maxX);
+-        int floor4 = Mth.floor(area.maxY);
+-        int floor5 = Mth.floor(area.maxZ);
++        int i = Mth.floor(area.minX);
++        int j = Mth.floor(area.minY);
++        int k = Mth.floor(area.minZ);
++        int l = Mth.floor(area.maxX);
++        int i1 = Mth.floor(area.maxY);
++        int j1 = Mth.floor(area.maxZ);
+         boolean flag = false;
+         boolean flag1 = false;
++        // CraftBukkit start - Create a list to hold all the destroyed blocks
++        List<org.bukkit.block.Block> destroyedBlocks = new java.util.ArrayList<org.bukkit.block.Block>();
++        // CraftBukkit end
+ 
+-        for (int i = floor; i <= floor3; i++) {
+-            for (int i1 = floor1; i1 <= floor4; i1++) {
+-                for (int i2 = floor2; i2 <= floor5; i2++) {
+-                    BlockPos blockPos = new BlockPos(i, i1, i2);
+-                    BlockState blockState = this.level().getBlockState(blockPos);
+-                    if (!blockState.isAir() && !blockState.is(BlockTags.DRAGON_TRANSPARENT)) {
+-                        if (this.level().getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING) && !blockState.is(BlockTags.DRAGON_IMMUNE)) {
+-                            flag1 = this.level().removeBlock(blockPos, false) || flag1;
++        for (int k1 = i; k1 <= l; ++k1) {
++            for (int l1 = j; l1 <= i1; ++l1) {
++                for (int i2 = k; i2 <= j1; ++i2) {
++                    BlockPos blockposition = new BlockPos(k1, l1, i2);
++                    IBlockData iblockdata = this.level().getBlockState(blockposition);
++
++                    if (!iblockdata.isAir() && !iblockdata.is(BlockTags.DRAGON_TRANSPARENT)) {
++                        if (this.level().getGameRules().getBoolean(GameRules.RULE_MOBGRIEFING) && !iblockdata.is(BlockTags.DRAGON_IMMUNE)) {
++                            // CraftBukkit start - Add blocks to list rather than destroying them
++                            // flag1 = this.level().removeBlock(blockposition, false) || flag1;
++                            flag1 = true;
++                            destroyedBlocks.add(CraftBlock.at(this.level(), blockposition));
++                            // CraftBukkit end
+                         } else {
+                             flag = true;
+                         }
+@@ -476,13 +520,55 @@
+             }
+         }
+ 
++        // CraftBukkit start - Set off an EntityExplodeEvent for the dragon exploding all these blocks
++        // SPIGOT-4882: don't fire event if nothing hit
++        if (!flag1) {
++            return flag;
++        }
++
++        org.bukkit.entity.Entity bukkitEntity = this.getBukkitEntity();
++        EntityExplodeEvent event = new EntityExplodeEvent(bukkitEntity, bukkitEntity.getLocation(), destroyedBlocks, 0F);
++        bukkitEntity.getServer().getPluginManager().callEvent(event);
++        if (event.isCancelled()) {
++            // This flag literally means 'Dragon hit something hard' (Obsidian, White Stone or Bedrock) and will cause the dragon to slow down.
++            // We should consider adding an event extension for it, or perhaps returning true if the event is cancelled.
++            return flag;
++        } else if (event.getYield() == 0F) {
++            // Yield zero ==> no drops
++            for (org.bukkit.block.Block block : event.blockList()) {
++                this.level().removeBlock(new BlockPos(block.getX(), block.getY(), block.getZ()), false);
++            }
++        } else {
++            for (org.bukkit.block.Block block : event.blockList()) {
++                org.bukkit.Material blockId = block.getType();
++                if (blockId.isAir()) {
++                    continue;
++                }
++
++                CraftBlock craftBlock = ((CraftBlock) block);
++                BlockPos blockposition = craftBlock.getPosition();
++
++                Block nmsBlock = craftBlock.getNMS().getBlock();
++                if (nmsBlock.dropFromExplosion(explosionSource)) {
++                    BlockEntity tileentity = craftBlock.getNMS().hasBlockEntity() ? this.level().getBlockEntity(blockposition) : null;
++                    LootParams.Builder loottableinfo_builder = (new LootParams.Builder((ServerLevel) this.level())).withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(blockposition)).withParameter(LootContextParams.TOOL, ItemStack.EMPTY).withParameter(LootContextParams.EXPLOSION_RADIUS, 1.0F / event.getYield()).withOptionalParameter(LootContextParams.BLOCK_ENTITY, tileentity);
++
++                    craftBlock.getNMS().getDrops(loottableinfo_builder).forEach((itemstack) -> {
++                        Block.popResource(this.level(), blockposition, itemstack);
++                    });
++                    craftBlock.getNMS().spawnAfterBreak((ServerLevel) this.level(), blockposition, ItemStack.EMPTY, false);
++                }
++                nmsBlock.wasExploded(this.level(), blockposition, explosionSource);
++
++                this.level().removeBlock(blockposition, false);
++            }
++        }
++        // CraftBukkit end
++
+         if (flag1) {
+-            BlockPos blockPos1 = new BlockPos(
+-                floor + this.random.nextInt(floor3 - floor + 1),
+-                floor1 + this.random.nextInt(floor4 - floor1 + 1),
+-                floor2 + this.random.nextInt(floor5 - floor2 + 1)
+-            );
+-            this.level().levelEvent(2008, blockPos1, 0);
++            BlockPos blockposition1 = new BlockPos(i + this.random.nextInt(l - i + 1), j + this.random.nextInt(i1 - j + 1), k + this.random.nextInt(j1 - k + 1));
++
++            this.level().levelEvent(2008, blockposition1, 0);
+         }
+ 
+         return flag;
+@@ -492,24 +578,25 @@
+         if (this.phaseManager.getCurrentPhase().getPhase() == EnderDragonPhase.DYING) {
+             return false;
+         } else {
+-            float var5 = this.phaseManager.getCurrentPhase().onHurt(source, damage);
++            damage = this.phaseManager.getCurrentPhase().onHurt(source, damage);
+             if (part != this.head) {
+-                var5 = var5 / 4.0F + Math.min(var5, 1.0F);
++                damage = damage / 4.0F + Math.min(damage, 1.0F);
+             }
+ 
+-            if (var5 < 0.01F) {
++            if (damage < 0.01F) {
+                 return false;
+             } else {
+                 if (source.getEntity() instanceof Player || source.is(DamageTypeTags.ALWAYS_HURTS_ENDER_DRAGONS)) {
+-                    float health = this.getHealth();
+-                    this.reallyHurt(source, var5);
++                    float f1 = this.getHealth();
++
++                    this.reallyHurt(source, damage);
+                     if (this.isDeadOrDying() && !this.phaseManager.getCurrentPhase().isSitting()) {
+                         this.setHealth(1.0F);
+                         this.phaseManager.setPhase(EnderDragonPhase.DYING);
+                     }
+ 
+                     if (this.phaseManager.getCurrentPhase().isSitting()) {
+-                        this.sittingDamageReceived = this.sittingDamageReceived + health - this.getHealth();
++                        this.sittingDamageReceived = this.sittingDamageReceived + f1 - this.getHealth();
+                         if (this.sittingDamageReceived > 0.25F * this.getMaxHealth()) {
+                             this.sittingDamageReceived = 0.0F;
+                             this.phaseManager.setPhase(EnderDragonPhase.TAKEOFF);
+@@ -524,7 +611,7 @@
+ 
+     @Override
+     public boolean hurt(DamageSource source, float amount) {
+-        return !this.level().isClientSide && this.hurt(this.body, source, amount);
++        return !this.level().isClientSide ? this.hurt(this.body, source, amount) : false;
+     }
+ 
+     protected boolean reallyHurt(DamageSource damageSource, float amount) {
+@@ -539,32 +626,54 @@
+             this.dragonFight.updateDragon(this);
+             this.dragonFight.setDragonKilled(this);
+         }
++
+     }
+ 
++    // CraftBukkit start - SPIGOT-2420: Special case, the ender dragon drops 12000 xp for the first kill and 500 xp for every other kill and this over time.
+     @Override
++    public int getExpReward() {
++        // CraftBukkit - Moved from #tickDeath method
++        boolean flag = this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
++        short short0 = 500;
++
++        if (this.dragonFight != null && !this.dragonFight.hasPreviouslyKilledDragon()) {
++            short0 = 12000;
++        }
++
++        return flag ? short0 : 0;
++    }
++    // CraftBukkit end
++
++    @Override
+     protected void tickDeath() {
+         if (this.dragonFight != null) {
+             this.dragonFight.updateDragon(this);
+         }
+ 
+-        this.dragonDeathTime++;
++        ++this.dragonDeathTime;
+         if (this.dragonDeathTime >= 180 && this.dragonDeathTime <= 200) {
+             float f = (this.random.nextFloat() - 0.5F) * 8.0F;
+             float f1 = (this.random.nextFloat() - 0.5F) * 4.0F;
+             float f2 = (this.random.nextFloat() - 0.5F) * 8.0F;
+-            this.level()
+-                .addParticle(ParticleTypes.EXPLOSION_EMITTER, this.getX() + (double)f, this.getY() + 2.0 + (double)f1, this.getZ() + (double)f2, 0.0, 0.0, 0.0);
++
++            this.level().addParticle(ParticleTypes.EXPLOSION_EMITTER, this.getX() + (double) f, this.getY() + 2.0D + (double) f1, this.getZ() + (double) f2, 0.0D, 0.0D, 0.0D);
+         }
+ 
+-        boolean _boolean = this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
+-        int i = 500;
++        // CraftBukkit start - SPIGOT-2420: Moved up to #getExpReward method
++        /*
++        boolean flag = this.level().getGameRules().getBoolean(GameRules.RULE_DOMOBLOOT);
++        short short0 = 500;
++
+         if (this.dragonFight != null && !this.dragonFight.hasPreviouslyKilledDragon()) {
+-            i = 12000;
++            short0 = 12000;
+         }
++        */
++        int short0 = expToDrop;
++        // CraftBukkit end
+ 
+         if (this.level() instanceof ServerLevel) {
+-            if (this.dragonDeathTime > 150 && this.dragonDeathTime % 5 == 0 && _boolean) {
+-                ExperienceOrb.award((ServerLevel)this.level(), this.position(), Mth.floor((float)i * 0.08F));
++            if (this.dragonDeathTime > 150 && this.dragonDeathTime % 5 == 0 && true) {  // CraftBukkit - SPIGOT-2420: Already checked for the game rule when calculating the xp
++                ExperienceOrb.award((ServerLevel) this.level(), this.position(), Mth.floor((float) short0 * 0.08F));
+             }
+ 
+             if (this.dragonDeathTime == 1 && !this.isSilent()) {
+@@ -572,10 +681,10 @@
+             }
+         }
+ 
+-        this.move(MoverType.SELF, new Vec3(0.0, 0.1F, 0.0));
++        this.move(EnumMoveType.SELF, new Vec3(0.0D, 0.10000000149011612D, 0.0D));
+         if (this.dragonDeathTime == 200 && this.level() instanceof ServerLevel) {
+-            if (_boolean) {
+-                ExperienceOrb.award((ServerLevel)this.level(), this.position(), Mth.floor((float)i * 0.2F));
++            if (true) { // CraftBukkit - SPIGOT-2420: Already checked for the game rule when calculating the xp
++                ExperienceOrb.award((ServerLevel) this.level(), this.position(), Mth.floor((float) short0 * 0.2F));
+             }
+ 
+             if (this.dragonFight != null) {
+@@ -585,33 +694,37 @@
+             this.remove(Entity.RemovalReason.KILLED);
+             this.gameEvent(GameEvent.ENTITY_DIE);
+         }
++
+     }
+ 
+     public int findClosestNode() {
+         if (this.nodes[0] == null) {
+-            for (int i = 0; i < 24; i++) {
+-                int i1 = 5;
+-                int floor;
+-                int floor1;
++            for (int i = 0; i < 24; ++i) {
++                int j = 5;
++                int k;
++                int l;
++
+                 if (i < 12) {
+-                    floor = Mth.floor(60.0F * Mth.cos(2.0F * ((float) -Math.PI + (float) (Math.PI / 12) * (float)i)));
+-                    floor1 = Mth.floor(60.0F * Mth.sin(2.0F * ((float) -Math.PI + (float) (Math.PI / 12) * (float)i)));
+-                } else if (i < 20) {
+-                    int i2 = i - 12;
+-                    floor = Mth.floor(40.0F * Mth.cos(2.0F * ((float) -Math.PI + (float) (Math.PI / 8) * (float)i2)));
+-                    floor1 = Mth.floor(40.0F * Mth.sin(2.0F * ((float) -Math.PI + (float) (Math.PI / 8) * (float)i2)));
+-                    i1 += 10;
++                    k = Mth.floor(60.0F * Mth.cos(2.0F * (-3.1415927F + 0.2617994F * (float) i)));
++                    l = Mth.floor(60.0F * Mth.sin(2.0F * (-3.1415927F + 0.2617994F * (float) i)));
+                 } else {
+-                    int var7 = i - 20;
+-                    floor = Mth.floor(20.0F * Mth.cos(2.0F * ((float) -Math.PI + (float) (Math.PI / 4) * (float)var7)));
+-                    floor1 = Mth.floor(20.0F * Mth.sin(2.0F * ((float) -Math.PI + (float) (Math.PI / 4) * (float)var7)));
++                    int i1;
++
++                    if (i < 20) {
++                        i1 = i - 12;
++                        k = Mth.floor(40.0F * Mth.cos(2.0F * (-3.1415927F + 0.3926991F * (float) i1)));
++                        l = Mth.floor(40.0F * Mth.sin(2.0F * (-3.1415927F + 0.3926991F * (float) i1)));
++                        j += 10;
++                    } else {
++                        i1 = i - 20;
++                        k = Mth.floor(20.0F * Mth.cos(2.0F * (-3.1415927F + 0.7853982F * (float) i1)));
++                        l = Mth.floor(20.0F * Mth.sin(2.0F * (-3.1415927F + 0.7853982F * (float) i1)));
++                    }
+                 }
+ 
+-                int max = Math.max(
+-                    this.level().getSeaLevel() + 10,
+-                    this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(floor, 0, floor1)).getY() + i1
+-                );
+-                this.nodes[i] = new Node(floor, max, floor1);
++                int j1 = Math.max(this.level().getSeaLevel() + 10, this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(k, 0, l)).getY() + j);
++
++                this.nodes[i] = new Node(k, j1, l);
+             }
+ 
+             this.nodeAdjacency[0] = 6146;
+@@ -643,21 +756,23 @@
+         return this.findClosestNode(this.getX(), this.getY(), this.getZ());
+     }
+ 
+-    public int findClosestNode(double x, double y, double z) {
++    public int findClosestNode(double x, double d1, double y) {
+         float f = 10000.0F;
+         int i = 0;
+-        Node node = new Node(Mth.floor(x), Mth.floor(y), Mth.floor(z));
+-        int i1 = 0;
++        Node pathpoint = new Node(Mth.floor(x), Mth.floor(d1), Mth.floor(y));
++        byte b0 = 0;
++
+         if (this.dragonFight == null || this.dragonFight.getCrystalsAlive() == 0) {
+-            i1 = 12;
++            b0 = 12;
+         }
+ 
+-        for (int i2 = i1; i2 < 24; i2++) {
+-            if (this.nodes[i2] != null) {
+-                float f1 = this.nodes[i2].distanceToSqr(node);
++        for (int j = b0; j < 24; ++j) {
++            if (this.nodes[j] != null) {
++                float f1 = this.nodes[j].distanceToSqr(pathpoint);
++
+                 if (f1 < f) {
+                     f = f1;
+-                    i = i2;
++                    i = j;
+                 }
+             }
+         }
+@@ -667,96 +782,118 @@
+ 
+     @Nullable
+     public Path findPath(int startIndex, int finishIndex, @Nullable Node andThen) {
+-        for (int i = 0; i < 24; i++) {
+-            Node node = this.nodes[i];
+-            node.closed = false;
+-            node.f = 0.0F;
+-            node.g = 0.0F;
+-            node.h = 0.0F;
+-            node.cameFrom = null;
+-            node.heapIdx = -1;
++        Node pathpoint1;
++
++        for (int k = 0; k < 24; ++k) {
++            pathpoint1 = this.nodes[k];
++            pathpoint1.closed = false;
++            pathpoint1.f = 0.0F;
++            pathpoint1.g = 0.0F;
++            pathpoint1.h = 0.0F;
++            pathpoint1.cameFrom = null;
++            pathpoint1.heapIdx = -1;
+         }
+ 
+-        Node node1 = this.nodes[startIndex];
+-        Node node = this.nodes[finishIndex];
+-        node1.g = 0.0F;
+-        node1.h = node1.distanceTo(node);
+-        node1.f = node1.h;
++        Node pathpoint2 = this.nodes[startIndex];
++
++        pathpoint1 = this.nodes[finishIndex];
++        pathpoint2.g = 0.0F;
++        pathpoint2.h = pathpoint2.distanceTo(pathpoint1);
++        pathpoint2.f = pathpoint2.h;
+         this.openSet.clear();
+-        this.openSet.insert(node1);
+-        Node node2 = node1;
+-        int i1 = 0;
++        this.openSet.insert(pathpoint2);
++        Node pathpoint3 = pathpoint2;
++        byte b0 = 0;
++
+         if (this.dragonFight == null || this.dragonFight.getCrystalsAlive() == 0) {
+-            i1 = 12;
++            b0 = 12;
+         }
+ 
++        label70:
+         while (!this.openSet.isEmpty()) {
+-            Node node3 = this.openSet.pop();
+-            if (node3.equals(node)) {
++            Node pathpoint4 = this.openSet.pop();
++
++            if (pathpoint4.equals(pathpoint1)) {
+                 if (andThen != null) {
+-                    andThen.cameFrom = node;
+-                    node = andThen;
++                    andThen.cameFrom = pathpoint1;
++                    pathpoint1 = andThen;
+                 }
+ 
+-                return this.reconstructPath(node1, node);
++                return this.reconstructPath(pathpoint2, pathpoint1);
+             }
+ 
+-            if (node3.distanceTo(node) < node2.distanceTo(node)) {
+-                node2 = node3;
++            if (pathpoint4.distanceTo(pathpoint1) < pathpoint3.distanceTo(pathpoint1)) {
++                pathpoint3 = pathpoint4;
+             }
+ 
+-            node3.closed = true;
+-            int i2 = 0;
++            pathpoint4.closed = true;
++            int l = 0;
++            int i1 = 0;
+ 
+-            for (int i3 = 0; i3 < 24; i3++) {
+-                if (this.nodes[i3] == node3) {
+-                    i2 = i3;
+-                    break;
++            while (true) {
++                if (i1 < 24) {
++                    if (this.nodes[i1] != pathpoint4) {
++                        ++i1;
++                        continue;
++                    }
++
++                    l = i1;
+                 }
+-            }
+ 
+-            for (int i3x = i1; i3x < 24; i3x++) {
+-                if ((this.nodeAdjacency[i2] & 1 << i3x) > 0) {
+-                    Node node4 = this.nodes[i3x];
+-                    if (!node4.closed) {
+-                        float f = node3.g + node3.distanceTo(node4);
+-                        if (!node4.inOpenSet() || f < node4.g) {
+-                            node4.cameFrom = node3;
+-                            node4.g = f;
+-                            node4.h = node4.distanceTo(node);
+-                            if (node4.inOpenSet()) {
+-                                this.openSet.changeCost(node4, node4.g + node4.h);
+-                            } else {
+-                                node4.f = node4.g + node4.h;
+-                                this.openSet.insert(node4);
++                i1 = b0;
++
++                while (true) {
++                    if (i1 >= 24) {
++                        continue label70;
++                    }
++
++                    if ((this.nodeAdjacency[l] & 1 << i1) > 0) {
++                        Node pathpoint5 = this.nodes[i1];
++
++                        if (!pathpoint5.closed) {
++                            float f = pathpoint4.g + pathpoint4.distanceTo(pathpoint5);
++
++                            if (!pathpoint5.inOpenSet() || f < pathpoint5.g) {
++                                pathpoint5.cameFrom = pathpoint4;
++                                pathpoint5.g = f;
++                                pathpoint5.h = pathpoint5.distanceTo(pathpoint1);
++                                if (pathpoint5.inOpenSet()) {
++                                    this.openSet.changeCost(pathpoint5, pathpoint5.g + pathpoint5.h);
++                                } else {
++                                    pathpoint5.f = pathpoint5.g + pathpoint5.h;
++                                    this.openSet.insert(pathpoint5);
++                                }
+                             }
+                         }
+                     }
++
++                    ++i1;
+                 }
+             }
+         }
+ 
+-        if (node2 == node1) {
++        if (pathpoint3 == pathpoint2) {
+             return null;
+         } else {
+-            LOGGER.debug("Failed to find path from {} to {}", startIndex, finishIndex);
++            EnderDragon.LOGGER.debug("Failed to find path from {} to {}", startIndex, finishIndex);
+             if (andThen != null) {
+-                andThen.cameFrom = node2;
+-                node2 = andThen;
++                andThen.cameFrom = pathpoint3;
++                pathpoint3 = andThen;
+             }
+ 
+-            return this.reconstructPath(node1, node2);
++            return this.reconstructPath(pathpoint2, pathpoint3);
+         }
+     }
+ 
+     private Path reconstructPath(Node start, Node finish) {
+         List<Node> list = Lists.newArrayList();
+-        Node node = finish;
++        Node pathpoint2 = finish;
++
+         list.add(0, finish);
+ 
+-        while (node.cameFrom != null) {
+-            node = node.cameFrom;
+-            list.add(0, node);
++        while (pathpoint2.cameFrom != null) {
++            pathpoint2 = pathpoint2.cameFrom;
++            list.add(0, pathpoint2);
+         }
+ 
+         return new Path(list, new BlockPos(finish.x, finish.y, finish.z), true);
+@@ -767,6 +904,7 @@
+         super.addAdditionalSaveData(compound);
+         compound.putInt("DragonPhase", this.phaseManager.getCurrentPhase().getPhase().getId());
+         compound.putInt("DragonDeathTime", this.dragonDeathTime);
++        compound.putInt("Bukkit.expToDrop", expToDrop); // CraftBukkit - SPIGOT-2420: The ender dragon drops xp over time which can also happen between server starts
+     }
+ 
+     @Override
+@@ -779,11 +917,16 @@
+         if (compound.contains("DragonDeathTime")) {
+             this.dragonDeathTime = compound.getInt("DragonDeathTime");
+         }
++
++        // CraftBukkit start - SPIGOT-2420: The ender dragon drops xp over time which can also happen between server starts
++        if (compound.contains("Bukkit.expToDrop")) {
++            this.expToDrop = compound.getInt("Bukkit.expToDrop");
++        }
++        // CraftBukkit end
+     }
+ 
+     @Override
+-    public void checkDespawn() {
+-    }
++    public void checkDespawn() {}
+ 
+     public EnderDragonPart[] getSubEntities() {
+         return this.subEntities;
+@@ -815,69 +958,81 @@
+     }
+ 
+     public float getHeadPartYOffset(int partIndex, double[] spineEndOffsets, double[] headPartOffsets) {
+-        DragonPhaseInstance currentPhase = this.phaseManager.getCurrentPhase();
+-        EnderDragonPhase<? extends DragonPhaseInstance> phase = currentPhase.getPhase();
+-        double d;
+-        if (phase == EnderDragonPhase.LANDING || phase == EnderDragonPhase.TAKEOFF) {
+-            BlockPos heightmapPos = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
+-            double max = Math.max(Math.sqrt(heightmapPos.distToCenterSqr(this.position())) / 4.0, 1.0);
+-            d = (double)partIndex / max;
+-        } else if (currentPhase.isSitting()) {
+-            d = (double)partIndex;
+-        } else if (partIndex == 6) {
+-            d = 0.0;
++        DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
++        EnderDragonPhase<? extends DragonPhaseInstance> dragoncontrollerphase = idragoncontroller.getPhase();
++        double d0;
++
++        if (dragoncontrollerphase != EnderDragonPhase.LANDING && dragoncontrollerphase != EnderDragonPhase.TAKEOFF) {
++            if (idragoncontroller.isSitting()) {
++                d0 = (double) partIndex;
++            } else if (partIndex == 6) {
++                d0 = 0.0D;
++            } else {
++                d0 = headPartOffsets[1] - spineEndOffsets[1];
++            }
+         } else {
+-            d = headPartOffsets[1] - spineEndOffsets[1];
++            BlockPos blockposition = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
++            double d1 = Math.max(Math.sqrt(blockposition.distToCenterSqr(this.position())) / 4.0D, 1.0D);
++
++            d0 = (double) partIndex / d1;
+         }
+ 
+-        return (float)d;
++        return (float) d0;
+     }
+ 
+     public Vec3 getHeadLookVector(float partialTicks) {
+-        DragonPhaseInstance currentPhase = this.phaseManager.getCurrentPhase();
+-        EnderDragonPhase<? extends DragonPhaseInstance> phase = currentPhase.getPhase();
+-        Vec3 viewVector;
+-        if (phase == EnderDragonPhase.LANDING || phase == EnderDragonPhase.TAKEOFF) {
+-            BlockPos heightmapPos = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
+-            float max = Math.max((float)Math.sqrt(heightmapPos.distToCenterSqr(this.position())) / 4.0F, 1.0F);
+-            float f = 6.0F / max;
+-            float xRot = this.getXRot();
+-            float f1 = 1.5F;
+-            this.setXRot(-f * 1.5F * 5.0F);
+-            viewVector = this.getViewVector(partialTicks);
+-            this.setXRot(xRot);
+-        } else if (currentPhase.isSitting()) {
+-            float xRot1 = this.getXRot();
+-            float max = 1.5F;
+-            this.setXRot(-45.0F);
+-            viewVector = this.getViewVector(partialTicks);
+-            this.setXRot(xRot1);
++        DragonPhaseInstance idragoncontroller = this.phaseManager.getCurrentPhase();
++        EnderDragonPhase<? extends DragonPhaseInstance> dragoncontrollerphase = idragoncontroller.getPhase();
++        float f1;
++        Vec3 vec3d;
++
++        if (dragoncontrollerphase != EnderDragonPhase.LANDING && dragoncontrollerphase != EnderDragonPhase.TAKEOFF) {
++            if (idragoncontroller.isSitting()) {
++                float f2 = this.getXRot();
++
++                f1 = 1.5F;
++                this.setXRot(-45.0F);
++                vec3d = this.getViewVector(partialTicks);
++                this.setXRot(f2);
++            } else {
++                vec3d = this.getViewVector(partialTicks);
++            }
+         } else {
+-            viewVector = this.getViewVector(partialTicks);
++            BlockPos blockposition = this.level().getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(this.fightOrigin));
++
++            f1 = Math.max((float) Math.sqrt(blockposition.distToCenterSqr(this.position())) / 4.0F, 1.0F);
++            float f3 = 6.0F / f1;
++            float f4 = this.getXRot();
++            float f5 = 1.5F;
++
++            this.setXRot(-f3 * 1.5F * 5.0F);
++            vec3d = this.getViewVector(partialTicks);
++            this.setXRot(f4);
+         }
+ 
+-        return viewVector;
++        return vec3d;
+     }
+ 
+     public void onCrystalDestroyed(EndCrystal crystal, BlockPos pos, DamageSource damageSource) {
+-        Player player;
++        Player entityhuman;
++
+         if (damageSource.getEntity() instanceof Player) {
+-            player = (Player)damageSource.getEntity();
++            entityhuman = (Player) damageSource.getEntity();
+         } else {
+-            player = this.level().getNearestPlayer(CRYSTAL_DESTROY_TARGETING, (double)pos.getX(), (double)pos.getY(), (double)pos.getZ());
++            entityhuman = this.level().getNearestPlayer(EnderDragon.CRYSTAL_DESTROY_TARGETING, (double) pos.getX(), (double) pos.getY(), (double) pos.getZ());
+         }
+ 
+         if (crystal == this.nearestCrystal) {
+-            this.hurt(this.head, this.damageSources().explosion(crystal, player), 10.0F);
++            this.hurt(this.head, this.damageSources().explosion(crystal, entityhuman), 10.0F);
+         }
+ 
+-        this.phaseManager.getCurrentPhase().onCrystalDestroyed(crystal, pos, damageSource, player);
++        this.phaseManager.getCurrentPhase().onCrystalDestroyed(crystal, pos, damageSource, entityhuman);
+     }
+ 
+     @Override
+     public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+-        if (DATA_PHASE.equals(key) && this.level().isClientSide) {
+-            this.phaseManager.setPhase(EnderDragonPhase.getById(this.getEntityData().get(DATA_PHASE)));
++        if (EnderDragon.DATA_PHASE.equals(key) && this.level().isClientSide) {
++            this.phaseManager.setPhase(EnderDragonPhase.getById((Integer) this.getEntityData().get(EnderDragon.DATA_PHASE)));
+         }
+ 
+         super.onSyncedDataUpdated(key);
+@@ -910,11 +1065,12 @@
+     @Override
+     public void recreateFromPacket(ClientboundAddEntityPacket packet) {
+         super.recreateFromPacket(packet);
+-        EnderDragonPart[] subEntities = this.getSubEntities();
++        EnderDragonPart[] aentitycomplexpart = this.getSubEntities();
+ 
+-        for (int i = 0; i < subEntities.length; i++) {
+-            subEntities[i].setId(i + packet.getId());
++        for (int i = 0; i < aentitycomplexpart.length; ++i) {
++            aentitycomplexpart[i].setId(i + packet.getId());
+         }
++
+     }
+ 
+     @Override
+@@ -923,7 +1079,7 @@
+     }
+ 
+     @Override
+-    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entityDimensions, float f) {
++    protected Vector3f getPassengerAttachmentPoint(Entity entity, EntityDimensions entitysize, float f) {
+         return new Vector3f(0.0F, this.body.getBbHeight(), 0.0F);
+     }
+ }

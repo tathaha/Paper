@@ -1,0 +1,177 @@
+--- a/net/minecraft/world/entity/projectile/WitherSkull.java
++++ b/net/minecraft/world/entity/projectile/WitherSkull.java
+@@ -16,59 +16,58 @@
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.Explosion;
+ import net.minecraft.world.level.Level;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.material.FluidState;
+ import net.minecraft.world.phys.EntityHitResult;
+ import net.minecraft.world.phys.HitResult;
++// CraftBukkit start
++import org.bukkit.event.entity.ExplosionPrimeEvent;
++// CraftBukkit end
+ 
+ public class WitherSkull extends AbstractHurtingProjectile {
+ 
+     private static final EntityDataAccessor<Boolean> DATA_DANGEROUS = SynchedEntityData.defineId(WitherSkull.class, EntityDataSerializers.BOOLEAN);
+ 
+-    public WitherSkull(EntityType<? extends WitherSkull> entitytype, Level level) {
+-        super(entitytype, level);
++    public WitherSkull(EntityType<? extends WitherSkull> entityType, Level level) {
++        super(entityType, level);
+     }
+ 
+-    public WitherSkull(Level level, LivingEntity livingentity, double d0, double d1, double d2) {
+-        super(EntityType.WITHER_SKULL, livingentity, d0, d1, d2, level);
++    public WitherSkull(Level level, LivingEntity shooter, double offsetX, double d1, double offsetY) {
++        super(EntityType.WITHER_SKULL, shooter, offsetX, d1, offsetY, level);
+     }
+ 
+     @Override
+-    @Override
+     protected float getInertia() {
+         return this.isDangerous() ? 0.73F : super.getInertia();
+     }
+ 
+     @Override
+-    @Override
+     public boolean isOnFire() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public float getBlockExplosionResistance(Explosion explosion, BlockGetter blockgetter, BlockPos blockpos, BlockState blockstate, FluidState fluidstate, float f) {
+-        return this.isDangerous() && WitherBoss.canDestroy(blockstate) ? Math.min(0.8F, f) : f;
++    public float getBlockExplosionResistance(Explosion explosion, BlockGetter level, BlockPos pos, IBlockData blockState, FluidState fluidState, float explosionPower) {
++        return this.isDangerous() && WitherBoss.canDestroy(blockState) ? Math.min(0.8F, explosionPower) : explosionPower;
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHitEntity(EntityHitResult entityhitresult) {
+-        super.onHitEntity(entityhitresult);
++    protected void onHitEntity(EntityHitResult result) {
++        super.onHitEntity(result);
+         if (!this.level().isClientSide) {
+-            Entity entity = entityhitresult.getEntity();
++            Entity entity = result.getEntity();
+             Entity entity1 = this.getOwner();
+-            LivingEntity livingentity;
++            LivingEntity entityliving;
+             boolean flag;
+ 
+             if (entity1 instanceof LivingEntity) {
+-                livingentity = (LivingEntity) entity1;
+-                flag = entity.hurt(this.damageSources().witherSkull(this, livingentity), 8.0F);
++                entityliving = (LivingEntity) entity1;
++                flag = entity.hurt(this.damageSources().witherSkull(this, entityliving), 8.0F);
+                 if (flag) {
+                     if (entity.isAlive()) {
+-                        this.doEnchantDamageEffects(livingentity, entity);
++                        this.doEnchantDamageEffects(entityliving, entity);
+                     } else {
+-                        livingentity.heal(5.0F);
++                        entityliving.heal(5.0F, org.bukkit.event.entity.EntityRegainHealthEvent.RegainReason.WITHER); // CraftBukkit
+                     }
+                 }
+             } else {
+@@ -76,7 +75,7 @@
+             }
+ 
+             if (flag && entity instanceof LivingEntity) {
+-                livingentity = (LivingEntity) entity;
++                entityliving = (LivingEntity) entity;
+                 byte b0 = 0;
+ 
+                 if (this.level().getDifficulty() == Difficulty.NORMAL) {
+@@ -86,7 +85,7 @@
+                 }
+ 
+                 if (b0 > 0) {
+-                    livingentity.addEffect(new MobEffectInstance(MobEffects.WITHER, 20 * b0, 1), this.getEffectSource());
++                    entityliving.addEffect(new MobEffectInstance(MobEffects.WITHER, 20 * b0, 1), this.getEffectSource(), org.bukkit.event.entity.EntityPotionEffectEvent.Cause.ATTACK); // CraftBukkit
+                 }
+             }
+ 
+@@ -94,30 +93,34 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void onHit(HitResult hitresult) {
+-        super.onHit(hitresult);
++    protected void onHit(HitResult result) {
++        super.onHit(result);
+         if (!this.level().isClientSide) {
+-            this.level().explode(this, this.getX(), this.getY(), this.getZ(), 1.0F, false, Level.ExplosionInteraction.MOB);
++            // CraftBukkit start
++            // this.level().explode(this, this.getX(), this.getY(), this.getZ(), 1.0F, false, World.a.MOB);
++            ExplosionPrimeEvent event = new ExplosionPrimeEvent(this.getBukkitEntity(), 1.0F, false);
++            this.level().getCraftServer().getPluginManager().callEvent(event);
++
++            if (!event.isCancelled()) {
++                this.level().explode(this, this.getX(), this.getY(), this.getZ(), event.getRadius(), event.getFire(), Level.a.MOB);
++            }
++            // CraftBukkit end
+             this.discard();
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean hurt(DamageSource damagesource, float f) {
++    public boolean hurt(DamageSource source, float amount) {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.entityData.define(WitherSkull.DATA_DANGEROUS, false);
+     }
+@@ -126,27 +129,24 @@
+         return (Boolean) this.entityData.get(WitherSkull.DATA_DANGEROUS);
+     }
+ 
+-    public void setDangerous(boolean flag) {
+-        this.entityData.set(WitherSkull.DATA_DANGEROUS, flag);
++    public void setDangerous(boolean invulnerable) {
++        this.entityData.set(WitherSkull.DATA_DANGEROUS, invulnerable);
+     }
+ 
+     @Override
+-    @Override
+     protected boolean shouldBurn() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public void addAdditionalSaveData(CompoundTag compoundtag) {
+-        super.addAdditionalSaveData(compoundtag);
+-        compoundtag.putBoolean("dangerous", this.isDangerous());
++    public void addAdditionalSaveData(CompoundTag compound) {
++        super.addAdditionalSaveData(compound);
++        compound.putBoolean("dangerous", this.isDangerous());
+     }
+ 
+     @Override
+-    @Override
+-    public void readAdditionalSaveData(CompoundTag compoundtag) {
+-        super.readAdditionalSaveData(compoundtag);
+-        this.setDangerous(compoundtag.getBoolean("dangerous"));
++    public void readAdditionalSaveData(CompoundTag compound) {
++        super.readAdditionalSaveData(compound);
++        this.setDangerous(compound.getBoolean("dangerous"));
+     }
+ }

@@ -1,0 +1,220 @@
+--- a/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
++++ b/net/minecraft/world/level/chunk/storage/RegionFileStorage.java
+@@ -1,7 +1,10 @@
+ package net.minecraft.world.level.chunk.storage;
+ 
+ import it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap;
++import it.unimi.dsi.fastutil.objects.ObjectIterator;
++import java.io.DataInput;
+ import java.io.DataInputStream;
++import java.io.DataOutput;
+ import java.io.DataOutputStream;
+ import java.io.IOException;
+ import java.nio.file.Path;
+@@ -15,9 +18,10 @@
+ import net.minecraft.world.level.ChunkPos;
+ 
+ public final class RegionFileStorage implements AutoCloseable {
++
+     public static final String ANVIL_EXTENSION = ".mca";
+     private static final int MAX_CACHE_SIZE = 256;
+-    private final Long2ObjectLinkedOpenHashMap<RegionFile> regionCache = new Long2ObjectLinkedOpenHashMap<>();
++    public final Long2ObjectLinkedOpenHashMap<RegionFile> regionCache = new Long2ObjectLinkedOpenHashMap();
+     private final Path folder;
+     private final boolean sync;
+ 
+@@ -26,79 +30,160 @@
+         this.sync = sync;
+     }
+ 
+-    private RegionFile getRegionFile(ChunkPos chunkPos) throws IOException {
+-        long _long = ChunkPos.asLong(chunkPos.getRegionX(), chunkPos.getRegionZ());
+-        RegionFile regionFile = this.regionCache.getAndMoveToFirst(_long);
+-        if (regionFile != null) {
+-            return regionFile;
++    private RegionFile getRegionFile(ChunkPos chunkcoordintpair, boolean existingOnly) throws IOException { // CraftBukkit
++        long i = ChunkPos.asLong(chunkcoordintpair.getRegionX(), chunkcoordintpair.getRegionZ());
++        RegionFile regionfile = (RegionFile) this.regionCache.getAndMoveToFirst(i);
++
++        if (regionfile != null) {
++            return regionfile;
+         } else {
+             if (this.regionCache.size() >= 256) {
+-                this.regionCache.removeLast().close();
++                ((RegionFile) this.regionCache.removeLast()).close();
+             }
+ 
+             FileUtil.createDirectoriesSafe(this.folder);
+-            Path path = this.folder.resolve("r." + chunkPos.getRegionX() + "." + chunkPos.getRegionZ() + ".mca");
+-            RegionFile regionFile1 = new RegionFile(path, this.folder, this.sync);
+-            this.regionCache.putAndMoveToFirst(_long, regionFile1);
+-            return regionFile1;
++            Path path = this.folder;
++            int j = chunkcoordintpair.getRegionX();
++            Path path1 = path.resolve("r." + j + "." + chunkcoordintpair.getRegionZ() + ".mca");
++            if (existingOnly && !java.nio.file.Files.exists(path1)) return null; // CraftBukkit
++            RegionFile regionfile1 = new RegionFile(path1, this.folder, this.sync);
++
++            this.regionCache.putAndMoveToFirst(i, regionfile1);
++            return regionfile1;
+         }
+     }
+ 
+     @Nullable
+     public CompoundTag read(ChunkPos chunkPos) throws IOException {
+-        RegionFile regionFile = this.getRegionFile(chunkPos);
++        // CraftBukkit start - SPIGOT-5680: There's no good reason to preemptively create files on read, save that for writing
++        RegionFile regionfile = this.getRegionFile(chunkPos, true);
++        if (regionfile == null) {
++            return null;
++        }
++        // CraftBukkit end
++        DataInputStream datainputstream = regionfile.getChunkDataInputStream(chunkPos);
+ 
+-        CompoundTag var4;
+-        try (DataInputStream chunkDataInputStream = regionFile.getChunkDataInputStream(chunkPos)) {
+-            if (chunkDataInputStream == null) {
+-                return null;
++        CompoundTag nbttagcompound;
++        label43:
++        {
++            try {
++                if (datainputstream != null) {
++                    nbttagcompound = NbtIo.read((DataInput) datainputstream);
++                    break label43;
++                }
++
++                nbttagcompound = null;
++            } catch (Throwable throwable) {
++                if (datainputstream != null) {
++                    try {
++                        datainputstream.close();
++                    } catch (Throwable throwable1) {
++                        throwable.addSuppressed(throwable1);
++                    }
++                }
++
++                throw throwable;
+             }
+ 
+-            var4 = NbtIo.read(chunkDataInputStream);
++            if (datainputstream != null) {
++                datainputstream.close();
++            }
++
++            return nbttagcompound;
+         }
+ 
+-        return var4;
++        if (datainputstream != null) {
++            datainputstream.close();
++        }
++
++        return nbttagcompound;
+     }
+ 
+     public void scanChunk(ChunkPos chunkPos, StreamTagVisitor visitor) throws IOException {
+-        RegionFile regionFile = this.getRegionFile(chunkPos);
++        // CraftBukkit start - SPIGOT-5680: There's no good reason to preemptively create files on read, save that for writing
++        RegionFile regionfile = this.getRegionFile(chunkPos, true);
++        if (regionfile == null) {
++            return;
++        }
++        // CraftBukkit end
++        DataInputStream datainputstream = regionfile.getChunkDataInputStream(chunkPos);
+ 
+-        try (DataInputStream chunkDataInputStream = regionFile.getChunkDataInputStream(chunkPos)) {
+-            if (chunkDataInputStream != null) {
+-                NbtIo.parse(chunkDataInputStream, visitor, NbtAccounter.unlimitedHeap());
++        try {
++            if (datainputstream != null) {
++                NbtIo.parse(datainputstream, visitor, NbtAccounter.unlimitedHeap());
+             }
++        } catch (Throwable throwable) {
++            if (datainputstream != null) {
++                try {
++                    datainputstream.close();
++                } catch (Throwable throwable1) {
++                    throwable.addSuppressed(throwable1);
++                }
++            }
++
++            throw throwable;
+         }
++
++        if (datainputstream != null) {
++            datainputstream.close();
++        }
++
+     }
+ 
+     protected void write(ChunkPos chunkPos, @Nullable CompoundTag chunkData) throws IOException {
+-        RegionFile regionFile = this.getRegionFile(chunkPos);
++        RegionFile regionfile = this.getRegionFile(chunkPos, false); // CraftBukkit
++
+         if (chunkData == null) {
+-            regionFile.clear(chunkPos);
++            regionfile.clear(chunkPos);
+         } else {
+-            try (DataOutputStream chunkDataOutputStream = regionFile.getChunkDataOutputStream(chunkPos)) {
+-                NbtIo.write(chunkData, chunkDataOutputStream);
++            DataOutputStream dataoutputstream = regionfile.getChunkDataOutputStream(chunkPos);
++
++            try {
++                NbtIo.write(chunkData, (DataOutput) dataoutputstream);
++            } catch (Throwable throwable) {
++                if (dataoutputstream != null) {
++                    try {
++                        dataoutputstream.close();
++                    } catch (Throwable throwable1) {
++                        throwable.addSuppressed(throwable1);
++                    }
++                }
++
++                throw throwable;
+             }
++
++            if (dataoutputstream != null) {
++                dataoutputstream.close();
++            }
+         }
++
+     }
+ 
+-    @Override
+     public void close() throws IOException {
+-        ExceptionCollector<IOException> exceptionCollector = new ExceptionCollector<>();
++        ExceptionCollector<IOException> exceptionsuppressor = new ExceptionCollector<>();
++        ObjectIterator objectiterator = this.regionCache.values().iterator();
+ 
+-        for (RegionFile regionFile : this.regionCache.values()) {
++        while (objectiterator.hasNext()) {
++            RegionFile regionfile = (RegionFile) objectiterator.next();
++
+             try {
+-                regionFile.close();
+-            } catch (IOException var5) {
+-                exceptionCollector.add(var5);
++                regionfile.close();
++            } catch (IOException ioexception) {
++                exceptionsuppressor.add(ioexception);
+             }
+         }
+ 
+-        exceptionCollector.throwIfPresent();
++        exceptionsuppressor.throwIfPresent();
+     }
+ 
+     public void flush() throws IOException {
+-        for (RegionFile regionFile : this.regionCache.values()) {
+-            regionFile.flush();
++        ObjectIterator objectiterator = this.regionCache.values().iterator();
++
++        while (objectiterator.hasNext()) {
++            RegionFile regionfile = (RegionFile) objectiterator.next();
++
++            regionfile.flush();
+         }
++
+     }
+ }

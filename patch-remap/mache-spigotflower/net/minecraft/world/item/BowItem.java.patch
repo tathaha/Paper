@@ -1,0 +1,190 @@
+--- a/net/minecraft/world/item/BowItem.java
++++ b/net/minecraft/world/item/BowItem.java
+@@ -4,7 +4,7 @@
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.sounds.SoundSource;
+ import net.minecraft.stats.Stats;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResultHolder;
+ import net.minecraft.world.entity.LivingEntity;
+ import net.minecraft.world.entity.player.Player;
+@@ -13,85 +13,101 @@
+ import net.minecraft.world.item.enchantment.Enchantments;
+ import net.minecraft.world.level.Level;
+ 
+-public class BowItem extends ProjectileWeaponItem implements Vanishable {
++public class BowItem extends ProjectileWeaponItem implements ItemVanishable {
+ 
+     public static final int MAX_DRAW_DURATION = 20;
+     public static final int DEFAULT_RANGE = 15;
+ 
+-    public BowItem(Item.Properties item_properties) {
+-        super(item_properties);
++    public BowItem(Item.Properties properties) {
++        super(properties);
+     }
+ 
+     @Override
+-    @Override
+-    public void releaseUsing(ItemStack itemstack, Level level, LivingEntity livingentity, int i) {
+-        if (livingentity instanceof Player) {
+-            Player player = (Player) livingentity;
+-            boolean flag = player.getAbilities().instabuild || EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, itemstack) > 0;
+-            ItemStack itemstack1 = player.getProjectile(itemstack);
++    public void releaseUsing(ItemStack stack, Level level, LivingEntity entityLiving, int timeLeft) {
++        if (entityLiving instanceof Player) {
++            Player entityhuman = (Player) entityLiving;
++            boolean flag = entityhuman.getAbilities().instabuild || EnchantmentHelper.getItemEnchantmentLevel(Enchantments.INFINITY_ARROWS, stack) > 0;
++            ItemStack itemstack1 = entityhuman.getProjectile(stack);
+ 
+             if (!itemstack1.isEmpty() || flag) {
+                 if (itemstack1.isEmpty()) {
+                     itemstack1 = new ItemStack(Items.ARROW);
+                 }
+ 
+-                int j = this.getUseDuration(itemstack) - i;
++                int j = this.getUseDuration(stack) - timeLeft;
+                 float f = getPowerForTime(j);
+ 
+                 if ((double) f >= 0.1D) {
+                     boolean flag1 = flag && itemstack1.is(Items.ARROW);
+ 
+                     if (!level.isClientSide) {
+-                        ArrowItem arrowitem = (ArrowItem) (itemstack1.getItem() instanceof ArrowItem ? itemstack1.getItem() : Items.ARROW);
+-                        AbstractArrow abstractarrow = arrowitem.createArrow(level, itemstack1, player);
++                        ArrowItem itemarrow = (ArrowItem) (itemstack1.getItem() instanceof ArrowItem ? itemstack1.getItem() : Items.ARROW);
++                        AbstractArrow entityarrow = itemarrow.createArrow(level, itemstack1, entityhuman);
+ 
+-                        abstractarrow.shootFromRotation(player, player.getXRot(), player.getYRot(), 0.0F, f * 3.0F, 1.0F);
++                        entityarrow.shootFromRotation(entityhuman, entityhuman.getXRot(), entityhuman.getYRot(), 0.0F, f * 3.0F, 1.0F);
+                         if (f == 1.0F) {
+-                            abstractarrow.setCritArrow(true);
++                            entityarrow.setCritArrow(true);
+                         }
+ 
+-                        int k = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, itemstack);
++                        int k = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.POWER_ARROWS, stack);
+ 
+                         if (k > 0) {
+-                            abstractarrow.setBaseDamage(abstractarrow.getBaseDamage() + (double) k * 0.5D + 0.5D);
++                            entityarrow.setBaseDamage(entityarrow.getBaseDamage() + (double) k * 0.5D + 0.5D);
+                         }
+ 
+-                        int l = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PUNCH_ARROWS, itemstack);
++                        int l = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PUNCH_ARROWS, stack);
+ 
+                         if (l > 0) {
+-                            abstractarrow.setKnockback(l);
++                            entityarrow.setKnockback(l);
+                         }
+ 
+-                        if (EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS, itemstack) > 0) {
+-                            abstractarrow.setSecondsOnFire(100);
++                        if (EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FLAMING_ARROWS, stack) > 0) {
++                            entityarrow.setSecondsOnFire(100);
+                         }
++                        // CraftBukkit start
++                        org.bukkit.event.entity.EntityShootBowEvent event = org.bukkit.craftbukkit.event.CraftEventFactory.callEntityShootBowEvent(entityhuman, stack, itemstack1, entityarrow, entityhuman.getUsedItemHand(), f, !flag1);
++                        if (event.isCancelled()) {
++                            event.getProjectile().remove();
++                            return;
++                        }
++                        flag1 = !event.shouldConsumeItem();
++                        // CraftBukkit end
+ 
+-                        itemstack.hurtAndBreak(1, player, (player1) -> {
+-                            player1.broadcastBreakEvent(player.getUsedItemHand());
++                        stack.hurtAndBreak(1, entityhuman, (entityhuman1) -> {
++                            entityhuman1.broadcastBreakEvent(entityhuman.getUsedItemHand());
+                         });
+-                        if (flag1 || player.getAbilities().instabuild && (itemstack1.is(Items.SPECTRAL_ARROW) || itemstack1.is(Items.TIPPED_ARROW))) {
+-                            abstractarrow.pickup = AbstractArrow.Pickup.CREATIVE_ONLY;
++                        if (flag1 || entityhuman.getAbilities().instabuild && (itemstack1.is(Items.SPECTRAL_ARROW) || itemstack1.is(Items.TIPPED_ARROW))) {
++                            entityarrow.pickup = AbstractArrow.Pickup.CREATIVE_ONLY;
+                         }
+ 
+-                        level.addFreshEntity(abstractarrow);
++                        // CraftBukkit start
++                        if (event.getProjectile() == entityarrow.getBukkitEntity()) {
++                            if (!level.addFreshEntity(entityarrow)) {
++                                if (entityhuman instanceof net.minecraft.server.level.ServerPlayer) {
++                                    ((net.minecraft.server.level.ServerPlayer) entityhuman).getBukkitEntity().updateInventory();
++                                }
++                                return;
++                            }
++                        }
++                        // CraftBukkit end
+                     }
+ 
+-                    level.playSound((Player) null, player.getX(), player.getY(), player.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (level.getRandom().nextFloat() * 0.4F + 1.2F) + f * 0.5F);
+-                    if (!flag1 && !player.getAbilities().instabuild) {
++                    level.playSound((Player) null, entityhuman.getX(), entityhuman.getY(), entityhuman.getZ(), SoundEvents.ARROW_SHOOT, SoundSource.PLAYERS, 1.0F, 1.0F / (level.getRandom().nextFloat() * 0.4F + 1.2F) + f * 0.5F);
++                    if (!flag1 && !entityhuman.getAbilities().instabuild) {
+                         itemstack1.shrink(1);
+                         if (itemstack1.isEmpty()) {
+-                            player.getInventory().removeItem(itemstack1);
++                            entityhuman.getInventory().removeItem(itemstack1);
+                         }
+                     }
+ 
+-                    player.awardStat(Stats.ITEM_USED.get(this));
++                    entityhuman.awardStat(Stats.ITEM_USED.get(this));
+                 }
+             }
+         }
+     }
+ 
+-    public static float getPowerForTime(int i) {
+-        float f = (float) i / 20.0F;
++    public static float getPowerForTime(int charge) {
++        float f = (float) charge / 20.0F;
+ 
+         f = (f * f + f * 2.0F) / 3.0F;
+         if (f > 1.0F) {
+@@ -102,39 +118,34 @@
+     }
+ 
+     @Override
+-    @Override
+-    public int getUseDuration(ItemStack itemstack) {
++    public int getUseDuration(ItemStack stack) {
+         return 72000;
+     }
+ 
+     @Override
+-    @Override
+-    public UseAnim getUseAnimation(ItemStack itemstack) {
+-        return UseAnim.BOW;
++    public EnumAnimation getUseAnimation(ItemStack stack) {
++        return EnumAnimation.BOW;
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand interactionhand) {
+-        ItemStack itemstack = player.getItemInHand(interactionhand);
++    public InteractionResultHolder<ItemStack> use(Level level, Player player, EnumHand hand) {
++        ItemStack itemstack = player.getItemInHand(hand);
+         boolean flag = !player.getProjectile(itemstack).isEmpty();
+ 
+         if (!player.getAbilities().instabuild && !flag) {
+             return InteractionResultHolder.fail(itemstack);
+         } else {
+-            player.startUsingItem(interactionhand);
++            player.startUsingItem(hand);
+             return InteractionResultHolder.consume(itemstack);
+         }
+     }
+ 
+     @Override
+-    @Override
+     public Predicate<ItemStack> getAllSupportedProjectiles() {
+         return BowItem.ARROW_ONLY;
+     }
+ 
+     @Override
+-    @Override
+     public int getDefaultProjectileRange() {
+         return 15;
+     }

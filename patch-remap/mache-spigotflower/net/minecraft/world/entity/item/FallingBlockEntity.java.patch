@@ -1,0 +1,450 @@
+--- a/net/minecraft/world/entity/item/FallingBlockEntity.java
++++ b/net/minecraft/world/entity/item/FallingBlockEntity.java
+@@ -26,13 +26,13 @@
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntitySelector;
+ import net.minecraft.world.entity.EntityType;
+-import net.minecraft.world.entity.MoverType;
++import net.minecraft.world.entity.EnumMoveType;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.context.BlockPlaceContext;
+ import net.minecraft.world.item.context.DirectionalPlaceContext;
+ import net.minecraft.world.level.ClipContext;
+ import net.minecraft.world.level.GameRules;
+-import net.minecraft.world.level.ItemLike;
++import net.minecraft.world.level.IMaterial;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.AnvilBlock;
+ import net.minecraft.world.level.block.Block;
+@@ -41,7 +41,7 @@
+ import net.minecraft.world.level.block.Fallable;
+ import net.minecraft.world.level.block.FallingBlock;
+ import net.minecraft.world.level.block.entity.BlockEntity;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.material.Fluids;
+ import net.minecraft.world.phys.BlockHitResult;
+@@ -49,55 +49,65 @@
+ import net.minecraft.world.phys.Vec3;
+ import org.slf4j.Logger;
+ 
++// CraftBukkit start;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++// CraftBukkit end
++
+ public class FallingBlockEntity extends Entity {
+ 
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    private BlockState blockState;
++    private IBlockData blockState;
+     public int time;
+     public boolean dropItem;
+-    private boolean cancelDrop;
+-    private boolean hurtEntities;
+-    private int fallDamageMax;
+-    private float fallDamagePerDistance;
++    public boolean cancelDrop;
++    public boolean hurtEntities;
++    public int fallDamageMax;
++    public float fallDamagePerDistance;
+     @Nullable
+     public CompoundTag blockData;
+     protected static final EntityDataAccessor<BlockPos> DATA_START_POS = SynchedEntityData.defineId(FallingBlockEntity.class, EntityDataSerializers.BLOCK_POS);
+ 
+-    public FallingBlockEntity(EntityType<? extends FallingBlockEntity> entitytype, Level level) {
+-        super(entitytype, level);
++    public FallingBlockEntity(EntityType<? extends FallingBlockEntity> entityType, Level level) {
++        super(entityType, level);
+         this.blockState = Blocks.SAND.defaultBlockState();
+         this.dropItem = true;
+         this.fallDamageMax = 40;
+     }
+ 
+-    private FallingBlockEntity(Level level, double d0, double d1, double d2, BlockState blockstate) {
++    private FallingBlockEntity(Level level, double x, double d1, double y, IBlockData iblockdata) {
+         this(EntityType.FALLING_BLOCK, level);
+-        this.blockState = blockstate;
++        this.blockState = iblockdata;
+         this.blocksBuilding = true;
+-        this.setPos(d0, d1, d2);
++        this.setPos(x, d1, y);
+         this.setDeltaMovement(Vec3.ZERO);
+-        this.xo = d0;
++        this.xo = x;
+         this.yo = d1;
+-        this.zo = d2;
++        this.zo = y;
+         this.setStartPos(this.blockPosition());
+     }
+ 
+-    public static FallingBlockEntity fall(Level level, BlockPos blockpos, BlockState blockstate) {
+-        FallingBlockEntity fallingblockentity = new FallingBlockEntity(level, (double) blockpos.getX() + 0.5D, (double) blockpos.getY(), (double) blockpos.getZ() + 0.5D, blockstate.hasProperty(BlockStateProperties.WATERLOGGED) ? (BlockState) blockstate.setValue(BlockStateProperties.WATERLOGGED, false) : blockstate);
++    public static FallingBlockEntity fall(Level level, BlockPos pos, IBlockData blockState) {
++        // CraftBukkit start
++        return fall(level, pos, blockState, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason.DEFAULT);
++    }
+ 
+-        level.setBlock(blockpos, blockstate.getFluidState().createLegacyBlock(), 3);
+-        level.addFreshEntity(fallingblockentity);
+-        return fallingblockentity;
++    public static FallingBlockEntity fall(Level world, BlockPos blockposition, IBlockData iblockdata, org.bukkit.event.entity.CreatureSpawnEvent.SpawnReason spawnReason) {
++        // CraftBukkit end
++        FallingBlockEntity entityfallingblock = new FallingBlockEntity(world, (double) blockposition.getX() + 0.5D, (double) blockposition.getY(), (double) blockposition.getZ() + 0.5D, iblockdata.hasProperty(BlockStateProperties.WATERLOGGED) ? (IBlockData) iblockdata.setValue(BlockStateProperties.WATERLOGGED, false) : iblockdata);
++        if (!CraftEventFactory.callEntityChangeBlockEvent(entityfallingblock, blockposition, iblockdata.getFluidState().createLegacyBlock())) return entityfallingblock; // CraftBukkit
++
++        world.setBlock(blockposition, iblockdata.getFluidState().createLegacyBlock(), 3);
++        world.addFreshEntity(entityfallingblock, spawnReason); // CraftBukkit
++        return entityfallingblock;
+     }
+ 
+     @Override
+-    @Override
+     public boolean isAttackable() {
+         return false;
+     }
+ 
+-    public void setStartPos(BlockPos blockpos) {
+-        this.entityData.set(FallingBlockEntity.DATA_START_POS, blockpos);
++    public void setStartPos(BlockPos startPos) {
++        this.entityData.set(FallingBlockEntity.DATA_START_POS, startPos);
+     }
+ 
+     public BlockPos getStartPos() {
+@@ -105,25 +115,21 @@
+     }
+ 
+     @Override
+-    @Override
+     protected Entity.MovementEmission getMovementEmission() {
+         return Entity.MovementEmission.NONE;
+     }
+ 
+     @Override
+-    @Override
+     protected void defineSynchedData() {
+         this.entityData.define(FallingBlockEntity.DATA_START_POS, BlockPos.ZERO);
+     }
+ 
+     @Override
+-    @Override
+     public boolean isPickable() {
+         return !this.isRemoved();
+     }
+ 
+     @Override
+-    @Override
+     public void tick() {
+         if (this.blockState.isAir()) {
+             this.discard();
+@@ -135,89 +141,95 @@
+                 this.setDeltaMovement(this.getDeltaMovement().add(0.0D, -0.04D, 0.0D));
+             }
+ 
+-            this.move(MoverType.SELF, this.getDeltaMovement());
++            this.move(EnumMoveType.SELF, this.getDeltaMovement());
+             if (!this.level().isClientSide) {
+-                BlockPos blockpos = this.blockPosition();
++                BlockPos blockposition = this.blockPosition();
+                 boolean flag = this.blockState.getBlock() instanceof ConcretePowderBlock;
+-                boolean flag1 = flag && this.level().getFluidState(blockpos).is(FluidTags.WATER);
++                boolean flag1 = flag && this.level().getFluidState(blockposition).is(FluidTags.WATER);
+                 double d0 = this.getDeltaMovement().lengthSqr();
+ 
+                 if (flag && d0 > 1.0D) {
+-                    BlockHitResult blockhitresult = this.level().clip(new ClipContext(new Vec3(this.xo, this.yo, this.zo), this.position(), ClipContext.Block.COLLIDER, ClipContext.Fluid.SOURCE_ONLY, this));
++                    BlockHitResult movingobjectpositionblock = this.level().clip(new ClipContext(new Vec3(this.xo, this.yo, this.zo), this.position(), ClipContext.Block.COLLIDER, ClipContext.Fluid.SOURCE_ONLY, this));
+ 
+-                    if (blockhitresult.getType() != HitResult.Type.MISS && this.level().getFluidState(blockhitresult.getBlockPos()).is(FluidTags.WATER)) {
+-                        blockpos = blockhitresult.getBlockPos();
++                    if (movingobjectpositionblock.getType() != HitResult.EnumMovingObjectType.MISS && this.level().getFluidState(movingobjectpositionblock.getBlockPos()).is(FluidTags.WATER)) {
++                        blockposition = movingobjectpositionblock.getBlockPos();
+                         flag1 = true;
+                     }
+                 }
+ 
+                 if (!this.onGround() && !flag1) {
+-                    if (!this.level().isClientSide && (this.time > 100 && (blockpos.getY() <= this.level().getMinBuildHeight() || blockpos.getY() > this.level().getMaxBuildHeight()) || this.time > 600)) {
++                    if (!this.level().isClientSide && (this.time > 100 && (blockposition.getY() <= this.level().getMinBuildHeight() || blockposition.getY() > this.level().getMaxBuildHeight()) || this.time > 600)) {
+                         if (this.dropItem && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
+-                            this.spawnAtLocation((ItemLike) block);
++                            this.spawnAtLocation((IMaterial) block);
+                         }
+ 
+                         this.discard();
+                     }
+                 } else {
+-                    BlockState blockstate = this.level().getBlockState(blockpos);
++                    IBlockData iblockdata = this.level().getBlockState(blockposition);
+ 
+                     this.setDeltaMovement(this.getDeltaMovement().multiply(0.7D, -0.5D, 0.7D));
+-                    if (!blockstate.is(Blocks.MOVING_PISTON)) {
++                    if (!iblockdata.is(Blocks.MOVING_PISTON)) {
+                         if (!this.cancelDrop) {
+-                            boolean flag2 = blockstate.canBeReplaced((BlockPlaceContext) (new DirectionalPlaceContext(this.level(), blockpos, Direction.DOWN, ItemStack.EMPTY, Direction.UP)));
+-                            boolean flag3 = FallingBlock.isFree(this.level().getBlockState(blockpos.below())) && (!flag || !flag1);
+-                            boolean flag4 = this.blockState.canSurvive(this.level(), blockpos) && !flag3;
++                            boolean flag2 = iblockdata.canBeReplaced((BlockPlaceContext) (new DirectionalPlaceContext(this.level(), blockposition, Direction.DOWN, ItemStack.EMPTY, Direction.UP)));
++                            boolean flag3 = FallingBlock.isFree(this.level().getBlockState(blockposition.below())) && (!flag || !flag1);
++                            boolean flag4 = this.blockState.canSurvive(this.level(), blockposition) && !flag3;
+ 
+                             if (flag2 && flag4) {
+-                                if (this.blockState.hasProperty(BlockStateProperties.WATERLOGGED) && this.level().getFluidState(blockpos).getType() == Fluids.WATER) {
+-                                    this.blockState = (BlockState) this.blockState.setValue(BlockStateProperties.WATERLOGGED, true);
++                                if (this.blockState.hasProperty(BlockStateProperties.WATERLOGGED) && this.level().getFluidState(blockposition).getType() == Fluids.WATER) {
++                                    this.blockState = (IBlockData) this.blockState.setValue(BlockStateProperties.WATERLOGGED, true);
+                                 }
+ 
+-                                if (this.level().setBlock(blockpos, this.blockState, 3)) {
+-                                    ((ServerLevel) this.level()).getChunkSource().chunkMap.broadcast(this, new ClientboundBlockUpdatePacket(blockpos, this.level().getBlockState(blockpos)));
++                                // CraftBukkit start
++                                if (!CraftEventFactory.callEntityChangeBlockEvent(this, blockposition, this.blockState)) {
++                                    this.discard(); // SPIGOT-6586 called before the event in previous versions
++                                    return;
++                                }
++                                // CraftBukkit end
++                                if (this.level().setBlock(blockposition, this.blockState, 3)) {
++                                    ((ServerLevel) this.level()).getChunkSource().chunkMap.broadcast(this, new ClientboundBlockUpdatePacket(blockposition, this.level().getBlockState(blockposition)));
+                                     this.discard();
+                                     if (block instanceof Fallable) {
+-                                        ((Fallable) block).onLand(this.level(), blockpos, this.blockState, blockstate, this);
++                                        ((Fallable) block).onLand(this.level(), blockposition, this.blockState, iblockdata, this);
+                                     }
+ 
+                                     if (this.blockData != null && this.blockState.hasBlockEntity()) {
+-                                        BlockEntity blockentity = this.level().getBlockEntity(blockpos);
++                                        BlockEntity tileentity = this.level().getBlockEntity(blockposition);
+ 
+-                                        if (blockentity != null) {
+-                                            CompoundTag compoundtag = blockentity.saveWithoutMetadata();
++                                        if (tileentity != null) {
++                                            CompoundTag nbttagcompound = tileentity.saveWithoutMetadata();
+                                             Iterator iterator = this.blockData.getAllKeys().iterator();
+ 
+                                             while (iterator.hasNext()) {
+                                                 String s = (String) iterator.next();
+ 
+-                                                compoundtag.put(s, this.blockData.get(s).copy());
++                                                nbttagcompound.put(s, this.blockData.get(s).copy());
+                                             }
+ 
+                                             try {
+-                                                blockentity.load(compoundtag);
++                                                tileentity.load(nbttagcompound);
+                                             } catch (Exception exception) {
+                                                 FallingBlockEntity.LOGGER.error("Failed to load block entity from falling block", exception);
+                                             }
+ 
+-                                            blockentity.setChanged();
++                                            tileentity.setChanged();
+                                         }
+                                     }
+                                 } else if (this.dropItem && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
+                                     this.discard();
+-                                    this.callOnBrokenAfterFall(block, blockpos);
+-                                    this.spawnAtLocation((ItemLike) block);
++                                    this.callOnBrokenAfterFall(block, blockposition);
++                                    this.spawnAtLocation((IMaterial) block);
+                                 }
+                             } else {
+                                 this.discard();
+                                 if (this.dropItem && this.level().getGameRules().getBoolean(GameRules.RULE_DOENTITYDROPS)) {
+-                                    this.callOnBrokenAfterFall(block, blockpos);
+-                                    this.spawnAtLocation((ItemLike) block);
++                                    this.callOnBrokenAfterFall(block, blockposition);
++                                    this.spawnAtLocation((IMaterial) block);
+                                 }
+                             }
+                         } else {
+                             this.discard();
+-                            this.callOnBrokenAfterFall(block, blockpos);
++                            this.callOnBrokenAfterFall(block, blockposition);
+                         }
+                     }
+                 }
+@@ -227,20 +239,19 @@
+         }
+     }
+ 
+-    public void callOnBrokenAfterFall(Block block, BlockPos blockpos) {
++    public void callOnBrokenAfterFall(Block block, BlockPos pos) {
+         if (block instanceof Fallable) {
+-            ((Fallable) block).onBrokenAfterFall(this.level(), blockpos, this);
++            ((Fallable) block).onBrokenAfterFall(this.level(), pos, this);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public boolean causeFallDamage(float f, float f1, DamageSource damagesource) {
++    public boolean causeFallDamage(float fallDistance, float multiplier, DamageSource source) {
+         if (!this.hurtEntities) {
+             return false;
+         } else {
+-            int i = Mth.ceil(f - 1.0F);
++            int i = Mth.ceil(fallDistance - 1.0F);
+ 
+             if (i < 0) {
+                 return false;
+@@ -261,17 +272,19 @@
+                 float f2 = (float) Math.min(Mth.floor((float) i * this.fallDamagePerDistance), this.fallDamageMax);
+ 
+                 this.level().getEntities((Entity) this, this.getBoundingBox(), predicate).forEach((entity) -> {
++                    CraftEventFactory.entityDamage = this; // CraftBukkit
+                     entity.hurt(damagesource2, f2);
++                    CraftEventFactory.entityDamage = null; // CraftBukkit
+                 });
+                 boolean flag = this.blockState.is(BlockTags.ANVIL);
+ 
+                 if (flag && f2 > 0.0F && this.random.nextFloat() < 0.05F + (float) i * 0.05F) {
+-                    BlockState blockstate = AnvilBlock.damage(this.blockState);
++                    IBlockData iblockdata = AnvilBlock.damage(this.blockState);
+ 
+-                    if (blockstate == null) {
++                    if (iblockdata == null) {
+                         this.cancelDrop = true;
+                     } else {
+-                        this.blockState = blockstate;
++                        this.blockState = iblockdata;
+                     }
+                 }
+ 
+@@ -281,53 +294,51 @@
+     }
+ 
+     @Override
+-    @Override
+-    protected void addAdditionalSaveData(CompoundTag compoundtag) {
+-        compoundtag.put("BlockState", NbtUtils.writeBlockState(this.blockState));
+-        compoundtag.putInt("Time", this.time);
+-        compoundtag.putBoolean("DropItem", this.dropItem);
+-        compoundtag.putBoolean("HurtEntities", this.hurtEntities);
+-        compoundtag.putFloat("FallHurtAmount", this.fallDamagePerDistance);
+-        compoundtag.putInt("FallHurtMax", this.fallDamageMax);
++    protected void addAdditionalSaveData(CompoundTag compound) {
++        compound.put("BlockState", NbtUtils.writeBlockState(this.blockState));
++        compound.putInt("Time", this.time);
++        compound.putBoolean("DropItem", this.dropItem);
++        compound.putBoolean("HurtEntities", this.hurtEntities);
++        compound.putFloat("FallHurtAmount", this.fallDamagePerDistance);
++        compound.putInt("FallHurtMax", this.fallDamageMax);
+         if (this.blockData != null) {
+-            compoundtag.put("TileEntityData", this.blockData);
++            compound.put("TileEntityData", this.blockData);
+         }
+ 
+-        compoundtag.putBoolean("CancelDrop", this.cancelDrop);
++        compound.putBoolean("CancelDrop", this.cancelDrop);
+     }
+ 
+     @Override
+-    @Override
+-    protected void readAdditionalSaveData(CompoundTag compoundtag) {
+-        this.blockState = NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compoundtag.getCompound("BlockState"));
+-        this.time = compoundtag.getInt("Time");
+-        if (compoundtag.contains("HurtEntities", 99)) {
+-            this.hurtEntities = compoundtag.getBoolean("HurtEntities");
+-            this.fallDamagePerDistance = compoundtag.getFloat("FallHurtAmount");
+-            this.fallDamageMax = compoundtag.getInt("FallHurtMax");
++    protected void readAdditionalSaveData(CompoundTag compound) {
++        this.blockState = NbtUtils.readBlockState(this.level().holderLookup(Registries.BLOCK), compound.getCompound("BlockState"));
++        this.time = compound.getInt("Time");
++        if (compound.contains("HurtEntities", 99)) {
++            this.hurtEntities = compound.getBoolean("HurtEntities");
++            this.fallDamagePerDistance = compound.getFloat("FallHurtAmount");
++            this.fallDamageMax = compound.getInt("FallHurtMax");
+         } else if (this.blockState.is(BlockTags.ANVIL)) {
+             this.hurtEntities = true;
+         }
+ 
+-        if (compoundtag.contains("DropItem", 99)) {
+-            this.dropItem = compoundtag.getBoolean("DropItem");
++        if (compound.contains("DropItem", 99)) {
++            this.dropItem = compound.getBoolean("DropItem");
+         }
+ 
+-        if (compoundtag.contains("TileEntityData", 10)) {
+-            this.blockData = compoundtag.getCompound("TileEntityData").copy();
++        if (compound.contains("TileEntityData", 10)) {
++            this.blockData = compound.getCompound("TileEntityData").copy();
+         }
+ 
+-        this.cancelDrop = compoundtag.getBoolean("CancelDrop");
++        this.cancelDrop = compound.getBoolean("CancelDrop");
+         if (this.blockState.isAir()) {
+             this.blockState = Blocks.SAND.defaultBlockState();
+         }
+ 
+     }
+ 
+-    public void setHurtsEntities(float f, int i) {
++    public void setHurtsEntities(float fallDamagePerDistance, int fallDamageMax) {
+         this.hurtEntities = true;
+-        this.fallDamagePerDistance = f;
+-        this.fallDamageMax = i;
++        this.fallDamagePerDistance = fallDamagePerDistance;
++        this.fallDamageMax = fallDamageMax;
+     }
+ 
+     public void disableDrop() {
+@@ -335,49 +346,43 @@
+     }
+ 
+     @Override
+-    @Override
+     public boolean displayFireAnimation() {
+         return false;
+     }
+ 
+     @Override
+-    @Override
+-    public void fillCrashReportCategory(CrashReportCategory crashreportcategory) {
+-        super.fillCrashReportCategory(crashreportcategory);
+-        crashreportcategory.setDetail("Immitating BlockState", (Object) this.blockState.toString());
++    public void fillCrashReportCategory(CrashReportCategory category) {
++        super.fillCrashReportCategory(category);
++        category.setDetail("Immitating BlockState", (Object) this.blockState.toString());
+     }
+ 
+-    public BlockState getBlockState() {
++    public IBlockData getBlockState() {
+         return this.blockState;
+     }
+ 
+     @Override
+-    @Override
+     protected Component getTypeName() {
+         return Component.translatable("entity.minecraft.falling_block_type", this.blockState.getBlock().getName());
+     }
+ 
+     @Override
+-    @Override
+     public boolean onlyOpCanSetNbt() {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+     public Packet<ClientGamePacketListener> getAddEntityPacket() {
+         return new ClientboundAddEntityPacket(this, Block.getId(this.getBlockState()));
+     }
+ 
+     @Override
+-    @Override
+-    public void recreateFromPacket(ClientboundAddEntityPacket clientboundaddentitypacket) {
+-        super.recreateFromPacket(clientboundaddentitypacket);
+-        this.blockState = Block.stateById(clientboundaddentitypacket.getData());
++    public void recreateFromPacket(ClientboundAddEntityPacket packet) {
++        super.recreateFromPacket(packet);
++        this.blockState = Block.stateById(packet.getData());
+         this.blocksBuilding = true;
+-        double d0 = clientboundaddentitypacket.getX();
+-        double d1 = clientboundaddentitypacket.getY();
+-        double d2 = clientboundaddentitypacket.getZ();
++        double d0 = packet.getX();
++        double d1 = packet.getY();
++        double d2 = packet.getZ();
+ 
+         this.setPos(d0, d1, d2);
+         this.setStartPos(this.blockPosition());

@@ -1,0 +1,319 @@
+--- a/net/minecraft/world/entity/monster/Creeper.java
++++ b/net/minecraft/world/entity/monster/Creeper.java
+@@ -1,6 +1,7 @@
+ package net.minecraft.world.entity.monster;
+ 
+ import java.util.Collection;
++import java.util.Iterator;
+ import javax.annotation.Nullable;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.syncher.EntityDataAccessor;
+@@ -11,7 +12,7 @@
+ import net.minecraft.sounds.SoundEvents;
+ import net.minecraft.tags.ItemTags;
+ import net.minecraft.util.Mth;
+-import net.minecraft.world.InteractionHand;
++import net.minecraft.world.EnumHand;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.damagesource.DamageSource;
+ import net.minecraft.world.effect.MobEffectInstance;
+@@ -38,17 +39,25 @@
+ import net.minecraft.world.entity.player.Player;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraft.world.item.Items;
++import net.minecraft.world.level.IMaterial;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.gameevent.GameEvent;
+ 
++// CraftBukkit start;
++import org.bukkit.event.entity.CreatureSpawnEvent;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.ExplosionPrimeEvent;
++// CraftBukkit end
++
+ public class Creeper extends Monster implements PowerableMob {
++
+     private static final EntityDataAccessor<Integer> DATA_SWELL_DIR = SynchedEntityData.defineId(Creeper.class, EntityDataSerializers.INT);
+     private static final EntityDataAccessor<Boolean> DATA_IS_POWERED = SynchedEntityData.defineId(Creeper.class, EntityDataSerializers.BOOLEAN);
+     private static final EntityDataAccessor<Boolean> DATA_IS_IGNITED = SynchedEntityData.defineId(Creeper.class, EntityDataSerializers.BOOLEAN);
+     private int oldSwell;
+-    private int swell;
+-    private int maxSwell = 30;
+-    private int explosionRadius = 3;
++    public int swell;
++    public int maxSwell = 30;
++    public int explosionRadius = 3;
+     private int droppedSkulls;
+ 
+     public Creeper(EntityType<? extends Creeper> entityType, Level level) {
+@@ -59,29 +68,30 @@
+     protected void registerGoals() {
+         this.goalSelector.addGoal(1, new FloatGoal(this));
+         this.goalSelector.addGoal(2, new SwellGoal(this));
+-        this.goalSelector.addGoal(3, new AvoidEntityGoal<>(this, Ocelot.class, 6.0F, 1.0, 1.2));
+-        this.goalSelector.addGoal(3, new AvoidEntityGoal<>(this, Cat.class, 6.0F, 1.0, 1.2));
+-        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0, false));
+-        this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.8));
++        this.goalSelector.addGoal(3, new AvoidEntityGoal<>(this, Ocelot.class, 6.0F, 1.0D, 1.2D));
++        this.goalSelector.addGoal(3, new AvoidEntityGoal<>(this, Cat.class, 6.0F, 1.0D, 1.2D));
++        this.goalSelector.addGoal(4, new MeleeAttackGoal(this, 1.0D, false));
++        this.goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.8D));
+         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 8.0F));
+         this.goalSelector.addGoal(6, new RandomLookAroundGoal(this));
+         this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, Player.class, true));
+-        this.targetSelector.addGoal(2, new HurtByTargetGoal(this));
++        this.targetSelector.addGoal(2, new HurtByTargetGoal(this, new Class[0]));
+     }
+ 
+     public static AttributeSupplier.Builder createAttributes() {
+-        return Monster.createMonsterAttributes().add(Attributes.MOVEMENT_SPEED, 0.25);
++        return Monster.createMonsterAttributes().add(Attributes.MOVEMENT_SPEED, 0.25D);
+     }
+ 
+     @Override
+     public int getMaxFallDistance() {
+-        return this.getTarget() == null ? 3 : 3 + (int)(this.getHealth() - 1.0F);
++        return this.getTarget() == null ? 3 : 3 + (int) (this.getHealth() - 1.0F);
+     }
+ 
+     @Override
+     public boolean causeFallDamage(float fallDistance, float multiplier, DamageSource source) {
+         boolean flag = super.causeFallDamage(fallDistance, multiplier, source);
+-        this.swell += (int)(fallDistance * 1.5F);
++
++        this.swell += (int) (fallDistance * 1.5F);
+         if (this.swell > this.maxSwell - 5) {
+             this.swell = this.maxSwell - 5;
+         }
+@@ -92,27 +102,27 @@
+     @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+-        this.entityData.define(DATA_SWELL_DIR, -1);
+-        this.entityData.define(DATA_IS_POWERED, false);
+-        this.entityData.define(DATA_IS_IGNITED, false);
++        this.entityData.define(Creeper.DATA_SWELL_DIR, -1);
++        this.entityData.define(Creeper.DATA_IS_POWERED, false);
++        this.entityData.define(Creeper.DATA_IS_IGNITED, false);
+     }
+ 
+     @Override
+     public void addAdditionalSaveData(CompoundTag compound) {
+         super.addAdditionalSaveData(compound);
+-        if (this.entityData.get(DATA_IS_POWERED)) {
++        if ((Boolean) this.entityData.get(Creeper.DATA_IS_POWERED)) {
+             compound.putBoolean("powered", true);
+         }
+ 
+-        compound.putShort("Fuse", (short)this.maxSwell);
+-        compound.putByte("ExplosionRadius", (byte)this.explosionRadius);
++        compound.putShort("Fuse", (short) this.maxSwell);
++        compound.putByte("ExplosionRadius", (byte) this.explosionRadius);
+         compound.putBoolean("ignited", this.isIgnited());
+     }
+ 
+     @Override
+     public void readAdditionalSaveData(CompoundTag compound) {
+         super.readAdditionalSaveData(compound);
+-        this.entityData.set(DATA_IS_POWERED, compound.getBoolean("powered"));
++        this.entityData.set(Creeper.DATA_IS_POWERED, compound.getBoolean("powered"));
+         if (compound.contains("Fuse", 99)) {
+             this.maxSwell = compound.getShort("Fuse");
+         }
+@@ -124,6 +134,7 @@
+         if (compound.getBoolean("ignited")) {
+             this.ignite();
+         }
++
+     }
+ 
+     @Override
+@@ -134,13 +145,14 @@
+                 this.setSwellDir(1);
+             }
+ 
+-            int swellDir = this.getSwellDir();
+-            if (swellDir > 0 && this.swell == 0) {
++            int i = this.getSwellDir();
++
++            if (i > 0 && this.swell == 0) {
+                 this.playSound(SoundEvents.CREEPER_PRIMED, 1.0F, 0.5F);
+                 this.gameEvent(GameEvent.PRIME_FUSE);
+             }
+ 
+-            this.swell += swellDir;
++            this.swell += i;
+             if (this.swell < 0) {
+                 this.swell = 0;
+             }
+@@ -175,10 +187,16 @@
+     protected void dropCustomDeathLoot(DamageSource source, int looting, boolean recentlyHit) {
+         super.dropCustomDeathLoot(source, looting, recentlyHit);
+         Entity entity = source.getEntity();
+-        if (entity != this && entity instanceof Creeper creeper && creeper.canDropMobsSkull()) {
+-            creeper.increaseDroppedSkulls();
+-            this.spawnAtLocation(Items.CREEPER_HEAD);
++
++        if (entity != this && entity instanceof Creeper) {
++            Creeper entitycreeper = (Creeper) entity;
++
++            if (entitycreeper.canDropMobsSkull()) {
++                entitycreeper.increaseDroppedSkulls();
++                this.spawnAtLocation((IMaterial) Items.CREEPER_HEAD);
++            }
+         }
++
+     }
+ 
+     @Override
+@@ -188,40 +206,54 @@
+ 
+     @Override
+     public boolean isPowered() {
+-        return this.entityData.get(DATA_IS_POWERED);
++        return (Boolean) this.entityData.get(Creeper.DATA_IS_POWERED);
+     }
+ 
+     public float getSwelling(float partialTicks) {
+-        return Mth.lerp(partialTicks, (float)this.oldSwell, (float)this.swell) / (float)(this.maxSwell - 2);
++        return Mth.lerp(partialTicks, (float) this.oldSwell, (float) this.swell) / (float) (this.maxSwell - 2);
+     }
+ 
+     public int getSwellDir() {
+-        return this.entityData.get(DATA_SWELL_DIR);
++        return (Integer) this.entityData.get(Creeper.DATA_SWELL_DIR);
+     }
+ 
+     public void setSwellDir(int state) {
+-        this.entityData.set(DATA_SWELL_DIR, state);
++        this.entityData.set(Creeper.DATA_SWELL_DIR, state);
+     }
+ 
+     @Override
+     public void thunderHit(ServerLevel level, LightningBolt lightning) {
+         super.thunderHit(level, lightning);
+-        this.entityData.set(DATA_IS_POWERED, true);
++        // CraftBukkit start
++        if (CraftEventFactory.callCreeperPowerEvent(this, lightning, org.bukkit.event.entity.CreeperPowerEvent.PowerCause.LIGHTNING).isCancelled()) {
++            return;
++        }
++        // CraftBukkit end
++        this.entityData.set(Creeper.DATA_IS_POWERED, true);
+     }
+ 
++    // CraftBukkit start
++    public void setPowered(boolean powered) {
++        this.entityData.set(Creeper.DATA_IS_POWERED, powered);
++    }
++    // CraftBukkit end
++
+     @Override
+-    protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+-        ItemStack itemInHand = player.getItemInHand(hand);
+-        if (itemInHand.is(ItemTags.CREEPER_IGNITERS)) {
+-            SoundEvent soundEvent = itemInHand.is(Items.FIRE_CHARGE) ? SoundEvents.FIRECHARGE_USE : SoundEvents.FLINTANDSTEEL_USE;
+-            this.level()
+-                .playSound(player, this.getX(), this.getY(), this.getZ(), soundEvent, this.getSoundSource(), 1.0F, this.random.nextFloat() * 0.4F + 0.8F);
++    protected InteractionResult mobInteract(Player player, EnumHand hand) {
++        ItemStack itemstack = player.getItemInHand(hand);
++
++        if (itemstack.is(ItemTags.CREEPER_IGNITERS)) {
++            SoundEvent soundeffect = itemstack.is(Items.FIRE_CHARGE) ? SoundEvents.FIRECHARGE_USE : SoundEvents.FLINTANDSTEEL_USE;
++
++            this.level().playSound(player, this.getX(), this.getY(), this.getZ(), soundeffect, this.getSoundSource(), 1.0F, this.random.nextFloat() * 0.4F + 0.8F);
+             if (!this.level().isClientSide) {
+                 this.ignite();
+-                if (!itemInHand.isDamageableItem()) {
+-                    itemInHand.shrink(1);
++                if (itemstack.getItem().getMaxDamage() == 0) { // CraftBukkit - fix MC-264285: unbreakable flint and steels are completely consumed when igniting a creeper
++                    itemstack.shrink(1);
+                 } else {
+-                    itemInHand.hurtAndBreak(1, player, entity -> entity.broadcastBreakEvent(hand));
++                    itemstack.hurtAndBreak(1, player, (entityhuman1) -> {
++                        entityhuman1.broadcastBreakEvent(hand);
++                    });
+                 }
+             }
+ 
+@@ -231,40 +263,58 @@
+         }
+     }
+ 
+-    private void explodeCreeper() {
++    public void explodeCreeper() {
+         if (!this.level().isClientSide) {
+             float f = this.isPowered() ? 2.0F : 1.0F;
++
++            // CraftBukkit start
++            ExplosionPrimeEvent event = CraftEventFactory.callExplosionPrimeEvent(this, this.explosionRadius * f, false);
++            if (!event.isCancelled()) {
++            // CraftBukkit end
+             this.dead = true;
+-            this.level().explode(this, this.getX(), this.getY(), this.getZ(), (float)this.explosionRadius * f, Level.ExplosionInteraction.MOB);
++            this.level().explode(this, this.getX(), this.getY(), this.getZ(), event.getRadius(), event.getFire(), Level.a.MOB); // CraftBukkit
+             this.discard();
+             this.spawnLingeringCloud();
++            // CraftBukkit start
++            } else {
++                swell = 0;
++            }
++            // CraftBukkit end
+         }
++
+     }
+ 
+     private void spawnLingeringCloud() {
+-        Collection<MobEffectInstance> activeEffects = this.getActiveEffects();
+-        if (!activeEffects.isEmpty()) {
+-            AreaEffectCloud areaEffectCloud = new AreaEffectCloud(this.level(), this.getX(), this.getY(), this.getZ());
+-            areaEffectCloud.setRadius(2.5F);
+-            areaEffectCloud.setRadiusOnUse(-0.5F);
+-            areaEffectCloud.setWaitTime(10);
+-            areaEffectCloud.setDuration(areaEffectCloud.getDuration() / 2);
+-            areaEffectCloud.setRadiusPerTick(-areaEffectCloud.getRadius() / (float)areaEffectCloud.getDuration());
++        Collection<MobEffectInstance> collection = this.getActiveEffects();
+ 
+-            for (MobEffectInstance mobEffectInstance : activeEffects) {
+-                areaEffectCloud.addEffect(new MobEffectInstance(mobEffectInstance));
++        if (!collection.isEmpty()) {
++            AreaEffectCloud entityareaeffectcloud = new AreaEffectCloud(this.level(), this.getX(), this.getY(), this.getZ());
++
++            entityareaeffectcloud.setOwner(this); // CraftBukkit
++            entityareaeffectcloud.setRadius(2.5F);
++            entityareaeffectcloud.setRadiusOnUse(-0.5F);
++            entityareaeffectcloud.setWaitTime(10);
++            entityareaeffectcloud.setDuration(entityareaeffectcloud.getDuration() / 2);
++            entityareaeffectcloud.setRadiusPerTick(-entityareaeffectcloud.getRadius() / (float) entityareaeffectcloud.getDuration());
++            Iterator iterator = collection.iterator();
++
++            while (iterator.hasNext()) {
++                MobEffectInstance mobeffect = (MobEffectInstance) iterator.next();
++
++                entityareaeffectcloud.addEffect(new MobEffectInstance(mobeffect));
+             }
+ 
+-            this.level().addFreshEntity(areaEffectCloud);
++            this.level().addFreshEntity(entityareaeffectcloud, CreatureSpawnEvent.SpawnReason.EXPLOSION); // CraftBukkit
+         }
++
+     }
+ 
+     public boolean isIgnited() {
+-        return this.entityData.get(DATA_IS_IGNITED);
++        return (Boolean) this.entityData.get(Creeper.DATA_IS_IGNITED);
+     }
+ 
+     public void ignite() {
+-        this.entityData.set(DATA_IS_IGNITED, true);
++        this.entityData.set(Creeper.DATA_IS_IGNITED, true);
+     }
+ 
+     public boolean canDropMobsSkull() {
+@@ -272,6 +322,6 @@
+     }
+ 
+     public void increaseDroppedSkulls() {
+-        this.droppedSkulls++;
++        ++this.droppedSkulls;
+     }
+ }

@@ -1,0 +1,176 @@
+--- a/net/minecraft/world/level/storage/loot/LootDataManager.java
++++ b/net/minecraft/world/level/storage/loot/LootDataManager.java
+@@ -1,9 +1,9 @@
+ package net.minecraft.world.level.storage.loot;
+ 
+ import com.google.common.collect.ImmutableMap;
++import com.google.common.collect.ImmutableMap.Builder;
+ import com.google.common.collect.ImmutableMultimap;
+ import com.google.common.collect.Multimap;
+-import com.google.common.collect.ImmutableMap.Builder;
+ import com.google.gson.Gson;
+ import com.google.gson.GsonBuilder;
+ import com.google.gson.JsonElement;
+@@ -11,6 +11,7 @@
+ import java.util.Collection;
+ import java.util.HashMap;
+ import java.util.Map;
++import java.util.Objects;
+ import java.util.concurrent.CompletableFuture;
+ import java.util.concurrent.Executor;
+ import javax.annotation.Nullable;
+@@ -21,87 +22,104 @@
+ import net.minecraft.util.ProblemReporter;
+ import net.minecraft.util.profiling.ProfilerFiller;
+ import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
++import org.bukkit.craftbukkit.CraftLootTable;
++import org.bukkit.craftbukkit.util.CraftNamespacedKey;
+ import org.slf4j.Logger;
+ 
+ public class LootDataManager implements PreparableReloadListener, LootDataResolver {
++
+     private static final Logger LOGGER = LogUtils.getLogger();
+-    private static final Gson GSON = new GsonBuilder().create();
++    private static final Gson GSON = (new GsonBuilder()).create();
+     public static final LootDataId<LootTable> EMPTY_LOOT_TABLE_KEY = new LootDataId<>(LootDataType.TABLE, BuiltInLootTables.EMPTY);
+     private Map<LootDataId<?>, ?> elements = Map.of();
+     private Multimap<LootDataType<?>, ResourceLocation> typeKeys = ImmutableMultimap.of();
+ 
++    public LootDataManager() {}
++
+     @Override
+-    public final CompletableFuture<Void> reload(
+-        PreparableReloadListener.PreparationBarrier preparationBarrier,
+-        ResourceManager resourceManager,
+-        ProfilerFiller preparationsProfiler,
+-        ProfilerFiller reloadProfiler,
+-        Executor backgroundExecutor,
+-        Executor gameExecutor
+-    ) {
+-        Map<LootDataType<?>, Map<ResourceLocation, ?>> map = new HashMap<>();
+-        CompletableFuture<?>[] completableFutures = LootDataType.values()
+-            .map(lootDataType -> scheduleElementParse((LootDataType<?>)lootDataType, resourceManager, backgroundExecutor, map))
+-            .toArray(CompletableFuture[]::new);
+-        return CompletableFuture.allOf(completableFutures).thenCompose(preparationBarrier::wait).thenAcceptAsync(ignored -> this.apply(map), gameExecutor);
++    public final CompletableFuture<Void> reload(PreparableReloadListener.PreparationBarrier preparationBarrier, ResourceManager resourceManager, ProfilerFiller preparationsProfiler, ProfilerFiller reloadProfiler, Executor backgroundExecutor, Executor gameExecutor) {
++        Map<LootDataType<?>, Map<ResourceLocation, ?>> map = new HashMap();
++        CompletableFuture<?>[] acompletablefuture = (CompletableFuture[]) LootDataType.values().map((lootdatatype) -> {
++            return scheduleElementParse(lootdatatype, resourceManager, backgroundExecutor, map);
++        }).toArray((i) -> {
++            return new CompletableFuture[i];
++        });
++        CompletableFuture completablefuture = CompletableFuture.allOf(acompletablefuture);
++
++        Objects.requireNonNull(preparationBarrier);
++        return completablefuture.thenCompose(preparationBarrier::wait).thenAcceptAsync((ovoid) -> {
++            this.apply(map);
++        }, gameExecutor);
+     }
+ 
+-    private static <T> CompletableFuture<?> scheduleElementParse(
+-        LootDataType<T> lootDataType,
+-        ResourceManager resourceManager,
+-        Executor backgroundExecutor,
+-        Map<LootDataType<?>, Map<ResourceLocation, ?>> elementCollector
+-    ) {
+-        Map<ResourceLocation, T> map = new HashMap<>();
+-        elementCollector.put(lootDataType, map);
+-        return CompletableFuture.runAsync(
+-            () -> {
+-                Map<ResourceLocation, JsonElement> map1 = new HashMap<>();
+-                SimpleJsonResourceReloadListener.scanDirectory(resourceManager, lootDataType.directory(), GSON, map1);
+-                map1.forEach(
+-                    (elementName, elementJson) -> lootDataType.deserialize(elementName, elementJson).ifPresent(element -> map.put(elementName, (T)element))
+-                );
+-            },
+-            backgroundExecutor
+-        );
++    private static <T> CompletableFuture<?> scheduleElementParse(LootDataType<T> lootDataType, ResourceManager resourceManager, Executor backgroundExecutor, Map<LootDataType<?>, Map<ResourceLocation, ?>> elementCollector) {
++        Map<ResourceLocation, T> map1 = new HashMap();
++
++        elementCollector.put(lootDataType, map1);
++        return CompletableFuture.runAsync(() -> {
++            Map<ResourceLocation, JsonElement> map2 = new HashMap();
++
++            SimpleJsonResourceReloadListener.scanDirectory(resourceManager, lootDataType.directory(), LootDataManager.GSON, map2);
++            map2.forEach((minecraftkey, jsonelement) -> {
++                lootDataType.deserialize(minecraftkey, jsonelement).ifPresent((object) -> {
++                    map1.put(minecraftkey, object);
++                });
++            });
++        }, backgroundExecutor);
+     }
+ 
+     private void apply(Map<LootDataType<?>, Map<ResourceLocation, ?>> collectedElements) {
+-        Object object = collectedElements.get(LootDataType.TABLE).remove(BuiltInLootTables.EMPTY);
++        Object object = ((Map) collectedElements.get(LootDataType.TABLE)).remove(BuiltInLootTables.EMPTY);
++
+         if (object != null) {
+-            LOGGER.warn("Datapack tried to redefine {} loot table, ignoring", BuiltInLootTables.EMPTY);
++            LootDataManager.LOGGER.warn("Datapack tried to redefine {} loot table, ignoring", BuiltInLootTables.EMPTY);
+         }
+ 
+         Builder<LootDataId<?>, Object> builder = ImmutableMap.builder();
+-        com.google.common.collect.ImmutableMultimap.Builder<LootDataType<?>, ResourceLocation> builder1 = ImmutableMultimap.builder();
+-        collectedElements.forEach((lootDataType, elements) -> elements.forEach((elementName, element) -> {
+-                builder.put(new LootDataId(lootDataType, elementName), element);
+-                builder1.put(lootDataType, elementName);
+-            }));
+-        builder.put(EMPTY_LOOT_TABLE_KEY, LootTable.EMPTY);
+-        ProblemReporter.Collector collector = new ProblemReporter.Collector();
+-        final Map<LootDataId<?>, ?> map = builder.build();
+-        ValidationContext validationContext = new ValidationContext(collector, LootContextParamSets.ALL_PARAMS, new LootDataResolver() {
++        com.google.common.collect.ImmutableMultimap.Builder<LootDataType<?>, ResourceLocation> com_google_common_collect_immutablemultimap_builder = ImmutableMultimap.builder();
++
++        collectedElements.forEach((lootdatatype, map1) -> {
++            map1.forEach((minecraftkey, object1) -> {
++                builder.put(new LootDataId<>(lootdatatype, minecraftkey), object1);
++                com_google_common_collect_immutablemultimap_builder.put(lootdatatype, minecraftkey);
++            });
++        });
++        builder.put(LootDataManager.EMPTY_LOOT_TABLE_KEY, LootTable.EMPTY);
++        ProblemReporter.a problemreporter_a = new ProblemReporter.a();
++        final Map<LootDataId<?>, ?> map1 = builder.build();
++        ValidationContext lootcollector = new ValidationContext(problemreporter_a, LootContextParamSets.ALL_PARAMS, new LootDataResolver() {
+             @Nullable
+             @Override
+             public <T> T getElement(LootDataId<T> id) {
+-                return (T)map.get(id);
++                return (T) map1.get(id); // CraftBukkit - decompile error
+             }
+         });
+-        map.forEach((id, element) -> castAndValidate(validationContext, id, element));
+-        collector.get().forEach((errorOwner, errorMessage) -> LOGGER.warn("Found loot table element validation problem in {}: {}", errorOwner, errorMessage));
+-        this.elements = map;
+-        this.typeKeys = builder1.build();
++
++        map1.forEach((lootdataid, object1) -> {
++            castAndValidate(lootcollector, lootdataid, object1);
++        });
++        problemreporter_a.get().forEach((s, s1) -> {
++            LootDataManager.LOGGER.warn("Found loot table element validation problem in {}: {}", s, s1);
++        });
++        // CraftBukkit start
++        map1.forEach((key, lootTable) -> {
++            if (object instanceof LootTable table) {
++                table.craftLootTable = new CraftLootTable(CraftNamespacedKey.fromMinecraft(key.location()), table);
++            }
++        });
++        // CraftBukkit end
++        this.elements = map1;
++        this.typeKeys = com_google_common_collect_immutablemultimap_builder.build();
+     }
+ 
+     private static <T> void castAndValidate(ValidationContext context, LootDataId<T> id, Object element) {
+-        id.type().runValidation(context, id, (T)element);
++        id.type().runValidation(context, id, (T) element); // CraftBukkit - decompile error
+     }
+ 
+     @Nullable
+     @Override
+     public <T> T getElement(LootDataId<T> id) {
+-        return (T)this.elements.get(id);
++        return (T) this.elements.get(id); // CraftBukkit - decompile error
+     }
+ 
+     public Collection<ResourceLocation> getKeys(LootDataType<?> type) {

@@ -1,0 +1,85 @@
+--- a/net/minecraft/world/entity/ai/behavior/StopAttackingIfTargetInvalid.java
++++ b/net/minecraft/world/entity/ai/behavior/StopAttackingIfTargetInvalid.java
+@@ -8,40 +8,58 @@
+ import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
+ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+ 
++// CraftBukkit start
++import org.bukkit.craftbukkit.entity.CraftLivingEntity;
++import org.bukkit.craftbukkit.event.CraftEventFactory;
++import org.bukkit.event.entity.EntityTargetEvent;
++// CraftBukkit end
++
+ public class StopAttackingIfTargetInvalid {
+ 
+     private static final int TIMEOUT_TO_GET_WITHIN_ATTACK_RANGE = 200;
+ 
+     public StopAttackingIfTargetInvalid() {}
+ 
+-    public static <E extends Mob> BehaviorControl<E> create(BiConsumer<E, LivingEntity> biconsumer) {
+-        return create((livingentity) -> {
++    public static <E extends Mob> BehaviorControl<E> create(BiConsumer<E, LivingEntity> onStopAttacking) {
++        return create((entityliving) -> {
+             return false;
+-        }, biconsumer, true);
++        }, onStopAttacking, true);
+     }
+ 
+-    public static <E extends Mob> BehaviorControl<E> create(Predicate<LivingEntity> predicate) {
+-        return create(predicate, (mob, livingentity) -> {
++    public static <E extends Mob> BehaviorControl<E> create(Predicate<LivingEntity> canStopAttacking) {
++        return create(canStopAttacking, (entityinsentient, entityliving) -> {
+         }, true);
+     }
+ 
+     public static <E extends Mob> BehaviorControl<E> create() {
+-        return create((livingentity) -> {
++        return create((entityliving) -> {
+             return false;
+-        }, (mob, livingentity) -> {
++        }, (entityinsentient, entityliving) -> {
+         }, true);
+     }
+ 
+-    public static <E extends Mob> BehaviorControl<E> create(Predicate<LivingEntity> predicate, BiConsumer<E, LivingEntity> biconsumer, boolean flag) {
+-        return BehaviorBuilder.create((behaviorbuilder_instance) -> {
+-            return behaviorbuilder_instance.group(behaviorbuilder_instance.present(MemoryModuleType.ATTACK_TARGET), behaviorbuilder_instance.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)).apply(behaviorbuilder_instance, (memoryaccessor, memoryaccessor1) -> {
+-                return (serverlevel, mob, i) -> {
+-                    LivingEntity livingentity = (LivingEntity) behaviorbuilder_instance.get(memoryaccessor);
++    public static <E extends Mob> BehaviorControl<E> create(Predicate<LivingEntity> canStopAttacking, BiConsumer<E, LivingEntity> onStopAttacking, boolean canGrowTiredOfTryingToReachTarget) {
++        return BehaviorBuilder.create((behaviorbuilder_b) -> {
++            return behaviorbuilder_b.group(behaviorbuilder_b.present(MemoryModuleType.ATTACK_TARGET), behaviorbuilder_b.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)).apply(behaviorbuilder_b, (memoryaccessor, memoryaccessor1) -> {
++                return (worldserver, entityinsentient, i) -> {
++                    LivingEntity entityliving = (LivingEntity) behaviorbuilder_b.get(memoryaccessor);
+ 
+-                    if (mob.canAttack(livingentity) && (!flag || !isTiredOfTryingToReachTarget(mob, behaviorbuilder_instance.tryGet(memoryaccessor1))) && livingentity.isAlive() && livingentity.level() == mob.level() && !predicate.test(livingentity)) {
++                    if (entityinsentient.canAttack(entityliving) && (!canGrowTiredOfTryingToReachTarget || !isTiredOfTryingToReachTarget(entityinsentient, behaviorbuilder_b.tryGet(memoryaccessor1))) && entityliving.isAlive() && entityliving.level() == entityinsentient.level() && !canStopAttacking.test(entityliving)) {
+                         return true;
+                     } else {
+-                        biconsumer.accept(mob, livingentity);
++                        // CraftBukkit start
++                        LivingEntity old = entityinsentient.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
++                        EntityTargetEvent event = CraftEventFactory.callEntityTargetLivingEvent(entityinsentient, null, (old != null && !old.isAlive()) ? EntityTargetEvent.TargetReason.TARGET_DIED : EntityTargetEvent.TargetReason.FORGOT_TARGET);
++                        if (event.isCancelled()) {
++                            return false;
++                        }
++                        if (event.getTarget() == null) {
++                            memoryaccessor.erase();
++                            return true;
++                        }
++                        entityliving = ((CraftLivingEntity) event.getTarget()).getHandle();
++                        // CraftBukkit end
++                        onStopAttacking.accept(entityinsentient, entityliving);
+                         memoryaccessor.erase();
+                         return true;
+                     }
+@@ -50,7 +68,7 @@
+         });
+     }
+ 
+-    private static boolean isTiredOfTryingToReachTarget(LivingEntity livingentity, Optional<Long> optional) {
+-        return optional.isPresent() && livingentity.level().getGameTime() - (Long) optional.get() > 200L;
++    private static boolean isTiredOfTryingToReachTarget(LivingEntity entity, Optional<Long> timeSinceInvalidTarget) {
++        return timeSinceInvalidTarget.isPresent() && entity.level().getGameTime() - (Long) timeSinceInvalidTarget.get() > 200L;
+     }
+ }

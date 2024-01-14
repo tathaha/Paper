@@ -1,0 +1,548 @@
+--- a/net/minecraft/world/item/MapItem.java
++++ b/net/minecraft/world/item/MapItem.java
+@@ -26,7 +26,7 @@
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.biome.Biome;
+ import net.minecraft.world.level.block.Blocks;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.chunk.LevelChunk;
+ import net.minecraft.world.level.levelgen.Heightmap;
+ import net.minecraft.world.level.material.FluidState;
+@@ -42,80 +42,80 @@
+     public static final String MAP_SCALE_TAG = "map_scale_direction";
+     public static final String MAP_LOCK_TAG = "map_to_lock";
+ 
+-    public MapItem(Item.Properties item_properties) {
+-        super(item_properties);
++    public MapItem(Item.Properties properties) {
++        super(properties);
+     }
+ 
+-    public static ItemStack create(Level level, int i, int j, byte b0, boolean flag, boolean flag1) {
++    public static ItemStack create(Level level, int levelX, int levelZ, byte scale, boolean trackingPosition, boolean unlimitedTracking) {
+         ItemStack itemstack = new ItemStack(Items.FILLED_MAP);
+ 
+-        createAndStoreSavedData(itemstack, level, i, j, b0, flag, flag1, level.dimension());
++        createAndStoreSavedData(itemstack, level, levelX, levelZ, scale, trackingPosition, unlimitedTracking, level.dimension());
+         return itemstack;
+     }
+ 
+     @Nullable
+-    public static MapItemSavedData getSavedData(@Nullable Integer integer, Level level) {
+-        return integer == null ? null : level.getMapData(makeKey(integer));
++    public static MapItemSavedData getSavedData(@Nullable Integer mapId, Level level) {
++        return mapId == null ? null : level.getMapData(makeKey(mapId));
+     }
+ 
+     @Nullable
+-    public static MapItemSavedData getSavedData(ItemStack itemstack, Level level) {
+-        Integer integer = getMapId(itemstack);
++    public static MapItemSavedData getSavedData(ItemStack stack, Level level) {
++        Integer integer = getMapId(stack);
+ 
+         return getSavedData(integer, level);
+     }
+ 
+     @Nullable
+-    public static Integer getMapId(ItemStack itemstack) {
+-        CompoundTag compoundtag = itemstack.getTag();
++    public static Integer getMapId(ItemStack stack) {
++        CompoundTag nbttagcompound = stack.getTag();
+ 
+-        return compoundtag != null && compoundtag.contains("map", 99) ? compoundtag.getInt("map") : null;
++        return nbttagcompound != null && nbttagcompound.contains("map", 99) ? nbttagcompound.getInt("map") : -1; // CraftBukkit - make new maps for no tag
+     }
+ 
+-    private static int createNewSavedData(Level level, int i, int j, int k, boolean flag, boolean flag1, ResourceKey<Level> resourcekey) {
+-        MapItemSavedData mapitemsaveddata = MapItemSavedData.createFresh((double) i, (double) j, (byte) k, flag, flag1, resourcekey);
++    public static int createNewSavedData(Level level, int x, int z, int scale, boolean trackingPosition, boolean unlimitedTracking, ResourceKey<Level> dimension) {
++        MapItemSavedData worldmap = MapItemSavedData.createFresh((double) x, (double) z, (byte) scale, trackingPosition, unlimitedTracking, dimension);
+         int l = level.getFreeMapId();
+ 
+-        level.setMapData(makeKey(l), mapitemsaveddata);
++        level.setMapData(makeKey(l), worldmap);
+         return l;
+     }
+ 
+-    private static void storeMapData(ItemStack itemstack, int i) {
+-        itemstack.getOrCreateTag().putInt("map", i);
++    private static void storeMapData(ItemStack stack, int mapId) {
++        stack.getOrCreateTag().putInt("map", mapId);
+     }
+ 
+-    private static void createAndStoreSavedData(ItemStack itemstack, Level level, int i, int j, int k, boolean flag, boolean flag1, ResourceKey<Level> resourcekey) {
+-        int l = createNewSavedData(level, i, j, k, flag, flag1, resourcekey);
++    private static void createAndStoreSavedData(ItemStack stack, Level level, int x, int z, int scale, boolean trackingPosition, boolean unlimitedTracking, ResourceKey<Level> dimension) {
++        int l = createNewSavedData(level, x, z, scale, trackingPosition, unlimitedTracking, dimension);
+ 
+-        storeMapData(itemstack, l);
++        storeMapData(stack, l);
+     }
+ 
+-    public static String makeKey(int i) {
+-        return "map_" + i;
++    public static String makeKey(int mapId) {
++        return "map_" + mapId;
+     }
+ 
+-    public void update(Level level, Entity entity, MapItemSavedData mapitemsaveddata) {
+-        if (level.dimension() == mapitemsaveddata.dimension && entity instanceof Player) {
+-            int i = 1 << mapitemsaveddata.scale;
+-            int j = mapitemsaveddata.centerX;
+-            int k = mapitemsaveddata.centerZ;
+-            int l = Mth.floor(entity.getX() - (double) j) / i + 64;
+-            int i1 = Mth.floor(entity.getZ() - (double) k) / i + 64;
++    public void update(Level level, Entity viewer, MapItemSavedData data) {
++        if (level.dimension() == data.dimension && viewer instanceof Player) {
++            int i = 1 << data.scale;
++            int j = data.centerX;
++            int k = data.centerZ;
++            int l = Mth.floor(viewer.getX() - (double) j) / i + 64;
++            int i1 = Mth.floor(viewer.getZ() - (double) k) / i + 64;
+             int j1 = 128 / i;
+ 
+             if (level.dimensionType().hasCeiling()) {
+                 j1 /= 2;
+             }
+ 
+-            MapItemSavedData.HoldingPlayer mapitemsaveddata_holdingplayer = mapitemsaveddata.getHoldingPlayer((Player) entity);
++            MapItemSavedData.HoldingPlayer worldmap_worldmaphumantracker = data.getHoldingPlayer((Player) viewer);
+ 
+-            ++mapitemsaveddata_holdingplayer.step;
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
+-            BlockPos.MutableBlockPos blockpos_mutableblockpos1 = new BlockPos.MutableBlockPos();
++            ++worldmap_worldmaphumantracker.step;
++            BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
++            BlockPos.MutableBlockPos blockposition_mutableblockposition1 = new BlockPos.MutableBlockPos();
+             boolean flag = false;
+ 
+             for (int k1 = l - j1 + 1; k1 < l + j1; ++k1) {
+-                if ((k1 & 15) == (mapitemsaveddata_holdingplayer.step & 15) || flag) {
++                if ((k1 & 15) == (worldmap_worldmaphumantracker.step & 15) || flag) {
+                     flag = false;
+                     double d0 = 0.0D;
+ 
+@@ -126,9 +126,9 @@
+                             int j2 = (j / i + k1 - 64) * i;
+                             int k2 = (k / i + l1 - 64) * i;
+                             Multiset<MapColor> multiset = LinkedHashMultiset.create();
+-                            LevelChunk levelchunk = level.getChunk(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2));
++                            LevelChunk chunk = level.getChunk(SectionPos.blockToSectionCoord(j2), SectionPos.blockToSectionCoord(k2));
+ 
+-                            if (!levelchunk.isEmpty()) {
++                            if (!chunk.isEmpty()) {
+                                 int l2 = 0;
+                                 double d1 = 0.0D;
+                                 int i3;
+@@ -146,71 +146,71 @@
+                                 } else {
+                                     for (i3 = 0; i3 < i; ++i3) {
+                                         for (int j3 = 0; j3 < i; ++j3) {
+-                                            blockpos_mutableblockpos.set(j2 + i3, 0, k2 + j3);
+-                                            int k3 = levelchunk.getHeight(Heightmap.Types.WORLD_SURFACE, blockpos_mutableblockpos.getX(), blockpos_mutableblockpos.getZ()) + 1;
+-                                            BlockState blockstate;
++                                            blockposition_mutableblockposition.set(j2 + i3, 0, k2 + j3);
++                                            int k3 = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, blockposition_mutableblockposition.getX(), blockposition_mutableblockposition.getZ()) + 1;
++                                            IBlockData iblockdata;
+ 
+                                             if (k3 > level.getMinBuildHeight() + 1) {
+                                                 do {
+                                                     --k3;
+-                                                    blockpos_mutableblockpos.setY(k3);
+-                                                    blockstate = levelchunk.getBlockState(blockpos_mutableblockpos);
+-                                                } while (blockstate.getMapColor(level, blockpos_mutableblockpos) == MapColor.NONE && k3 > level.getMinBuildHeight());
++                                                    blockposition_mutableblockposition.setY(k3);
++                                                    iblockdata = chunk.getBlockState(blockposition_mutableblockposition);
++                                                } while (iblockdata.getMapColor(level, blockposition_mutableblockposition) == MapColor.NONE && k3 > level.getMinBuildHeight());
+ 
+-                                                if (k3 > level.getMinBuildHeight() && !blockstate.getFluidState().isEmpty()) {
++                                                if (k3 > level.getMinBuildHeight() && !iblockdata.getFluidState().isEmpty()) {
+                                                     int l3 = k3 - 1;
+ 
+-                                                    blockpos_mutableblockpos1.set(blockpos_mutableblockpos);
++                                                    blockposition_mutableblockposition1.set(blockposition_mutableblockposition);
+ 
+-                                                    BlockState blockstate1;
++                                                    IBlockData iblockdata1;
+ 
+                                                     do {
+-                                                        blockpos_mutableblockpos1.setY(l3--);
+-                                                        blockstate1 = levelchunk.getBlockState(blockpos_mutableblockpos1);
++                                                        blockposition_mutableblockposition1.setY(l3--);
++                                                        iblockdata1 = chunk.getBlockState(blockposition_mutableblockposition1);
+                                                         ++l2;
+-                                                    } while (l3 > level.getMinBuildHeight() && !blockstate1.getFluidState().isEmpty());
++                                                    } while (l3 > level.getMinBuildHeight() && !iblockdata1.getFluidState().isEmpty());
+ 
+-                                                    blockstate = this.getCorrectStateForFluidBlock(level, blockstate, blockpos_mutableblockpos);
++                                                    iblockdata = this.getCorrectStateForFluidBlock(level, iblockdata, blockposition_mutableblockposition);
+                                                 }
+                                             } else {
+-                                                blockstate = Blocks.BEDROCK.defaultBlockState();
++                                                iblockdata = Blocks.BEDROCK.defaultBlockState();
+                                             }
+ 
+-                                            mapitemsaveddata.checkBanners(level, blockpos_mutableblockpos.getX(), blockpos_mutableblockpos.getZ());
++                                            data.checkBanners(level, blockposition_mutableblockposition.getX(), blockposition_mutableblockposition.getZ());
+                                             d1 += (double) k3 / (double) (i * i);
+-                                            multiset.add(blockstate.getMapColor(level, blockpos_mutableblockpos));
++                                            multiset.add(iblockdata.getMapColor(level, blockposition_mutableblockposition));
+                                         }
+                                     }
+                                 }
+ 
+                                 l2 /= i * i;
+-                                MapColor mapcolor = (MapColor) Iterables.getFirst(Multisets.copyHighestCountFirst(multiset), MapColor.NONE);
++                                MapColor materialmapcolor = (MapColor) Iterables.getFirst(Multisets.copyHighestCountFirst(multiset), MapColor.NONE);
+                                 double d2;
+-                                MapColor.Brightness mapcolor_brightness;
++                                MapColor.Brightness materialmapcolor_a;
+ 
+-                                if (mapcolor == MapColor.WATER) {
++                                if (materialmapcolor == MapColor.WATER) {
+                                     d2 = (double) l2 * 0.1D + (double) (k1 + l1 & 1) * 0.2D;
+                                     if (d2 < 0.5D) {
+-                                        mapcolor_brightness = MapColor.Brightness.HIGH;
++                                        materialmapcolor_a = MapColor.Brightness.HIGH;
+                                     } else if (d2 > 0.9D) {
+-                                        mapcolor_brightness = MapColor.Brightness.LOW;
++                                        materialmapcolor_a = MapColor.Brightness.LOW;
+                                     } else {
+-                                        mapcolor_brightness = MapColor.Brightness.NORMAL;
++                                        materialmapcolor_a = MapColor.Brightness.NORMAL;
+                                     }
+                                 } else {
+                                     d2 = (d1 - d0) * 4.0D / (double) (i + 4) + ((double) (k1 + l1 & 1) - 0.5D) * 0.4D;
+                                     if (d2 > 0.6D) {
+-                                        mapcolor_brightness = MapColor.Brightness.HIGH;
++                                        materialmapcolor_a = MapColor.Brightness.HIGH;
+                                     } else if (d2 < -0.6D) {
+-                                        mapcolor_brightness = MapColor.Brightness.LOW;
++                                        materialmapcolor_a = MapColor.Brightness.LOW;
+                                     } else {
+-                                        mapcolor_brightness = MapColor.Brightness.NORMAL;
++                                        materialmapcolor_a = MapColor.Brightness.NORMAL;
+                                     }
+                                 }
+ 
+                                 d0 = d1;
+                                 if (l1 >= 0 && i2 < j1 * j1 && (!flag1 || (k1 + l1 & 1) != 0)) {
+-                                    flag |= mapitemsaveddata.updateColor(k1, l1, mapcolor.getPackedId(mapcolor_brightness));
++                                    flag |= data.updateColor(k1, l1, materialmapcolor.getPackedId(materialmapcolor_a));
+                                 }
+                             }
+                         }
+@@ -221,35 +221,35 @@
+         }
+     }
+ 
+-    private BlockState getCorrectStateForFluidBlock(Level level, BlockState blockstate, BlockPos blockpos) {
+-        FluidState fluidstate = blockstate.getFluidState();
++    private IBlockData getCorrectStateForFluidBlock(Level level, IBlockData state, BlockPos pos) {
++        FluidState fluid = state.getFluidState();
+ 
+-        return !fluidstate.isEmpty() && !blockstate.isFaceSturdy(level, blockpos, Direction.UP) ? fluidstate.createLegacyBlock() : blockstate;
++        return !fluid.isEmpty() && !state.isFaceSturdy(level, pos, Direction.UP) ? fluid.createLegacyBlock() : state;
+     }
+ 
+-    private static boolean isBiomeWatery(boolean[] aboolean, int i, int j) {
+-        return aboolean[j * 128 + i];
++    private static boolean isBiomeWatery(boolean[] wateryMap, int xSample, int zSample) {
++        return wateryMap[zSample * 128 + xSample];
+     }
+ 
+-    public static void renderBiomePreviewMap(ServerLevel serverlevel, ItemStack itemstack) {
+-        MapItemSavedData mapitemsaveddata = getSavedData(itemstack, serverlevel);
++    public static void renderBiomePreviewMap(ServerLevel serverLevel, ItemStack stack) {
++        MapItemSavedData worldmap = getSavedData(stack, serverLevel);
+ 
+-        if (mapitemsaveddata != null) {
+-            if (serverlevel.dimension() == mapitemsaveddata.dimension) {
+-                int i = 1 << mapitemsaveddata.scale;
+-                int j = mapitemsaveddata.centerX;
+-                int k = mapitemsaveddata.centerZ;
++        if (worldmap != null) {
++            if (serverLevel.dimension() == worldmap.dimension) {
++                int i = 1 << worldmap.scale;
++                int j = worldmap.centerX;
++                int k = worldmap.centerZ;
+                 boolean[] aboolean = new boolean[16384];
+                 int l = j / i - 64;
+                 int i1 = k / i - 64;
+-                BlockPos.MutableBlockPos blockpos_mutableblockpos = new BlockPos.MutableBlockPos();
++                BlockPos.MutableBlockPos blockposition_mutableblockposition = new BlockPos.MutableBlockPos();
+ 
+                 int j1;
+                 int k1;
+ 
+                 for (j1 = 0; j1 < 128; ++j1) {
+                     for (k1 = 0; k1 < 128; ++k1) {
+-                        Holder<Biome> holder = serverlevel.getBiome(blockpos_mutableblockpos.set((l + k1) * i, 0, (i1 + j1) * i));
++                        Holder<Biome> holder = serverLevel.getBiome(blockposition_mutableblockposition.set((l + k1) * i, 0, (i1 + j1) * i));
+ 
+                         aboolean[j1 * 128 + k1] = holder.is(BiomeTags.WATER_ON_MAP_OUTLINES);
+                     }
+@@ -267,44 +267,44 @@
+                             }
+                         }
+ 
+-                        MapColor.Brightness mapcolor_brightness = MapColor.Brightness.LOWEST;
+-                        MapColor mapcolor = MapColor.NONE;
++                        MapColor.Brightness materialmapcolor_a = MapColor.Brightness.LOWEST;
++                        MapColor materialmapcolor = MapColor.NONE;
+ 
+                         if (isBiomeWatery(aboolean, j1, k1)) {
+-                            mapcolor = MapColor.COLOR_ORANGE;
++                            materialmapcolor = MapColor.COLOR_ORANGE;
+                             if (l1 > 7 && k1 % 2 == 0) {
+                                 switch ((j1 + (int) (Mth.sin((float) k1 + 0.0F) * 7.0F)) / 8 % 5) {
+                                     case 0:
+                                     case 4:
+-                                        mapcolor_brightness = MapColor.Brightness.LOW;
++                                        materialmapcolor_a = MapColor.Brightness.LOW;
+                                         break;
+                                     case 1:
+                                     case 3:
+-                                        mapcolor_brightness = MapColor.Brightness.NORMAL;
++                                        materialmapcolor_a = MapColor.Brightness.NORMAL;
+                                         break;
+                                     case 2:
+-                                        mapcolor_brightness = MapColor.Brightness.HIGH;
++                                        materialmapcolor_a = MapColor.Brightness.HIGH;
+                                 }
+                             } else if (l1 > 7) {
+-                                mapcolor = MapColor.NONE;
++                                materialmapcolor = MapColor.NONE;
+                             } else if (l1 > 5) {
+-                                mapcolor_brightness = MapColor.Brightness.NORMAL;
++                                materialmapcolor_a = MapColor.Brightness.NORMAL;
+                             } else if (l1 > 3) {
+-                                mapcolor_brightness = MapColor.Brightness.LOW;
++                                materialmapcolor_a = MapColor.Brightness.LOW;
+                             } else if (l1 > 1) {
+-                                mapcolor_brightness = MapColor.Brightness.LOW;
++                                materialmapcolor_a = MapColor.Brightness.LOW;
+                             }
+                         } else if (l1 > 0) {
+-                            mapcolor = MapColor.COLOR_BROWN;
++                            materialmapcolor = MapColor.COLOR_BROWN;
+                             if (l1 > 3) {
+-                                mapcolor_brightness = MapColor.Brightness.NORMAL;
++                                materialmapcolor_a = MapColor.Brightness.NORMAL;
+                             } else {
+-                                mapcolor_brightness = MapColor.Brightness.LOWEST;
++                                materialmapcolor_a = MapColor.Brightness.LOWEST;
+                             }
+                         }
+ 
+-                        if (mapcolor != MapColor.NONE) {
+-                            mapitemsaveddata.setColor(j1, k1, mapcolor.getPackedId(mapcolor_brightness));
++                        if (materialmapcolor != MapColor.NONE) {
++                            worldmap.setColor(j1, k1, materialmapcolor.getPackedId(materialmapcolor_a));
+                         }
+                     }
+                 }
+@@ -314,20 +314,19 @@
+     }
+ 
+     @Override
+-    @Override
+-    public void inventoryTick(ItemStack itemstack, Level level, Entity entity, int i, boolean flag) {
++    public void inventoryTick(ItemStack stack, Level level, Entity entity, int itemSlot, boolean isSelected) {
+         if (!level.isClientSide) {
+-            MapItemSavedData mapitemsaveddata = getSavedData(itemstack, level);
++            MapItemSavedData worldmap = getSavedData(stack, level);
+ 
+-            if (mapitemsaveddata != null) {
++            if (worldmap != null) {
+                 if (entity instanceof Player) {
+-                    Player player = (Player) entity;
++                    Player entityhuman = (Player) entity;
+ 
+-                    mapitemsaveddata.tickCarriedBy(player, itemstack);
++                    worldmap.tickCarriedBy(entityhuman, stack);
+                 }
+ 
+-                if (!mapitemsaveddata.locked && (flag || entity instanceof Player && ((Player) entity).getOffhandItem() == itemstack)) {
+-                    this.update(level, entity, mapitemsaveddata);
++                if (!worldmap.locked && (isSelected || entity instanceof Player && ((Player) entity).getOffhandItem() == stack)) {
++                    this.update(level, entity, worldmap);
+                 }
+ 
+             }
+@@ -336,88 +335,85 @@
+ 
+     @Nullable
+     @Override
+-    @Override
+-    public Packet<?> getUpdatePacket(ItemStack itemstack, Level level, Player player) {
+-        Integer integer = getMapId(itemstack);
+-        MapItemSavedData mapitemsaveddata = getSavedData(integer, level);
++    public Packet<?> getUpdatePacket(ItemStack stack, Level level, Player player) {
++        Integer integer = getMapId(stack);
++        MapItemSavedData worldmap = getSavedData(integer, level);
+ 
+-        return mapitemsaveddata != null ? mapitemsaveddata.getUpdatePacket(integer, player) : null;
++        return worldmap != null ? worldmap.getUpdatePacket(integer, player) : null;
+     }
+ 
+     @Override
+-    @Override
+-    public void onCraftedPostProcess(ItemStack itemstack, Level level) {
+-        CompoundTag compoundtag = itemstack.getTag();
++    public void onCraftedPostProcess(ItemStack itemstack, Level world) {
++        CompoundTag nbttagcompound = itemstack.getTag();
+ 
+-        if (compoundtag != null && compoundtag.contains("map_scale_direction", 99)) {
+-            scaleMap(itemstack, level, compoundtag.getInt("map_scale_direction"));
+-            compoundtag.remove("map_scale_direction");
+-        } else if (compoundtag != null && compoundtag.contains("map_to_lock", 1) && compoundtag.getBoolean("map_to_lock")) {
+-            lockMap(level, itemstack);
+-            compoundtag.remove("map_to_lock");
++        if (nbttagcompound != null && nbttagcompound.contains("map_scale_direction", 99)) {
++            scaleMap(itemstack, world, nbttagcompound.getInt("map_scale_direction"));
++            nbttagcompound.remove("map_scale_direction");
++        } else if (nbttagcompound != null && nbttagcompound.contains("map_to_lock", 1) && nbttagcompound.getBoolean("map_to_lock")) {
++            lockMap(world, itemstack);
++            nbttagcompound.remove("map_to_lock");
+         }
+ 
+     }
+ 
+-    private static void scaleMap(ItemStack itemstack, Level level, int i) {
+-        MapItemSavedData mapitemsaveddata = getSavedData(itemstack, level);
++    private static void scaleMap(ItemStack stack, Level level, int scale) {
++        MapItemSavedData worldmap = getSavedData(stack, level);
+ 
+-        if (mapitemsaveddata != null) {
++        if (worldmap != null) {
+             int j = level.getFreeMapId();
+ 
+-            level.setMapData(makeKey(j), mapitemsaveddata.scaled(i));
+-            storeMapData(itemstack, j);
++            level.setMapData(makeKey(j), worldmap.scaled(scale));
++            storeMapData(stack, j);
+         }
+ 
+     }
+ 
+-    public static void lockMap(Level level, ItemStack itemstack) {
+-        MapItemSavedData mapitemsaveddata = getSavedData(itemstack, level);
++    public static void lockMap(Level level, ItemStack stack) {
++        MapItemSavedData worldmap = getSavedData(stack, level);
+ 
+-        if (mapitemsaveddata != null) {
++        if (worldmap != null) {
+             int i = level.getFreeMapId();
+             String s = makeKey(i);
+-            MapItemSavedData mapitemsaveddata1 = mapitemsaveddata.locked();
++            MapItemSavedData worldmap1 = worldmap.locked();
+ 
+-            level.setMapData(s, mapitemsaveddata1);
+-            storeMapData(itemstack, i);
++            level.setMapData(s, worldmap1);
++            storeMapData(stack, i);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void appendHoverText(ItemStack itemstack, @Nullable Level level, List<Component> list, TooltipFlag tooltipflag) {
+-        Integer integer = getMapId(itemstack);
+-        MapItemSavedData mapitemsaveddata = level == null ? null : getSavedData(integer, level);
+-        CompoundTag compoundtag = itemstack.getTag();
++    public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
++        Integer integer = getMapId(stack);
++        MapItemSavedData worldmap = level == null ? null : getSavedData(integer, level);
++        CompoundTag nbttagcompound = stack.getTag();
+         boolean flag;
+         byte b0;
+ 
+-        if (compoundtag != null) {
+-            flag = compoundtag.getBoolean("map_to_lock");
+-            b0 = compoundtag.getByte("map_scale_direction");
++        if (nbttagcompound != null) {
++            flag = nbttagcompound.getBoolean("map_to_lock");
++            b0 = nbttagcompound.getByte("map_scale_direction");
+         } else {
+             flag = false;
+             b0 = 0;
+         }
+ 
+-        if (mapitemsaveddata != null && (mapitemsaveddata.locked || flag)) {
+-            list.add(Component.translatable("filled_map.locked", integer).withStyle(ChatFormatting.GRAY));
++        if (worldmap != null && (worldmap.locked || flag)) {
++            tooltip.add(Component.translatable("filled_map.locked", integer).withStyle(ChatFormatting.GRAY));
+         }
+ 
+-        if (tooltipflag.isAdvanced()) {
+-            if (mapitemsaveddata != null) {
++        if (flag.isAdvanced()) {
++            if (worldmap != null) {
+                 if (!flag && b0 == 0) {
+-                    list.add(getTooltipForId(integer));
++                    tooltip.add(getTooltipForId(integer));
+                 }
+ 
+-                int i = Math.min(mapitemsaveddata.scale + b0, 4);
++                int i = Math.min(worldmap.scale + b0, 4);
+ 
+-                list.add(Component.translatable("filled_map.scale", 1 << i).withStyle(ChatFormatting.GRAY));
+-                list.add(Component.translatable("filled_map.level", i, 4).withStyle(ChatFormatting.GRAY));
++                tooltip.add(Component.translatable("filled_map.scale", 1 << i).withStyle(ChatFormatting.GRAY));
++                tooltip.add(Component.translatable("filled_map.level", i, 4).withStyle(ChatFormatting.GRAY));
+             } else {
+-                list.add(Component.translatable("filled_map.unknown").withStyle(ChatFormatting.GRAY));
++                tooltip.add(Component.translatable("filled_map.unknown").withStyle(ChatFormatting.GRAY));
+             }
+         }
+ 
+@@ -431,11 +427,11 @@
+         return getTooltipForId(getMapId(itemstack));
+     }
+ 
+-    public static int getColor(ItemStack itemstack) {
+-        CompoundTag compoundtag = itemstack.getTagElement("display");
++    public static int getColor(ItemStack stack) {
++        CompoundTag nbttagcompound = stack.getTagElement("display");
+ 
+-        if (compoundtag != null && compoundtag.contains("MapColor", 99)) {
+-            int i = compoundtag.getInt("MapColor");
++        if (nbttagcompound != null && nbttagcompound.contains("MapColor", 99)) {
++            int i = nbttagcompound.getInt("MapColor");
+ 
+             return -16777216 | i & 16777215;
+         } else {
+@@ -444,22 +440,21 @@
+     }
+ 
+     @Override
+-    @Override
+-    public InteractionResult useOn(UseOnContext useoncontext) {
+-        BlockState blockstate = useoncontext.getLevel().getBlockState(useoncontext.getClickedPos());
++    public InteractionResult useOn(UseOnContext context) {
++        IBlockData iblockdata = context.getLevel().getBlockState(context.getClickedPos());
+ 
+-        if (blockstate.is(BlockTags.BANNERS)) {
+-            if (!useoncontext.getLevel().isClientSide) {
+-                MapItemSavedData mapitemsaveddata = getSavedData(useoncontext.getItemInHand(), useoncontext.getLevel());
++        if (iblockdata.is(BlockTags.BANNERS)) {
++            if (!context.getLevel().isClientSide) {
++                MapItemSavedData worldmap = getSavedData(context.getItemInHand(), context.getLevel());
+ 
+-                if (mapitemsaveddata != null && !mapitemsaveddata.toggleBanner(useoncontext.getLevel(), useoncontext.getClickedPos())) {
++                if (worldmap != null && !worldmap.toggleBanner(context.getLevel(), context.getClickedPos())) {
+                     return InteractionResult.FAIL;
+                 }
+             }
+ 
+-            return InteractionResult.sidedSuccess(useoncontext.getLevel().isClientSide);
++            return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+         } else {
+-            return super.useOn(useoncontext);
++            return super.useOn(context);
+         }
+     }
+ }

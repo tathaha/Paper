@@ -1,0 +1,245 @@
+--- a/net/minecraft/world/level/block/RedstoneTorchBlock.java
++++ b/net/minecraft/world/level/block/RedstoneTorchBlock.java
+@@ -8,16 +8,17 @@
+ import java.util.WeakHashMap;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Direction;
+-import net.minecraft.core.particles.DustParticleOptions;
++import net.minecraft.core.particles.ParticleParamRedstone;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.util.RandomSource;
+ import net.minecraft.world.level.BlockGetter;
+ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.state.BlockBehaviour;
+-import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.level.block.state.IBlockData;
+ import net.minecraft.world.level.block.state.StateDefinition;
+ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+ import net.minecraft.world.level.block.state.properties.BooleanProperty;
++import org.bukkit.event.block.BlockRedstoneEvent; // CraftBukkit
+ 
+ public class RedstoneTorchBlock extends BaseTorchBlock {
+ 
+@@ -30,135 +31,150 @@
+     private static final int TOGGLE_DELAY = 2;
+ 
+     @Override
+-    @Override
+     public MapCodec<? extends RedstoneTorchBlock> codec() {
+         return RedstoneTorchBlock.CODEC;
+     }
+ 
+-    protected RedstoneTorchBlock(BlockBehaviour.Properties blockbehaviour_properties) {
+-        super(blockbehaviour_properties);
+-        this.registerDefaultState((BlockState) ((BlockState) this.stateDefinition.any()).setValue(RedstoneTorchBlock.LIT, true));
++    protected RedstoneTorchBlock(BlockBehaviour.Properties properties) {
++        super(properties);
++        this.registerDefaultState((IBlockData) ((IBlockData) this.stateDefinition.any()).setValue(RedstoneTorchBlock.LIT, true));
+     }
+ 
+     @Override
+-    @Override
+-    public void onPlace(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        Direction[] adirection = Direction.values();
+-        int i = adirection.length;
++    public void onPlace(IBlockData state, Level level, BlockPos pos, IBlockData oldState, boolean isMoving) {
++        Direction[] aenumdirection = Direction.values();
++        int i = aenumdirection.length;
+ 
+         for (int j = 0; j < i; ++j) {
+-            Direction direction = adirection[j];
++            Direction enumdirection = aenumdirection[j];
+ 
+-            level.updateNeighborsAt(blockpos.relative(direction), this);
++            level.updateNeighborsAt(pos.relative(enumdirection), this);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void onRemove(BlockState blockstate, Level level, BlockPos blockpos, BlockState blockstate1, boolean flag) {
+-        if (!flag) {
+-            Direction[] adirection = Direction.values();
+-            int i = adirection.length;
++    public void onRemove(IBlockData state, Level level, BlockPos pos, IBlockData newState, boolean isMoving) {
++        if (!isMoving) {
++            Direction[] aenumdirection = Direction.values();
++            int i = aenumdirection.length;
+ 
+             for (int j = 0; j < i; ++j) {
+-                Direction direction = adirection[j];
++                Direction enumdirection = aenumdirection[j];
+ 
+-                level.updateNeighborsAt(blockpos.relative(direction), this);
++                level.updateNeighborsAt(pos.relative(enumdirection), this);
+             }
+ 
+         }
+     }
+ 
+     @Override
+-    @Override
+-    public int getSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return (Boolean) blockstate.getValue(RedstoneTorchBlock.LIT) && Direction.UP != direction ? 15 : 0;
++    public int getSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return (Boolean) blockState.getValue(RedstoneTorchBlock.LIT) && Direction.UP != side ? 15 : 0;
+     }
+ 
+-    protected boolean hasNeighborSignal(Level level, BlockPos blockpos, BlockState blockstate) {
+-        return level.hasSignal(blockpos.below(), Direction.DOWN);
++    protected boolean hasNeighborSignal(Level level, BlockPos pos, IBlockData state) {
++        return level.hasSignal(pos.below(), Direction.DOWN);
+     }
+ 
+     @Override
+-    @Override
+-    public void tick(BlockState blockstate, ServerLevel serverlevel, BlockPos blockpos, RandomSource randomsource) {
+-        boolean flag = this.hasNeighborSignal(serverlevel, blockpos, blockstate);
+-        List list = (List) RedstoneTorchBlock.RECENT_TOGGLES.get(serverlevel);
++    public void tick(IBlockData state, ServerLevel level, BlockPos pos, RandomSource random) {
++        boolean flag = this.hasNeighborSignal(level, pos, state);
++        List list = (List) RedstoneTorchBlock.RECENT_TOGGLES.get(level);
+ 
+-        while (list != null && !list.isEmpty() && serverlevel.getGameTime() - ((RedstoneTorchBlock.Toggle) list.get(0)).when > 60L) {
++        while (list != null && !list.isEmpty() && level.getGameTime() - ((RedstoneTorchBlock.Toggle) list.get(0)).when > 60L) {
+             list.remove(0);
+         }
+ 
+-        if ((Boolean) blockstate.getValue(RedstoneTorchBlock.LIT)) {
++        // CraftBukkit start
++        org.bukkit.plugin.PluginManager manager = level.getCraftServer().getPluginManager();
++        org.bukkit.block.Block block = level.getWorld().getBlockAt(pos.getX(), pos.getY(), pos.getZ());
++        int oldCurrent = ((Boolean) state.getValue(RedstoneTorchBlock.LIT)).booleanValue() ? 15 : 0;
++
++        BlockRedstoneEvent event = new BlockRedstoneEvent(block, oldCurrent, oldCurrent);
++        // CraftBukkit end
++        if ((Boolean) state.getValue(RedstoneTorchBlock.LIT)) {
+             if (flag) {
+-                serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(RedstoneTorchBlock.LIT, false), 3);
+-                if (isToggledTooFrequently(serverlevel, blockpos, true)) {
+-                    serverlevel.levelEvent(1502, blockpos, 0);
+-                    serverlevel.scheduleTick(blockpos, serverlevel.getBlockState(blockpos).getBlock(), 160);
++                // CraftBukkit start
++                if (oldCurrent != 0) {
++                    event.setNewCurrent(0);
++                    manager.callEvent(event);
++                    if (event.getNewCurrent() != 0) {
++                        return;
++                    }
+                 }
++                // CraftBukkit end
++                level.setBlock(pos, (IBlockData) state.setValue(RedstoneTorchBlock.LIT, false), 3);
++                if (isToggledTooFrequently(level, pos, true)) {
++                    level.levelEvent(1502, pos, 0);
++                    level.scheduleTick(pos, level.getBlockState(pos).getBlock(), 160);
++                }
+             }
+-        } else if (!flag && !isToggledTooFrequently(serverlevel, blockpos, false)) {
+-            serverlevel.setBlock(blockpos, (BlockState) blockstate.setValue(RedstoneTorchBlock.LIT, true), 3);
++        } else if (!flag && !isToggledTooFrequently(level, pos, false)) {
++            // CraftBukkit start
++            if (oldCurrent != 15) {
++                event.setNewCurrent(15);
++                manager.callEvent(event);
++                if (event.getNewCurrent() != 15) {
++                    return;
++                }
++            }
++            // CraftBukkit end
++            level.setBlock(pos, (IBlockData) state.setValue(RedstoneTorchBlock.LIT, true), 3);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public void neighborChanged(BlockState blockstate, Level level, BlockPos blockpos, Block block, BlockPos blockpos1, boolean flag) {
+-        if ((Boolean) blockstate.getValue(RedstoneTorchBlock.LIT) == this.hasNeighborSignal(level, blockpos, blockstate) && !level.getBlockTicks().willTickThisTick(blockpos, this)) {
+-            level.scheduleTick(blockpos, (Block) this, 2);
++    public void neighborChanged(IBlockData state, Level level, BlockPos pos, Block block, BlockPos fromPos, boolean isMoving) {
++        if ((Boolean) state.getValue(RedstoneTorchBlock.LIT) == this.hasNeighborSignal(level, pos, state) && !level.getBlockTicks().willTickThisTick(pos, this)) {
++            level.scheduleTick(pos, (Block) this, 2);
+         }
+ 
+     }
+ 
+     @Override
+-    @Override
+-    public int getDirectSignal(BlockState blockstate, BlockGetter blockgetter, BlockPos blockpos, Direction direction) {
+-        return direction == Direction.DOWN ? blockstate.getSignal(blockgetter, blockpos, direction) : 0;
++    public int getDirectSignal(IBlockData blockState, BlockGetter blockAccess, BlockPos pos, Direction side) {
++        return side == Direction.DOWN ? blockState.getSignal(blockAccess, pos, side) : 0;
+     }
+ 
+     @Override
+-    @Override
+-    public boolean isSignalSource(BlockState blockstate) {
++    public boolean isSignalSource(IBlockData state) {
+         return true;
+     }
+ 
+     @Override
+-    @Override
+-    public void animateTick(BlockState blockstate, Level level, BlockPos blockpos, RandomSource randomsource) {
+-        if ((Boolean) blockstate.getValue(RedstoneTorchBlock.LIT)) {
+-            double d0 = (double) blockpos.getX() + 0.5D + (randomsource.nextDouble() - 0.5D) * 0.2D;
+-            double d1 = (double) blockpos.getY() + 0.7D + (randomsource.nextDouble() - 0.5D) * 0.2D;
+-            double d2 = (double) blockpos.getZ() + 0.5D + (randomsource.nextDouble() - 0.5D) * 0.2D;
++    public void animateTick(IBlockData state, Level level, BlockPos pos, RandomSource random) {
++        if ((Boolean) state.getValue(RedstoneTorchBlock.LIT)) {
++            double d0 = (double) pos.getX() + 0.5D + (random.nextDouble() - 0.5D) * 0.2D;
++            double d1 = (double) pos.getY() + 0.7D + (random.nextDouble() - 0.5D) * 0.2D;
++            double d2 = (double) pos.getZ() + 0.5D + (random.nextDouble() - 0.5D) * 0.2D;
+ 
+-            level.addParticle(DustParticleOptions.REDSTONE, d0, d1, d2, 0.0D, 0.0D, 0.0D);
++            level.addParticle(ParticleParamRedstone.REDSTONE, d0, d1, d2, 0.0D, 0.0D, 0.0D);
+         }
+     }
+ 
+     @Override
+-    @Override
+-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> statedefinition_builder) {
+-        statedefinition_builder.add(RedstoneTorchBlock.LIT);
++    protected void createBlockStateDefinition(StateDefinition.Builder<Block, IBlockData> builder) {
++        builder.add(RedstoneTorchBlock.LIT);
+     }
+ 
+-    private static boolean isToggledTooFrequently(Level level, BlockPos blockpos, boolean flag) {
+-        List<RedstoneTorchBlock.Toggle> list = (List) RedstoneTorchBlock.RECENT_TOGGLES.computeIfAbsent(level, (blockgetter) -> {
++    private static boolean isToggledTooFrequently(Level level, BlockPos pos, boolean logToggle) {
++        List<RedstoneTorchBlock.Toggle> list = (List) RedstoneTorchBlock.RECENT_TOGGLES.computeIfAbsent(level, (iblockaccess) -> {
+             return Lists.newArrayList();
+         });
+ 
+-        if (flag) {
+-            list.add(new RedstoneTorchBlock.Toggle(blockpos.immutable(), level.getGameTime()));
++        if (logToggle) {
++            list.add(new RedstoneTorchBlock.Toggle(pos.immutable(), level.getGameTime()));
+         }
+ 
+         int i = 0;
+         Iterator iterator = list.iterator();
+ 
+         while (iterator.hasNext()) {
+-            RedstoneTorchBlock.Toggle redstonetorchblock_toggle = (RedstoneTorchBlock.Toggle) iterator.next();
++            RedstoneTorchBlock.Toggle blockredstonetorch_redstoneupdateinfo = (RedstoneTorchBlock.Toggle) iterator.next();
+ 
+-            if (redstonetorchblock_toggle.pos.equals(blockpos)) {
++            if (blockredstonetorch_redstoneupdateinfo.pos.equals(pos)) {
+                 ++i;
+                 if (i >= 8) {
+                     return true;
+@@ -174,9 +190,9 @@
+         final BlockPos pos;
+         final long when;
+ 
+-        public Toggle(BlockPos blockpos, long i) {
+-            this.pos = blockpos;
+-            this.when = i;
++        public Toggle(BlockPos pos, long when) {
++            this.pos = pos;
++            this.when = when;
+         }
+     }
+ }

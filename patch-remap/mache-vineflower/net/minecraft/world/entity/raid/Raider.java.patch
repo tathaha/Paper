@@ -1,0 +1,660 @@
+--- a/net/minecraft/world/entity/raid/Raider.java
++++ b/net/minecraft/world/entity/raid/Raider.java
+@@ -2,13 +2,13 @@
+ 
+ import com.google.common.collect.Lists;
+ import java.util.EnumSet;
++import java.util.Iterator;
+ import java.util.List;
+ import java.util.Objects;
+ import java.util.Optional;
+ import java.util.function.Predicate;
+ import javax.annotation.Nullable;
+ import net.minecraft.core.BlockPos;
+-import net.minecraft.core.Holder;
+ import net.minecraft.nbt.CompoundTag;
+ import net.minecraft.network.syncher.EntityDataAccessor;
+ import net.minecraft.network.syncher.EntityDataSerializers;
+@@ -22,10 +22,10 @@
+ import net.minecraft.world.effect.MobEffects;
+ import net.minecraft.world.entity.Entity;
+ import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.EnumMobSpawn;
+ import net.minecraft.world.entity.EquipmentSlot;
++import net.minecraft.world.entity.GroupDataEntity;
+ import net.minecraft.world.entity.LivingEntity;
+-import net.minecraft.world.entity.MobSpawnType;
+-import net.minecraft.world.entity.SpawnGroupData;
+ import net.minecraft.world.entity.ai.goal.Goal;
+ import net.minecraft.world.entity.ai.goal.PathfindToRaidGoal;
+ import net.minecraft.world.entity.ai.targeting.TargetingConditions;
+@@ -44,10 +44,11 @@
+ import net.minecraft.world.phys.Vec3;
+ 
+ public abstract class Raider extends PatrollingMonster {
++
+     protected static final EntityDataAccessor<Boolean> IS_CELEBRATING = SynchedEntityData.defineId(Raider.class, EntityDataSerializers.BOOLEAN);
+-    static final Predicate<ItemEntity> ALLOWED_ITEMS = itemEntity -> !itemEntity.hasPickUpDelay()
+-            && itemEntity.isAlive()
+-            && ItemStack.matches(itemEntity.getItem(), Raid.getLeaderBannerInstance());
++    static final Predicate<ItemEntity> ALLOWED_ITEMS = (entityitem) -> {
++        return !entityitem.hasPickUpDelay() && entityitem.isAlive() && ItemStack.matches(entityitem.getItem(), Raid.getLeaderBannerInstance());
++    };
+     @Nullable
+     protected Raid raid;
+     private int wave;
+@@ -63,14 +64,14 @@
+         super.registerGoals();
+         this.goalSelector.addGoal(1, new Raider.ObtainRaidLeaderBannerGoal<>(this));
+         this.goalSelector.addGoal(3, new PathfindToRaidGoal<>(this));
+-        this.goalSelector.addGoal(4, new Raider.RaiderMoveThroughVillageGoal(this, 1.05F, 1));
++        this.goalSelector.addGoal(4, new Raider.RaiderMoveThroughVillageGoal(this, 1.0499999523162842D, 1));
+         this.goalSelector.addGoal(5, new Raider.RaiderCelebration(this));
+     }
+ 
+     @Override
+     protected void defineSynchedData() {
+         super.defineSynchedData();
+-        this.entityData.define(IS_CELEBRATING, false);
++        this.entityData.define(Raider.IS_CELEBRATING, false);
+     }
+ 
+     public abstract void applyRaidBuffs(int wave, boolean unusedFalse);
+@@ -86,18 +87,21 @@
+     @Override
+     public void aiStep() {
+         if (this.level() instanceof ServerLevel && this.isAlive()) {
+-            Raid currentRaid = this.getCurrentRaid();
++            Raid raid = this.getCurrentRaid();
++
+             if (this.canJoinRaid()) {
+-                if (currentRaid == null) {
++                if (raid == null) {
+                     if (this.level().getGameTime() % 20L == 0L) {
+-                        Raid raidAt = ((ServerLevel)this.level()).getRaidAt(this.blockPosition());
+-                        if (raidAt != null && Raids.canJoinRaid(this, raidAt)) {
+-                            raidAt.joinRaid(raidAt.getGroupsSpawned(), this, null, true);
++                        Raid raid1 = ((ServerLevel) this.level()).getRaidAt(this.blockPosition());
++
++                        if (raid1 != null && Raids.canJoinRaid(this, raid1)) {
++                            raid1.joinRaid(raid1.getGroupsSpawned(), this, (BlockPos) null, true);
+                         }
+                     }
+                 } else {
+-                    LivingEntity target = this.getTarget();
+-                    if (target != null && (target.getType() == EntityType.PLAYER || target.getType() == EntityType.IRON_GOLEM)) {
++                    LivingEntity entityliving = this.getTarget();
++
++                    if (entityliving != null && (entityliving.getType() == EntityType.PLAYER || entityliving.getType() == EntityType.IRON_GOLEM)) {
+                         this.noActionTime = 0;
+                     }
+                 }
+@@ -116,45 +120,52 @@
+     public void die(DamageSource cause) {
+         if (this.level() instanceof ServerLevel) {
+             Entity entity = cause.getEntity();
+-            Raid currentRaid = this.getCurrentRaid();
+-            if (currentRaid != null) {
++            Raid raid = this.getCurrentRaid();
++
++            if (raid != null) {
+                 if (this.isPatrolLeader()) {
+-                    currentRaid.removeLeader(this.getWave());
++                    raid.removeLeader(this.getWave());
+                 }
+ 
+                 if (entity != null && entity.getType() == EntityType.PLAYER) {
+-                    currentRaid.addHeroOfTheVillage(entity);
++                    raid.addHeroOfTheVillage(entity);
+                 }
+ 
+-                currentRaid.removeFromRaid(this, false);
++                raid.removeFromRaid(this, false);
+             }
+ 
+-            if (this.isPatrolLeader() && currentRaid == null && ((ServerLevel)this.level()).getRaidAt(this.blockPosition()) == null) {
+-                ItemStack itemBySlot = this.getItemBySlot(EquipmentSlot.HEAD);
+-                Player player = null;
++            if (this.isPatrolLeader() && raid == null && ((ServerLevel) this.level()).getRaidAt(this.blockPosition()) == null) {
++                ItemStack itemstack = this.getItemBySlot(EquipmentSlot.HEAD);
++                Player entityhuman = null;
++
+                 if (entity instanceof Player) {
+-                    player = (Player)entity;
+-                } else if (entity instanceof Wolf wolf) {
+-                    LivingEntity owner = wolf.getOwner();
+-                    if (wolf.isTame() && owner instanceof Player) {
+-                        player = (Player)owner;
++                    entityhuman = (Player) entity;
++                } else if (entity instanceof Wolf) {
++                    Wolf entitywolf = (Wolf) entity;
++                    LivingEntity entityliving = entitywolf.getOwner();
++
++                    if (entitywolf.isTame() && entityliving instanceof Player) {
++                        entityhuman = (Player) entityliving;
+                     }
+                 }
+ 
+-                if (!itemBySlot.isEmpty() && ItemStack.matches(itemBySlot, Raid.getLeaderBannerInstance()) && player != null) {
+-                    MobEffectInstance effect = player.getEffect(MobEffects.BAD_OMEN);
+-                    int i = 1;
+-                    if (effect != null) {
+-                        i += effect.getAmplifier();
+-                        player.removeEffectNoUpdate(MobEffects.BAD_OMEN);
++                if (!itemstack.isEmpty() && ItemStack.matches(itemstack, Raid.getLeaderBannerInstance()) && entityhuman != null) {
++                    MobEffectInstance mobeffect = entityhuman.getEffect(MobEffects.BAD_OMEN);
++                    byte b0 = 1;
++                    int i;
++
++                    if (mobeffect != null) {
++                        i = b0 + mobeffect.getAmplifier();
++                        entityhuman.removeEffectNoUpdate(MobEffects.BAD_OMEN);
+                     } else {
+-                        i--;
++                        i = b0 - 1;
+                     }
+ 
+                     i = Mth.clamp(i, 0, 4);
+-                    MobEffectInstance mobEffectInstance = new MobEffectInstance(MobEffects.BAD_OMEN, 120000, i, false, false, true);
++                    MobEffectInstance mobeffect1 = new MobEffectInstance(MobEffects.BAD_OMEN, 120000, i, false, false, true);
++
+                     if (!this.level().getGameRules().getBoolean(GameRules.RULE_DISABLE_RAIDS)) {
+-                        player.addEffect(mobEffectInstance);
++                        entityhuman.addEffect(mobeffect1, org.bukkit.event.entity.EntityPotionEffectEvent.Cause.PATROL_CAPTAIN); // CraftBukkit
+                     }
+                 }
+             }
+@@ -190,11 +201,11 @@
+     }
+ 
+     public boolean isCelebrating() {
+-        return this.entityData.get(IS_CELEBRATING);
++        return (Boolean) this.entityData.get(Raider.IS_CELEBRATING);
+     }
+ 
+     public void setCelebrating(boolean celebrating) {
+-        this.entityData.set(IS_CELEBRATING, celebrating);
++        this.entityData.set(Raider.IS_CELEBRATING, celebrating);
+     }
+ 
+     @Override
+@@ -205,6 +216,7 @@
+         if (this.raid != null) {
+             compound.putInt("RaidId", this.raid.getId());
+         }
++
+     }
+ 
+     @Override
+@@ -214,7 +226,7 @@
+         this.canJoinRaid = compound.getBoolean("CanJoinRaid");
+         if (compound.contains("RaidId", 3)) {
+             if (this.level() instanceof ServerLevel) {
+-                this.raid = ((ServerLevel)this.level()).getRaids().get(compound.getInt("RaidId"));
++                this.raid = ((ServerLevel) this.level()).getRaids().get(compound.getInt("RaidId"));
+             }
+ 
+             if (this.raid != null) {
+@@ -224,34 +236,38 @@
+                 }
+             }
+         }
++
+     }
+ 
+     @Override
+     protected void pickUpItem(ItemEntity itemEntity) {
+-        ItemStack item = itemEntity.getItem();
++        ItemStack itemstack = itemEntity.getItem();
+         boolean flag = this.hasActiveRaid() && this.getCurrentRaid().getLeader(this.getWave()) != null;
+-        if (this.hasActiveRaid() && !flag && ItemStack.matches(item, Raid.getLeaderBannerInstance())) {
+-            EquipmentSlot equipmentSlot = EquipmentSlot.HEAD;
+-            ItemStack itemBySlot = this.getItemBySlot(equipmentSlot);
+-            double d = (double)this.getEquipmentDropChance(equipmentSlot);
+-            if (!itemBySlot.isEmpty() && (double)Math.max(this.random.nextFloat() - 0.1F, 0.0F) < d) {
+-                this.spawnAtLocation(itemBySlot);
++
++        if (this.hasActiveRaid() && !flag && ItemStack.matches(itemstack, Raid.getLeaderBannerInstance())) {
++            EquipmentSlot enumitemslot = EquipmentSlot.HEAD;
++            ItemStack itemstack1 = this.getItemBySlot(enumitemslot);
++            double d0 = (double) this.getEquipmentDropChance(enumitemslot);
++
++            if (!itemstack1.isEmpty() && (double) Math.max(this.random.nextFloat() - 0.1F, 0.0F) < d0) {
++                this.spawnAtLocation(itemstack1);
+             }
+ 
+             this.onItemPickup(itemEntity);
+-            this.setItemSlot(equipmentSlot, item);
+-            this.take(itemEntity, item.getCount());
++            this.setItemSlot(enumitemslot, itemstack);
++            this.take(itemEntity, itemstack.getCount());
+             itemEntity.discard();
+             this.getCurrentRaid().setLeader(this.getWave(), this);
+             this.setPatrolLeader(true);
+         } else {
+             super.pickUpItem(itemEntity);
+         }
++
+     }
+ 
+     @Override
+     public boolean removeWhenFarAway(double distanceToClosestPlayer) {
+-        return this.getCurrentRaid() == null && super.removeWhenFarAway(distanceToClosestPlayer);
++        return this.getCurrentRaid() == null ? super.removeWhenFarAway(distanceToClosestPlayer) : false;
+     }
+ 
+     @Override
+@@ -278,143 +294,176 @@
+ 
+     @Nullable
+     @Override
+-    public SpawnGroupData finalizeSpawn(
+-        ServerLevelAccessor level, DifficultyInstance difficulty, MobSpawnType reason, @Nullable SpawnGroupData spawnData, @Nullable CompoundTag dataTag
+-    ) {
+-        this.setCanJoinRaid(this.getType() != EntityType.WITCH || reason != MobSpawnType.NATURAL);
++    public GroupDataEntity finalizeSpawn(ServerLevelAccessor level, DifficultyInstance difficulty, EnumMobSpawn reason, @Nullable GroupDataEntity spawnData, @Nullable CompoundTag dataTag) {
++        this.setCanJoinRaid(this.getType() != EntityType.WITCH || reason != EnumMobSpawn.NATURAL);
+         return super.finalizeSpawn(level, difficulty, reason, spawnData, dataTag);
+     }
+ 
+     public abstract SoundEvent getCelebrateSound();
+ 
+-    protected class HoldGroundAttackGoal extends Goal {
+-        private final Raider mob;
+-        private final float hostileRadiusSqr;
+-        public final TargetingConditions shoutTargeting = TargetingConditions.forNonCombat().range(8.0).ignoreLineOfSight().ignoreInvisibilityTesting();
++    public class ObtainRaidLeaderBannerGoal<T extends Raider> extends Goal {
+ 
+-        public HoldGroundAttackGoal(AbstractIllager mob, float hostileRadiusSquare) {
+-            this.mob = mob;
+-            this.hostileRadiusSqr = hostileRadiusSquare * hostileRadiusSquare;
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
++        private final T mob;
++
++        public ObtainRaidLeaderBannerGoal(T entityraider) { // CraftBukkit - decompile error
++            this.mob = entityraider;
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            LivingEntity lastHurtByMob = this.mob.getLastHurtByMob();
+-            return this.mob.getCurrentRaid() == null
+-                && this.mob.isPatrolling()
+-                && this.mob.getTarget() != null
+-                && !this.mob.isAggressive()
+-                && (lastHurtByMob == null || lastHurtByMob.getType() != EntityType.PLAYER);
+-        }
++            Raid raid = this.mob.getCurrentRaid();
+ 
+-        @Override
+-        public void start() {
+-            super.start();
+-            this.mob.getNavigation().stop();
++            if (this.mob.hasActiveRaid() && !this.mob.getCurrentRaid().isOver() && this.mob.canBeLeader() && !ItemStack.matches(this.mob.getItemBySlot(EquipmentSlot.HEAD), Raid.getLeaderBannerInstance())) {
++                Raider entityraider = raid.getLeader(this.mob.getWave());
+ 
+-            for (Raider raider : this.mob
+-                .level()
+-                .getNearbyEntities(Raider.class, this.shoutTargeting, this.mob, this.mob.getBoundingBox().inflate(8.0, 8.0, 8.0))) {
+-                raider.setTarget(this.mob.getTarget());
+-            }
+-        }
++                if (entityraider == null || !entityraider.isAlive()) {
++                    List<ItemEntity> list = this.mob.level().getEntitiesOfClass(ItemEntity.class, this.mob.getBoundingBox().inflate(16.0D, 8.0D, 16.0D), Raider.ALLOWED_ITEMS);
+ 
+-        @Override
+-        public void stop() {
+-            super.stop();
+-            LivingEntity target = this.mob.getTarget();
+-            if (target != null) {
+-                for (Raider raider : this.mob
+-                    .level()
+-                    .getNearbyEntities(Raider.class, this.shoutTargeting, this.mob, this.mob.getBoundingBox().inflate(8.0, 8.0, 8.0))) {
+-                    raider.setTarget(target);
+-                    raider.setAggressive(true);
++                    if (!list.isEmpty()) {
++                        return this.mob.getNavigation().moveTo((Entity) list.get(0), 1.149999976158142D);
++                    }
+                 }
+ 
+-                this.mob.setAggressive(true);
++                return false;
++            } else {
++                return false;
+             }
+         }
+ 
+         @Override
+-        public boolean requiresUpdateEveryTick() {
+-            return true;
+-        }
+-
+-        @Override
+         public void tick() {
+-            LivingEntity target = this.mob.getTarget();
+-            if (target != null) {
+-                if (this.mob.distanceToSqr(target) > (double)this.hostileRadiusSqr) {
+-                    this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+-                    if (this.mob.random.nextInt(50) == 0) {
+-                        this.mob.playAmbientSound();
+-                    }
+-                } else {
+-                    this.mob.setAggressive(true);
+-                }
++            if (this.mob.getNavigation().getTargetPos().closerToCenterThan(this.mob.position(), 1.414D)) {
++                List<ItemEntity> list = this.mob.level().getEntitiesOfClass(ItemEntity.class, this.mob.getBoundingBox().inflate(4.0D, 4.0D, 4.0D), Raider.ALLOWED_ITEMS);
+ 
+-                super.tick();
++                if (!list.isEmpty()) {
++                    this.mob.pickUpItem((ItemEntity) list.get(0));
++                }
+             }
++
+         }
+     }
+ 
+-    public class ObtainRaidLeaderBannerGoal<T extends Raider> extends Goal {
+-        private final T mob;
++    private static class RaiderMoveThroughVillageGoal extends Goal {
+ 
+-        public ObtainRaidLeaderBannerGoal(T mob) {
+-            this.mob = mob;
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++        private final Raider raider;
++        private final double speedModifier;
++        private BlockPos poiPos;
++        private final List<BlockPos> visited = Lists.newArrayList();
++        private final int distanceToPoi;
++        private boolean stuck;
++
++        public RaiderMoveThroughVillageGoal(Raider raider, double speedModifier, int i) {
++            this.raider = raider;
++            this.speedModifier = speedModifier;
++            this.distanceToPoi = i;
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            Raid currentRaid = this.mob.getCurrentRaid();
+-            if (this.mob.hasActiveRaid()
+-                && !this.mob.getCurrentRaid().isOver()
+-                && this.mob.canBeLeader()
+-                && !ItemStack.matches(this.mob.getItemBySlot(EquipmentSlot.HEAD), Raid.getLeaderBannerInstance())) {
+-                Raider leader = currentRaid.getLeader(this.mob.getWave());
+-                if (leader == null || !leader.isAlive()) {
+-                    List<ItemEntity> entitiesOfClass = this.mob
+-                        .level()
+-                        .getEntitiesOfClass(ItemEntity.class, this.mob.getBoundingBox().inflate(16.0, 8.0, 16.0), Raider.ALLOWED_ITEMS);
+-                    if (!entitiesOfClass.isEmpty()) {
+-                        return this.mob.getNavigation().moveTo(entitiesOfClass.get(0), 1.15F);
+-                    }
+-                }
++            this.updateVisited();
++            return this.isValidRaid() && this.hasSuitablePoi() && this.raider.getTarget() == null;
++        }
+ 
++        private boolean isValidRaid() {
++            return this.raider.hasActiveRaid() && !this.raider.getCurrentRaid().isOver();
++        }
++
++        private boolean hasSuitablePoi() {
++            ServerLevel worldserver = (ServerLevel) this.raider.level();
++            BlockPos blockposition = this.raider.blockPosition();
++            Optional<BlockPos> optional = worldserver.getPoiManager().getRandom((holder) -> {
++                return holder.is(PoiTypes.HOME);
++            }, this::hasNotVisited, PoiManager.Occupancy.ANY, blockposition, 48, this.raider.random);
++
++            if (optional.isEmpty()) {
+                 return false;
+             } else {
+-                return false;
++                this.poiPos = ((BlockPos) optional.get()).immutable();
++                return true;
+             }
+         }
+ 
+         @Override
++        public boolean canContinueToUse() {
++            return this.raider.getNavigation().isDone() ? false : this.raider.getTarget() == null && !this.poiPos.closerToCenterThan(this.raider.position(), (double) (this.raider.getBbWidth() + (float) this.distanceToPoi)) && !this.stuck;
++        }
++
++        @Override
++        public void stop() {
++            if (this.poiPos.closerToCenterThan(this.raider.position(), (double) this.distanceToPoi)) {
++                this.visited.add(this.poiPos);
++            }
++
++        }
++
++        @Override
++        public void start() {
++            super.start();
++            this.raider.setNoActionTime(0);
++            this.raider.getNavigation().moveTo((double) this.poiPos.getX(), (double) this.poiPos.getY(), (double) this.poiPos.getZ(), this.speedModifier);
++            this.stuck = false;
++        }
++
++        @Override
+         public void tick() {
+-            if (this.mob.getNavigation().getTargetPos().closerToCenterThan(this.mob.position(), 1.414)) {
+-                List<ItemEntity> entitiesOfClass = this.mob
+-                    .level()
+-                    .getEntitiesOfClass(ItemEntity.class, this.mob.getBoundingBox().inflate(4.0, 4.0, 4.0), Raider.ALLOWED_ITEMS);
+-                if (!entitiesOfClass.isEmpty()) {
+-                    this.mob.pickUpItem(entitiesOfClass.get(0));
++            if (this.raider.getNavigation().isDone()) {
++                Vec3 vec3d = Vec3.atBottomCenterOf(this.poiPos);
++                Vec3 vec3d1 = DefaultRandomPos.getPosTowards(this.raider, 16, 7, vec3d, 0.3141592741012573D);
++
++                if (vec3d1 == null) {
++                    vec3d1 = DefaultRandomPos.getPosTowards(this.raider, 8, 7, vec3d, 1.5707963705062866D);
+                 }
++
++                if (vec3d1 == null) {
++                    this.stuck = true;
++                    return;
++                }
++
++                this.raider.getNavigation().moveTo(vec3d1.x, vec3d1.y, vec3d1.z, this.speedModifier);
+             }
++
+         }
++
++        private boolean hasNotVisited(BlockPos pos) {
++            Iterator iterator = this.visited.iterator();
++
++            BlockPos blockposition1;
++
++            do {
++                if (!iterator.hasNext()) {
++                    return true;
++                }
++
++                blockposition1 = (BlockPos) iterator.next();
++            } while (!Objects.equals(pos, blockposition1));
++
++            return false;
++        }
++
++        private void updateVisited() {
++            if (this.visited.size() > 2) {
++                this.visited.remove(0);
++            }
++
++        }
+     }
+ 
+     public class RaiderCelebration extends Goal {
++
+         private final Raider mob;
+ 
+-        RaiderCelebration(Raider mob) {
+-            this.mob = mob;
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++        RaiderCelebration(Raider entityraider) {
++            this.mob = entityraider;
++            this.setFlags(EnumSet.of(Goal.Type.MOVE));
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            Raid currentRaid = this.mob.getCurrentRaid();
+-            return this.mob.isAlive() && this.mob.getTarget() == null && currentRaid != null && currentRaid.isLoss();
++            Raid raid = this.mob.getCurrentRaid();
++
++            return this.mob.isAlive() && this.mob.getTarget() == null && raid != null && raid.isLoss();
+         }
+ 
+         @Override
+@@ -443,99 +492,82 @@
+         }
+     }
+ 
+-    static class RaiderMoveThroughVillageGoal extends Goal {
+-        private final Raider raider;
+-        private final double speedModifier;
+-        private BlockPos poiPos;
+-        private final List<BlockPos> visited = Lists.newArrayList();
+-        private final int distanceToPoi;
+-        private boolean stuck;
++    protected class HoldGroundAttackGoal extends Goal {
+ 
+-        public RaiderMoveThroughVillageGoal(Raider raider, double speedModifier, int distanceToPoi) {
+-            this.raider = raider;
+-            this.speedModifier = speedModifier;
+-            this.distanceToPoi = distanceToPoi;
+-            this.setFlags(EnumSet.of(Goal.Flag.MOVE));
++        private final Raider mob;
++        private final float hostileRadiusSqr;
++        public final TargetingConditions shoutTargeting = TargetingConditions.forNonCombat().range(8.0D).ignoreLineOfSight().ignoreInvisibilityTesting();
++
++        public HoldGroundAttackGoal(AbstractIllager entityillagerabstract, float f) {
++            this.mob = entityillagerabstract;
++            this.hostileRadiusSqr = f * f;
++            this.setFlags(EnumSet.of(Goal.Type.MOVE, Goal.Type.LOOK));
+         }
+ 
+         @Override
+         public boolean canUse() {
+-            this.updateVisited();
+-            return this.isValidRaid() && this.hasSuitablePoi() && this.raider.getTarget() == null;
+-        }
++            LivingEntity entityliving = this.mob.getLastHurtByMob();
+ 
+-        private boolean isValidRaid() {
+-            return this.raider.hasActiveRaid() && !this.raider.getCurrentRaid().isOver();
++            return this.mob.getCurrentRaid() == null && this.mob.isPatrolling() && this.mob.getTarget() != null && !this.mob.isAggressive() && (entityliving == null || entityliving.getType() != EntityType.PLAYER);
+         }
+ 
+-        private boolean hasSuitablePoi() {
+-            ServerLevel serverLevel = (ServerLevel)this.raider.level();
+-            BlockPos blockPos = this.raider.blockPosition();
+-            Optional<BlockPos> random = serverLevel.getPoiManager()
+-                .getRandom(holder -> holder.is(PoiTypes.HOME), this::hasNotVisited, PoiManager.Occupancy.ANY, blockPos, 48, this.raider.random);
+-            if (random.isEmpty()) {
+-                return false;
+-            } else {
+-                this.poiPos = random.get().immutable();
+-                return true;
++        @Override
++        public void start() {
++            super.start();
++            this.mob.getNavigation().stop();
++            List<Raider> list = this.mob.level().getNearbyEntities(Raider.class, this.shoutTargeting, this.mob, this.mob.getBoundingBox().inflate(8.0D, 8.0D, 8.0D));
++            Iterator iterator = list.iterator();
++
++            while (iterator.hasNext()) {
++                Raider entityraider = (Raider) iterator.next();
++
++                entityraider.setTarget(this.mob.getTarget(), org.bukkit.event.entity.EntityTargetEvent.TargetReason.FOLLOW_LEADER, true); // CraftBukkit
+             }
+-        }
+ 
+-        @Override
+-        public boolean canContinueToUse() {
+-            return !this.raider.getNavigation().isDone()
+-                && this.raider.getTarget() == null
+-                && !this.poiPos.closerToCenterThan(this.raider.position(), (double)(this.raider.getBbWidth() + (float)this.distanceToPoi))
+-                && !this.stuck;
+         }
+ 
+         @Override
+         public void stop() {
+-            if (this.poiPos.closerToCenterThan(this.raider.position(), (double)this.distanceToPoi)) {
+-                this.visited.add(this.poiPos);
++            super.stop();
++            LivingEntity entityliving = this.mob.getTarget();
++
++            if (entityliving != null) {
++                List<Raider> list = this.mob.level().getNearbyEntities(Raider.class, this.shoutTargeting, this.mob, this.mob.getBoundingBox().inflate(8.0D, 8.0D, 8.0D));
++                Iterator iterator = list.iterator();
++
++                while (iterator.hasNext()) {
++                    Raider entityraider = (Raider) iterator.next();
++
++                    entityraider.setTarget(this.mob.getTarget(), org.bukkit.event.entity.EntityTargetEvent.TargetReason.FOLLOW_LEADER, true); // CraftBukkit
++                    entityraider.setAggressive(true);
++                }
++
++                this.mob.setAggressive(true);
+             }
++
+         }
+ 
+         @Override
+-        public void start() {
+-            super.start();
+-            this.raider.setNoActionTime(0);
+-            this.raider.getNavigation().moveTo((double)this.poiPos.getX(), (double)this.poiPos.getY(), (double)this.poiPos.getZ(), this.speedModifier);
+-            this.stuck = false;
++        public boolean requiresUpdateEveryTick() {
++            return true;
+         }
+ 
+         @Override
+         public void tick() {
+-            if (this.raider.getNavigation().isDone()) {
+-                Vec3 vec3 = Vec3.atBottomCenterOf(this.poiPos);
+-                Vec3 posTowards = DefaultRandomPos.getPosTowards(this.raider, 16, 7, vec3, (float) (Math.PI / 10));
+-                if (posTowards == null) {
+-                    posTowards = DefaultRandomPos.getPosTowards(this.raider, 8, 7, vec3, (float) (Math.PI / 2));
+-                }
++            LivingEntity entityliving = this.mob.getTarget();
+ 
+-                if (posTowards == null) {
+-                    this.stuck = true;
+-                    return;
++            if (entityliving != null) {
++                if (this.mob.distanceToSqr((Entity) entityliving) > (double) this.hostileRadiusSqr) {
++                    this.mob.getLookControl().setLookAt(entityliving, 30.0F, 30.0F);
++                    if (this.mob.random.nextInt(50) == 0) {
++                        this.mob.playAmbientSound();
++                    }
++                } else {
++                    this.mob.setAggressive(true);
+                 }
+ 
+-                this.raider.getNavigation().moveTo(posTowards.x, posTowards.y, posTowards.z, this.speedModifier);
++                super.tick();
+             }
+         }
+-
+-        private boolean hasNotVisited(BlockPos pos) {
+-            for (BlockPos blockPos : this.visited) {
+-                if (Objects.equals(pos, blockPos)) {
+-                    return false;
+-                }
+-            }
+-
+-            return true;
+-        }
+-
+-        private void updateVisited() {
+-            if (this.visited.size() > 2) {
+-                this.visited.remove(0);
+-            }
+-        }
+     }
+ }
