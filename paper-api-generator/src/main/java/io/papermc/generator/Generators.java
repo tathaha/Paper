@@ -1,6 +1,7 @@
 package io.papermc.generator;
 
 import io.papermc.generator.types.GeneratedKeyType;
+import io.papermc.generator.types.SoundGenerator;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.types.goal.MobGoalGenerator;
 import io.papermc.paper.registry.RegistryKey;
@@ -33,7 +34,8 @@ public interface Generators {
         simpleKey("MobEffectKeys", PotionEffectType.class, Registries.MOB_EFFECT, RegistryKey.MOB_EFFECT, false),
         simpleKey("DamageTypeKeys", DamageType.class, Registries.DAMAGE_TYPE, RegistryKey.DAMAGE_TYPE, true),
         simpleKey("WolfVariantKeys", Wolf.Variant.class, Registries.WOLF_VARIANT, RegistryKey.WOLF_VARIANT, true),
-        new MobGoalGenerator("VanillaGoal", "com.destroystokyo.paper.entity.ai")
+        new MobGoalGenerator("VanillaGoal", "com.destroystokyo.paper.entity.ai"),
+        new SoundGenerator("Sound", "org.bukkit")
     };
 
     private static <T, A> SourceGenerator simpleKey(final String className, final Class<A> apiType, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {
