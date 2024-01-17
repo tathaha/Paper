@@ -2,7 +2,6 @@ package io.papermc.generator.utils;
 
 import com.squareup.javapoet.AnnotationSpec;
 import java.util.List;
-
 import io.papermc.paper.generated.GeneratedFrom;
 import net.minecraft.SharedConstants;
 import org.bukkit.MinecraftExperimental;
