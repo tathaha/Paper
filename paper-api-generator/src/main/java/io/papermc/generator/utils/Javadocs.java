@@ -22,6 +22,8 @@ public final class Javadocs {
         """.formatted(headerIdentifier);
     }
 
+    public static final String DEPRECATED_FOR = "@deprecated in favour of {@link #$L}";
+
     private Javadocs() {
     }
 }

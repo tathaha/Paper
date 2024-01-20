@@ -1,4 +1,4 @@
-package io.papermc.generator.types.enumgen;
+package io.papermc.generator.types.registry;
 
 import com.squareup.javapoet.TypeSpec;
 import io.papermc.generator.utils.Javadocs;
@@ -14,7 +14,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
 
 @DefaultQualifier(NonNull.class)
-public class SoundGenerator extends EnumGenerator<SoundEvent> {
+public class SoundGenerator extends EnumRegistryGenerator<SoundEvent> {
 
     private static final String CLASS_HEADER = Javadocs.getVersionDependentClassHeader("Sounds");
     private static final List<Pattern> EXPERIMENTAL_REGEX = of(

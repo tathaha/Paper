@@ -15,6 +15,10 @@ public final class Formatting {
         return ILLEGAL_FIELD_CHARACTERS.matcher(path.toUpperCase(Locale.ENGLISH)).replaceAll("_");
     }
 
+    public static String formatKeyAsTagField(String path, String prefix) {
+        return prefix + formatKeyAsField(path);
+    }
+
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
 
     public static <T> Comparator<T> alphabeticKeyOrder(Function<T, String> mapper) {
