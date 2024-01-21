@@ -15,10 +15,6 @@ import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
 import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.TypedKey;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import net.kyori.adventure.key.Key;
 import net.minecraft.core.Holder;
@@ -40,22 +36,6 @@ import static javax.lang.model.element.Modifier.STATIC;
 
 @DefaultQualifier(NonNull.class)
 public class GeneratedKeyType<T, A> extends SimpleGenerator {
-
-    private static final Map<RegistryKey<?>, String> REGISTRY_KEY_FIELD_NAMES;
-    static {
-        final Map<RegistryKey<?>, String> map = new HashMap<>();
-        try {
-            for (final Field field : RegistryKey.class.getFields()) {
-                if (!Modifier.isStatic(field.getModifiers()) || !Modifier.isFinal(field.getModifiers()) || field.getType() != RegistryKey.class) {
-                    continue;
-                }
-                map.put((RegistryKey<?>) field.get(null), field.getName());
-            }
-            REGISTRY_KEY_FIELD_NAMES = Map.copyOf(map);
-        } catch (final ReflectiveOperationException ex) {
-            throw new RuntimeException(ex);
-        }
-    }
 
     private static final String CREATE_JAVADOC = """
         Creates a key for {@link $T} in a registry.
@@ -84,7 +64,7 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         final MethodSpec.Builder create = MethodSpec.methodBuilder("create")
             .addModifiers(this.publicCreateKeyMethod ? PUBLIC : PRIVATE, STATIC)
             .addParameter(keyParam)
-            .addCode("return $T.create($T.$L, $N);", TypedKey.class, RegistryKey.class, requireNonNull(REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), keyParam)
+            .addCode("return $T.create($T.$L, $N);", TypedKey.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), keyParam)
             .returns(returnType.annotated(NOT_NULL));
         if (this.publicCreateKeyMethod) {
             create.addAnnotation(EXPERIMENTAL_API_ANNOTATION); // TODO remove once not experimental
@@ -96,7 +76,7 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
     private TypeSpec.Builder keyHolderType() {
         return classBuilder(this.className)
             .addModifiers(PUBLIC, FINAL)
-            .addJavadoc(Javadocs.getVersionDependentClassHeader("{@link $T#$L}"), RegistryKey.class, REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey))
+            .addJavadoc(Javadocs.getVersionDependentClassHeader("{@link $T#$L}"), RegistryKey.class, RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey))
             .addAnnotations(Annotations.CLASS_HEADER)
             .addMethod(MethodSpec.constructorBuilder()
                 .addModifiers(PRIVATE)

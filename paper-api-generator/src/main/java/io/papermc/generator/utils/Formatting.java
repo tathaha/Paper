@@ -6,6 +6,9 @@ import java.util.Locale;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 
 public final class Formatting {
 
@@ -15,8 +18,14 @@ public final class Formatting {
         return ILLEGAL_FIELD_CHARACTERS.matcher(path.toUpperCase(Locale.ENGLISH)).replaceAll("_");
     }
 
-    public static String formatKeyAsTagField(String path, String prefix) {
-        return prefix + formatKeyAsField(path);
+    public static String formatTagFieldPrefix(String name, ResourceKey<? extends Registry<?>> registryKey) {
+        if (registryKey == Registries.BLOCK) {
+            return "";
+        }
+        if (registryKey == Registries.GAME_EVENT) {
+            return "GAME_EVENT_"; // Paper doesn't follow the format (should be GAME_EVENTS_)
+        }
+        return name.toUpperCase(Locale.ENGLISH) + "_";
     }
 
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
