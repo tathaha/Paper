@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.MinecraftExperimental;
 import org.bukkit.NamespacedKey;
@@ -41,14 +42,14 @@ import static javax.lang.model.element.Modifier.STATIC;
 @DefaultQualifier(NonNull.class)
 public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
 
-    protected final Class<A> apiType;
+    private final Class<A> apiType;
     protected final RegistryKey<A> apiRegistryKey;
     private final Supplier<Registry<T>> registry;
     private final boolean isInterface;
     private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
 
-    public RegistryGenerator(final String keysClassName, final Class<A> apiType, final String pkg, final RegistryKey<A> apiRegistryKey, final boolean isInterface) {
-        super(keysClassName, pkg);
+    protected RegistryGenerator(final String className, final Class<A> apiType, final String pkg, final RegistryKey<A> apiRegistryKey, final boolean isInterface) {
+        super(className, pkg);
         this.apiType = apiType;
         this.registry = Suppliers.memoize(this::getRegistry);
         this.apiRegistryKey = apiRegistryKey;
@@ -90,7 +91,7 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
     protected TypeSpec getTypeSpec() {
         TypeSpec.Builder typeBuilder = this.valueHolderType();
 
-        MethodSpec.@Nullable Builder fetchMethod = this.fetchMethod(TypeName.get(this.apiType));
+        MethodSpec.@Nullable Builder fetchMethod = this.fetchMethod(TypeName.get(this.apiType)); // todo check runtime order issue when the classes are removed with the key generator
 
         List<Map.Entry<ResourceKey<T>, T>> paths = new ArrayList<>(this.registry.get().entrySet());
         paths.sort(Comparator.comparing(o -> o.getKey().location().getPath()));
@@ -111,7 +112,7 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
                 fieldBuilder.initializer("$N($S)", fetchMethod.build(), pathKey);
             }
             if (isExperimental) {
-                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(MinecraftExperimental.Requires.UPDATE_1_21));
+                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(FeatureFlags.UPDATE_1_21));
             }
 
             typeBuilder.addField(fieldBuilder.build());

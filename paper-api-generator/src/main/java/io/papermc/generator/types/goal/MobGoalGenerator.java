@@ -160,8 +160,8 @@ public class MobGoalGenerator extends SimpleGenerator {
         //</editor-fold>
     };
 
-    public MobGoalGenerator(final String keysClassName, final String pkg) {
-        super(keysClassName, pkg);
+    public MobGoalGenerator(final String className, final String pkg) {
+        super(className, pkg);
     }
 
     @Override

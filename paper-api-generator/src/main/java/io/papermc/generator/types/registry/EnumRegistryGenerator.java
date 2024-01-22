@@ -20,10 +20,12 @@ import javax.lang.model.element.Modifier;
 import io.papermc.generator.utils.RegistryUtils;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.MinecraftExperimental;
 import org.bukkit.NamespacedKey;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static javax.lang.model.element.Modifier.FINAL;
@@ -35,13 +37,10 @@ public abstract class EnumRegistryGenerator<T> extends SimpleGenerator {
     protected final ResourceKey<Registry<T>> registryKey;
     private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
 
-    public EnumRegistryGenerator(final String keysClassName, final String pkg, ResourceKey<Registry<T>> registryKey) {
-        super(keysClassName, pkg);
+    public EnumRegistryGenerator(final String className, final String pkg, ResourceKey<Registry<T>> registryKey) {
+        super(className, pkg);
         this.registryKey = registryKey;
-        this.experimentalKeys = Suppliers.memoize(() -> {
-            Registry<T> registry = Main.REGISTRY_ACCESS.registryOrThrow(this.registryKey);
-            return RegistryUtils.collectExperimentalDataDrivenKeys(registry);
-        });
+        this.experimentalKeys = Suppliers.memoize(() -> RegistryUtils.collectExperimentalDataDrivenKeys(Main.REGISTRY_ACCESS.registryOrThrow(this.registryKey)));
     }
 
     @Override
@@ -60,10 +59,10 @@ public abstract class EnumRegistryGenerator<T> extends SimpleGenerator {
             String pathKey = resourceKey.location().getPath();
 
             String fieldName = Formatting.formatKeyAsField(pathKey);
-            boolean isExperimental = this.isExperimental(entry);
+            @Nullable String experimentalValue = this.getExperimentalValue(entry);
             TypeSpec.Builder builder = TypeSpec.anonymousClassBuilder("$S", pathKey);
-            if (isExperimental) {
-                builder.addAnnotations(Annotations.experimentalAnnotations(MinecraftExperimental.Requires.UPDATE_1_21));
+            if (experimentalValue != null) {
+                builder.addAnnotations(Annotations.experimentalAnnotations(experimentalValue));
             }
 
             typeBuilder.addEnumConstant(fieldName, builder.build());
@@ -95,8 +94,12 @@ public abstract class EnumRegistryGenerator<T> extends SimpleGenerator {
         return builder.skipJavaLangImports(true);
     }
 
-    public boolean isExperimental(Map.Entry<ResourceKey<T>, T> entry) {
-        return this.experimentalKeys.get().contains(entry.getKey());
+    @Nullable
+    public String getExperimentalValue(Map.Entry<ResourceKey<T>, T> entry) {
+        if (this.experimentalKeys.get().contains(entry.getKey())) {
+            return Formatting.formatFeatureFlag(FeatureFlags.UPDATE_1_21);
+        }
+        return null;
     }
 
 }

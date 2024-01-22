@@ -20,6 +20,7 @@ import net.kyori.adventure.key.Key;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.MinecraftExperimental;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
@@ -49,8 +50,8 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
     private final RegistryKey<A> apiRegistryKey;
     private final boolean publicCreateKeyMethod;
 
-    public GeneratedKeyType(final String keysClassName, final Class<A> apiType, final String pkg, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {
-        super(keysClassName, pkg);
+    public GeneratedKeyType(final String className, final Class<A> apiType, final String pkg, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {
+        super(className, pkg);
         this.apiType = apiType;
         this.registryKey = registryKey;
         this.apiRegistryKey = apiRegistryKey;
@@ -103,15 +104,15 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
                 .initializer("$N(key($S))", createMethod.build(), keyPath)
                 .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), key.location().toString());
             if (experimental.contains(key)) {
-                fieldBuilder.addAnnotations(experimentalAnnotations(MinecraftExperimental.Requires.UPDATE_1_21));
+                fieldBuilder.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
             } else {
                 allExperimental = false;
             }
             typeBuilder.addField(fieldBuilder.build());
         }
         if (allExperimental) {
-            typeBuilder.addAnnotations(experimentalAnnotations(MinecraftExperimental.Requires.UPDATE_1_21));
-            createMethod.addAnnotations(experimentalAnnotations(MinecraftExperimental.Requires.UPDATE_1_21));
+            typeBuilder.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
+            createMethod.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
         } else {
             typeBuilder.addAnnotation(EXPERIMENTAL_API_ANNOTATION); // TODO experimental API
         }
