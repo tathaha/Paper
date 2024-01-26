@@ -5,6 +5,7 @@ import org.apache.commons.lang3.math.NumberUtils;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -49,12 +50,24 @@ public final class Formatting {
     private static final Map<FeatureFlag, ResourceLocation> FEATURE_FLAG_NAME = HashBiMap.create(FeatureFlags.REGISTRY.names).inverse();
 
     public static String formatFeatureFlag(FeatureFlag featureFlag) {
-        String name = FEATURE_FLAG_NAME.get(featureFlag).getPath();
+        return formatFeatureFlagName(FEATURE_FLAG_NAME.get(featureFlag).getPath());
+    }
+
+    public static String formatFeatureFlagName(String name) {
         int updateIndex = name.indexOf("update_");
         if (updateIndex == 0) {
             return "update %s".formatted(name.substring(updateIndex + "update_".length()).replace('_', '.'));
         }
         return name.replace('_', ' ') + " feature";
+    }
+
+    public static Optional<String> formatTagKey(String tagDir, String resourcePath) {
+        int tagsIndex = resourcePath.indexOf(tagDir);
+        int dotIndex = resourcePath.lastIndexOf('.');
+        if (tagsIndex == -1 || dotIndex == -1) {
+            return Optional.empty();
+        }
+        return Optional.of(resourcePath.substring(tagsIndex + tagDir.length() + 1, dotIndex)); // namespace/tags/registry_key/[tag_key].json
     }
 
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
