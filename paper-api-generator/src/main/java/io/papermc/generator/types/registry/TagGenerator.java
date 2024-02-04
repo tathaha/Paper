@@ -3,7 +3,6 @@ package io.papermc.generator.types.registry;
 import com.destroystokyo.paper.MaterialTags;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
-import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
@@ -24,7 +23,6 @@ import java.util.Set;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.tags.TagKey;
 import org.bukkit.Bukkit;
 import org.bukkit.Fluid;
 import org.bukkit.GameEvent;
@@ -38,6 +36,7 @@ import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static com.squareup.javapoet.TypeSpec.interfaceBuilder;
 import static io.papermc.generator.utils.Annotations.NOT_NULL;
+import static io.papermc.generator.utils.Annotations.NULLABLE;
 import static io.papermc.generator.utils.Annotations.experimentalAnnotations;
 import static javax.lang.model.element.Modifier.ABSTRACT;
 import static javax.lang.model.element.Modifier.FINAL;
@@ -74,7 +73,7 @@ public class TagGenerator extends SimpleGenerator {
         @return set of tagged items
         """;
 
-    private static final String REGISTRY_FIELD_JAVADOC = "Key for the built in $L registry.";
+    private static final String REGISTRY_FIELD_JAVADOC = "Key for the built-in $L registry.";
 
     public record TagRegistry(String name, Class<?> apiType, ResourceKey<? extends Registry<?>> registryKey) {}
 
@@ -90,15 +89,12 @@ public class TagGenerator extends SimpleGenerator {
         registry("game_events", GameEvent.class, Registries.GAME_EVENT)
     );
 
-    private final TypeVariableName typeVariable = TypeVariableName.get("T", Keyed.class);
-
     public TagGenerator(final String className, final String pkg) {
         super(className, pkg);
     }
 
     private TypeSpec.Builder tagHolderType() {
         return interfaceBuilder(this.className)
-            .addTypeVariable(this.typeVariable)
             .addModifiers(PUBLIC)
             .addSuperinterface(Keyed.class)
             .addJavadoc(CLASS_HEADER_JAVADOC, MaterialTags.class, EntityTags.class)
@@ -107,13 +103,17 @@ public class TagGenerator extends SimpleGenerator {
 
     @Override
     protected TypeSpec getTypeSpec() {
+        final TypeVariableName typeVariable = TypeVariableName.get("T", Keyed.class);
         final TypeSpec.Builder typeBuilder = this.tagHolderType();
+        typeBuilder.addTypeVariable(typeVariable);
 
         for (final TagRegistry tagRegistry : TAG_REGISTRIES) {
             final TypeName fieldType = ParameterizedTypeName.get(Tag.class, tagRegistry.apiType());
 
             final ResourceKey<? extends Registry<?>> registryKey = tagRegistry.registryKey();
             final Registry<?> registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
+            final Collection<String> experimentalTags = Main.EXPERIMENTAL_TAGS.perRegistry().get(registryKey);
+
             final String registryFieldName = "REGISTRY_" + tagRegistry.name().toUpperCase(Locale.ENGLISH);
             final FieldSpec.Builder registryFieldBuilder = FieldSpec.builder(String.class, registryFieldName)
                 .addModifiers(PUBLIC, STATIC, FINAL)
@@ -123,9 +123,8 @@ public class TagGenerator extends SimpleGenerator {
             typeBuilder.addField(registryFieldBuilder.build());
 
             final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.name(), registryKey);
-            final Collection<String> experimentalTags = Main.EXPERIMENTAL_TAGS.perRegistry().get(tagRegistry.registryKey());
 
-            for (final TagKey<?> tagKey : registry.getTagNames().sorted(Comparator.comparing(tagKey -> tagKey.location().getPath())).toList()) {
+            registry.getTagNames().sorted(Comparator.comparing(tagKey -> tagKey.location().getPath())).forEach(tagKey -> {
                 final String keyPath = tagKey.location().getPath();
 
                 final String fieldName = fieldPrefix + Formatting.formatKeyAsField(keyPath);
@@ -134,10 +133,11 @@ public class TagGenerator extends SimpleGenerator {
                     .initializer("$T.getTag($L, $T.minecraft($S), $T.class)", Bukkit.class, registryFieldName, NamespacedKey.class, keyPath, tagRegistry.apiType())
                     .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), tagKey.location().toString());
                 if (experimentalTags.contains(keyPath)) {
-                    fieldBuilder.addAnnotations(experimentalAnnotations(Formatting.formatFeatureFlagName(Main.EXPERIMENTAL_TAGS.perFeatureFlag().get(tagKey))));
+                    fieldBuilder.addAnnotations(experimentalAnnotations(Formatting.formatFeatureFlagName(Main.EXPERIMENTAL_TAGS.perFeatureFlag().get(tagKey))))
+                                .addAnnotation(NULLABLE);
                 }
                 typeBuilder.addField(fieldBuilder.build());
-            }
+            });
 
         }
 
@@ -153,24 +153,17 @@ public class TagGenerator extends SimpleGenerator {
         // methods
         typeBuilder.addMethod(MethodSpec.methodBuilder("isTagged")
             .addModifiers(PUBLIC, ABSTRACT)
-            .returns(boolean.class).addParameter(ParameterSpec.builder(this.typeVariable, "item")
+            .returns(boolean.class).addParameter(ParameterSpec.builder(typeVariable, "item")
                 .addAnnotation(NOT_NULL).build())
             .addJavadoc(IS_TAGGED_JAVADOC)
             .build());
 
         typeBuilder.addMethod(MethodSpec.methodBuilder("getValues")
             .addModifiers(PUBLIC, ABSTRACT)
-            .returns(ParameterizedTypeName.get(ClassName.get(Set.class), this.typeVariable))
+            .returns(ParameterizedTypeName.get(ClassName.get(Set.class), typeVariable))
             .addJavadoc(GET_VALUES_JAVADOC)
             .addAnnotation(NOT_NULL).build());
 
         return typeBuilder.build();
-    }
-
-    @Override
-    protected JavaFile.Builder file(JavaFile.Builder builder) {
-        return builder
-            .skipJavaLangImports(true)
-            .indent("    ");
     }
 }

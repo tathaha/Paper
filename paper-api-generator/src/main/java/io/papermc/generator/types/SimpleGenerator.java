@@ -18,11 +18,12 @@ public abstract class SimpleGenerator implements SourceGenerator {
 
     protected abstract TypeSpec getTypeSpec();
 
-    protected abstract JavaFile.Builder file(JavaFile.Builder builder);
+    protected JavaFile.Builder file(JavaFile.Builder builder) {
+        return builder;
+    }
 
     @Override
     public void writeToFile(Path parent) throws IOException {
-
         JavaFile.Builder builder = JavaFile.builder(this.packageName, this.getTypeSpec());
         this.file(builder)
             .indent("    ")

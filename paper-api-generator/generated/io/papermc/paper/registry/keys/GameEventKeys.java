@@ -293,6 +293,48 @@ public final class GameEventKeys {
     public static final TypedKey<GameEvent> RESONATE_1 = create(key("resonate_1"));
 
     /**
+     * {@code minecraft:resonate_10}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_10 = create(key("resonate_10"));
+
+    /**
+     * {@code minecraft:resonate_11}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_11 = create(key("resonate_11"));
+
+    /**
+     * {@code minecraft:resonate_12}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_12 = create(key("resonate_12"));
+
+    /**
+     * {@code minecraft:resonate_13}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_13 = create(key("resonate_13"));
+
+    /**
+     * {@code minecraft:resonate_14}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_14 = create(key("resonate_14"));
+
+    /**
+     * {@code minecraft:resonate_15}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> RESONATE_15 = create(key("resonate_15"));
+
+    /**
      * {@code minecraft:resonate_2}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
@@ -349,46 +391,60 @@ public final class GameEventKeys {
     public static final TypedKey<GameEvent> RESONATE_9 = create(key("resonate_9"));
 
     /**
-     * {@code minecraft:resonate_10}
+     * {@code minecraft:sculk_sensor_tendrils_clicking}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_10 = create(key("resonate_10"));
+    public static final TypedKey<GameEvent> SCULK_SENSOR_TENDRILS_CLICKING = create(key("sculk_sensor_tendrils_clicking"));
 
     /**
-     * {@code minecraft:resonate_11}
+     * {@code minecraft:shear}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_11 = create(key("resonate_11"));
+    public static final TypedKey<GameEvent> SHEAR = create(key("shear"));
 
     /**
-     * {@code minecraft:resonate_12}
+     * {@code minecraft:shriek}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_12 = create(key("resonate_12"));
+    public static final TypedKey<GameEvent> SHRIEK = create(key("shriek"));
 
     /**
-     * {@code minecraft:resonate_13}
+     * {@code minecraft:splash}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_13 = create(key("resonate_13"));
+    public static final TypedKey<GameEvent> SPLASH = create(key("splash"));
 
     /**
-     * {@code minecraft:resonate_14}
+     * {@code minecraft:step}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_14 = create(key("resonate_14"));
+    public static final TypedKey<GameEvent> STEP = create(key("step"));
 
     /**
-     * {@code minecraft:resonate_15}
+     * {@code minecraft:swim}
      *
      * @apiNote This field is version-dependant and may be removed in future Minecraft versions
      */
-    public static final TypedKey<GameEvent> RESONATE_15 = create(key("resonate_15"));
+    public static final TypedKey<GameEvent> SWIM = create(key("swim"));
+
+    /**
+     * {@code minecraft:teleport}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> TELEPORT = create(key("teleport"));
+
+    /**
+     * {@code minecraft:unequip}
+     *
+     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
+     */
+    public static final TypedKey<GameEvent> UNEQUIP = create(key("unequip"));
 
     /**
      * {@code minecraft:sculk_sensor_tendrils_clicking}

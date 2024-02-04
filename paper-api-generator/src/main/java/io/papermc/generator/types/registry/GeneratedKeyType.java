@@ -1,5 +1,6 @@
 package io.papermc.generator.types.registry;
 
+import com.google.common.base.Suppliers;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -16,13 +17,15 @@ import io.papermc.generator.utils.RegistryUtils;
 import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.TypedKey;
 import java.util.Set;
+import java.util.function.Supplier;
 import net.kyori.adventure.key.Key;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureFlags;
-import org.bukkit.MinecraftExperimental;
+import net.minecraft.world.flag.FeatureElement;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static com.squareup.javapoet.TypeSpec.classBuilder;
@@ -46,16 +49,20 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         """;
 
     private final Class<A> apiType;
-    private final ResourceKey<? extends Registry<T>> registryKey;
+    private final Registry<T> registry;
     private final RegistryKey<A> apiRegistryKey;
     private final boolean publicCreateKeyMethod;
+    private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
+    private final boolean isFilteredRegistry;
 
     public GeneratedKeyType(final String className, final Class<A> apiType, final String pkg, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {
         super(className, pkg);
         this.apiType = apiType;
-        this.registryKey = registryKey;
+        this.registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
         this.apiRegistryKey = apiRegistryKey;
         this.publicCreateKeyMethod = publicCreateKeyMethod;
+        this.experimentalKeys = Suppliers.memoize(() -> RegistryUtils.collectExperimentalDataDrivenKeys(this.registry));
+        this.isFilteredRegistry = FeatureElement.FILTERED_REGISTRIES.contains(registryKey);
     }
 
     private MethodSpec.Builder createMethod(final TypeName returnType) {
@@ -92,24 +99,24 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         final TypeSpec.Builder typeBuilder = this.keyHolderType();
         final MethodSpec.Builder createMethod = this.createMethod(typedKey);
 
-        final Registry<T> registry = Main.REGISTRY_ACCESS.registryOrThrow(this.registryKey);
-        final Set<ResourceKey<T>> experimental = RegistryUtils.collectExperimentalDataDrivenKeys(registry);
-
         boolean allExperimental = true;
-        for (final Holder.Reference<T> reference : registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList()) {
+        for (final Holder.Reference<T> reference : this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList()) {
             final ResourceKey<T> key = reference.key();
             final String keyPath = key.location().getPath();
             final String fieldName = Formatting.formatKeyAsField(keyPath);
             final FieldSpec.Builder fieldBuilder = FieldSpec.builder(typedKey, fieldName, PUBLIC, STATIC, FINAL)
                 .initializer("$N(key($S))", createMethod.build(), keyPath)
                 .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), key.location().toString());
-            if (experimental.contains(key)) {
-                fieldBuilder.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
+
+            final @Nullable String experimentalValue = this.getExperimentalValue(reference);
+            if (experimentalValue != null) {
+                fieldBuilder.addAnnotations(experimentalAnnotations(experimentalValue));
             } else {
                 allExperimental = false;
             }
             typeBuilder.addField(fieldBuilder.build());
         }
+
         if (allExperimental) {
             typeBuilder.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
             createMethod.addAnnotations(experimentalAnnotations(FeatureFlags.UPDATE_1_21));
@@ -120,10 +127,18 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
     }
 
     @Override
-    protected JavaFile.Builder file(final JavaFile.Builder builder) {
-        return builder
-            .skipJavaLangImports(true)
-            .addStaticImport(Key.class, "key")
-            .indent("    ");
+    protected JavaFile.Builder file(JavaFile.Builder builder) {
+        return builder.addStaticImport(Key.class, "key");
+    }
+
+    @Nullable
+    public String getExperimentalValue(final Holder.Reference<T> reference) {
+        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
+            return Formatting.formatFeatureFlagSet(element.requiredFeatures());
+        }
+        if (this.experimentalKeys.get().contains(reference.key())) {
+            return Formatting.formatFeatureFlag(FeatureFlags.UPDATE_1_21);
+        }
+        return null;
     }
 }
