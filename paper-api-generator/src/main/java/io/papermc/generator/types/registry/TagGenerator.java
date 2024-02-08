@@ -16,7 +16,6 @@ import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.paper.tag.EntityTags;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -124,7 +123,7 @@ public class TagGenerator extends SimpleGenerator {
 
             final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.name(), registryKey);
 
-            registry.getTagNames().sorted(Comparator.comparing(tagKey -> tagKey.location().getPath())).forEach(tagKey -> {
+            registry.getTagNames().sorted(Formatting.alphabeticKeyOrder(tagKey -> tagKey.location().getPath())).forEach(tagKey -> {
                 final String keyPath = tagKey.location().getPath();
 
                 final String fieldName = fieldPrefix + Formatting.formatKeyAsField(keyPath);

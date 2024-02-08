@@ -10,6 +10,7 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
+import com.squareup.javapoet.WildcardTypeName;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ScanResult;
 import io.papermc.generator.types.SimpleGenerator;
@@ -236,9 +237,8 @@ public class MobGoalGenerator extends SimpleGenerator {
         return typeBuilder.addMethod(createMethod.build()).build();
     }
 
-    record DeprecatedEntry(Class<?> entity, String entryName, @Nullable String removalVersion,
+    record DeprecatedEntry(Class<? extends Mob> entity, String entryName, @Nullable String removalVersion,
                            @Nullable String removedVersion) {
-
     }
 
 }
