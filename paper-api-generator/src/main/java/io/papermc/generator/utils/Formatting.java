@@ -70,6 +70,26 @@ public final class Formatting {
         return Optional.of(resourcePath.substring(tagsIndex + tagDir.length() + 1, dotIndex)); // namespace/tags/registry_key/[tag_key].json
     }
 
+    public static String incrementalIndent(String unit, Class<?> clazz) {
+        Class<?> parent = clazz.getEnclosingClass();
+        StringBuilder indentBuilder = new StringBuilder(unit);
+        while (parent != null) {
+            indentBuilder.append(unit);
+            parent = parent.getEnclosingClass();
+        }
+        return indentBuilder.toString();
+    }
+
+    public static String retrieveFileName(Class<?> clazz) {
+        String name = clazz.getSimpleName();
+        Class<?> parent = clazz.getEnclosingClass();
+        while (parent != null) {
+            name = parent.getSimpleName();
+            parent = parent.getEnclosingClass();
+        }
+        return name;
+    }
+
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
 
     public static <T> Comparator<T> alphabeticKeyOrder(Function<T, String> mapper) {
