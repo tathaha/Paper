@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 
 public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
 
-    public static final Map<Class<?>, String> REGISTRY_FIELD_NAMES;
+    private static final Map<Class<?>, String> REGISTRY_FIELD_NAMES;
     static {
         final Map<Class<?>, String> map = new IdentityHashMap<>();
         for (final Field field : org.bukkit.Registry.class.getDeclaredFields()) {
@@ -58,7 +58,7 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
     }
 
     @Override
-    public void insert(final SearchMetadata metadata, final StringBuilder builder) {
+    protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
         List<Holder.Reference<T>> references = this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
         Iterator<Holder.Reference<T>> referenceIterator = references.iterator();
 
@@ -70,7 +70,7 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
             String fieldName = Formatting.formatKeyAsField(pathKey);
             String experimentalValue = this.getExperimentalValue(reference);
             if (experimentalValue != null) {
-                Annotations.experimentalAnnotations(builder, metadata::indent, experimentalValue);
+                Annotations.experimentalAnnotations(builder, metadata, experimentalValue);
             }
 
             builder.append(metadata.indent());
@@ -84,8 +84,8 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
             } else {
                 builder.append("%s(\"%s\")".formatted(this.fetchMethod, pathKey)); // todo search with reflection or smth?
             }
-
             builder.append(';');
+
             builder.append('\n');
             if (referenceIterator.hasNext()) {
                 builder.append('\n');
@@ -94,7 +94,7 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
     }
 
     @Nullable
-    public String getExperimentalValue(Holder.Reference<T> reference) {
+    protected String getExperimentalValue(Holder.Reference<T> reference) {
         if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
             return Formatting.formatFeatureFlagSet(element.requiredFeatures());
         }
