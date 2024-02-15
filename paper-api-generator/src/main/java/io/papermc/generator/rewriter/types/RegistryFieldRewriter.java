@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import static io.papermc.generator.utils.Formatting.quoted;
+
 public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
 
     private static final Map<Class<?>, String> REGISTRY_FIELD_NAMES;
@@ -58,6 +60,19 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
     }
 
     @Override
+    protected void checkFileState() {
+        if (this.fetchMethod == null) {
+            return;
+        }
+
+        try {
+            this.rewriteClass.getDeclaredMethod(this.fetchMethod, String.class);
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
     protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
         List<Holder.Reference<T>> references = this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
         Iterator<Holder.Reference<T>> referenceIterator = references.iterator();
@@ -80,9 +95,9 @@ public class RegistryFieldRewriter<T, A> extends SearchReplaceRewriter {
             builder.append(this.rewriteClass.getSimpleName()).append(' ').append(fieldName);
             builder.append(" = ");
             if (this.fetchMethod == null) {
-                builder.append("%s.%s.get(%s.minecraft(\"%s\"))".formatted(org.bukkit.Registry.class.getSimpleName(), REGISTRY_FIELD_NAMES.get(this.rewriteClass), NamespacedKey.class.getSimpleName(), pathKey));
+                builder.append("%s.%s.get(%s.minecraft(%s))".formatted(org.bukkit.Registry.class.getSimpleName(), REGISTRY_FIELD_NAMES.get(this.rewriteClass), NamespacedKey.class.getSimpleName(), quoted(pathKey)));
             } else {
-                builder.append("%s(\"%s\")".formatted(this.fetchMethod, pathKey)); // todo search with reflection or smth?
+                builder.append("%s(%s)".formatted(this.fetchMethod, quoted(pathKey)));
             }
             builder.append(';');
 
