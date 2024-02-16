@@ -1,15 +1,16 @@
-package io.papermc.generator.rewriter.types;
+package io.papermc.generator.rewriter.types.simple;
 
 import io.papermc.generator.rewriter.SearchMetadata;
 import io.papermc.generator.rewriter.SearchReplaceRewriter;
 import net.minecraft.world.level.material.MapColor;
+import org.bukkit.map.MapPalette;
 
 import java.awt.Color;
 
 public class MapPaletteRewriter extends SearchReplaceRewriter {
 
-    public MapPaletteRewriter(final Class<?> rewriteClass, final String pattern) {
-        super(rewriteClass, pattern, false);
+    public MapPaletteRewriter(final String pattern) {
+        super(MapPalette.class, pattern, false);
     }
 
     @Override

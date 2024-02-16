@@ -1,20 +1,28 @@
 package io.papermc.generator;
 
 import io.papermc.generator.rewriter.SourceRewriter;
+import io.papermc.generator.rewriter.types.EnumCloneRewriter;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
-import io.papermc.generator.rewriter.types.MapPaletteRewriter;
+import io.papermc.generator.rewriter.types.simple.MapPaletteRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
+import io.papermc.generator.rewriter.types.simple.PatternTypeRewriter;
 import io.papermc.generator.utils.ExperimentalSounds;
 import io.papermc.generator.types.registry.GeneratedKeyType;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.types.goal.MobGoalGenerator;
+import io.papermc.generator.utils.Formatting;
 import io.papermc.paper.registry.RegistryKey;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.sounds.SoundEvent;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.decoration.PaintingVariant;
+import net.minecraft.world.level.saveddata.maps.MapDecorationType;
+import org.bukkit.Art;
 import org.bukkit.Fluid;
 import org.bukkit.GameEvent;
 import org.bukkit.MusicInstrument;
@@ -32,9 +40,12 @@ import org.bukkit.generator.structure.Structure;
 import org.bukkit.generator.structure.StructureType;
 import org.bukkit.inventory.meta.trim.TrimMaterial;
 import org.bukkit.inventory.meta.trim.TrimPattern;
+import org.bukkit.map.MapCursor;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.map.MapPalette;
 import org.bukkit.potion.PotionType;
+import org.bukkit.scoreboard.DisplaySlot;
+
+import static io.papermc.generator.utils.Formatting.quoted;
 
 public interface Generators {
 
@@ -80,6 +91,41 @@ public interface Generators {
         new EnumRegistryRewriter<>(Attribute.class, Registries.ATTRIBUTE, "Attribute", true),
         new EnumRegistryRewriter<>(Cat.Type.class, Registries.CAT_VARIANT, "CatType", true),
         new EnumRegistryRewriter<>(PotionType.class, Registries.POTION, "PotionType", true),
+        new EnumRegistryRewriter<>(Art.class, Registries.PAINTING_VARIANT, "Art", true) {
+
+            private static final int PIXELS_PER_BLOCK = 16;
+            @Override
+            protected String rewriteEnumValue(Holder.Reference<PaintingVariant> reference) {
+                PaintingVariant variant = reference.value();
+                return "%d, %d, %d".formatted(
+                    BuiltInRegistries.PAINTING_VARIANT.getId(reference.value()),
+                    Mth.positiveCeilDiv(variant.getWidth(), PIXELS_PER_BLOCK),
+                    Mth.positiveCeilDiv(variant.getHeight(), PIXELS_PER_BLOCK)
+                );
+            }
+        },
+        new PatternTypeRewriter("PatternType"),
+        new EnumRegistryRewriter<>(MapCursor.Type.class, Registries.MAP_DECORATION_TYPE, "MapCursorType", true) {
+            @Override
+            protected String rewriteEnumValue(Holder.Reference<MapDecorationType> reference) {
+                return "%d, %s".formatted(BuiltInRegistries.MAP_DECORATION_TYPE.getId(reference.value()), super.rewriteEnumValue(reference));
+            }
+        },
+        new EnumCloneRewriter<>(DisplaySlot.class, net.minecraft.world.scores.DisplaySlot.class, "DisplaySlot", false) {
+            @Override
+            protected String rewriteEnumName(net.minecraft.world.scores.DisplaySlot slot) {
+                if (slot == net.minecraft.world.scores.DisplaySlot.LIST) {
+                    return "PLAYER_LIST";
+                }
+
+                return Formatting.formatKeyAsField(slot.getSerializedName());
+            }
+
+            @Override
+            protected String rewriteEnumValue(net.minecraft.world.scores.DisplaySlot slot) {
+                return quoted(slot.getSerializedName());
+            }
+        },
         //new EnumRegistryRewriter<>(EntityType.class, Registries.ENTITY_TYPE, "EntityType", false), seems complex to get the typeId?
         new RegistryFieldRewriter<>(Structure.class, Registries.STRUCTURE, "Structure", "getStructure"),
         new RegistryFieldRewriter<>(StructureType.class, Registries.STRUCTURE_TYPE, "StructureType", "getStructureType"),
@@ -87,7 +133,7 @@ public interface Generators {
         new RegistryFieldRewriter<>(TrimMaterial.class, Registries.TRIM_MATERIAL, "TrimMaterial", null),
         new RegistryFieldRewriter<>(DamageType.class, Registries.DAMAGE_TYPE, "DamageType", "getDamageType"),
         new TagRewriter(Tag.class, "Tag"),
-        new MapPaletteRewriter(MapPalette.class, "MapPalette#colors"),
+        new MapPaletteRewriter("MapPalette#colors"),
     };
 
     private static <T, A> SourceGenerator simpleKey(final String className, final Class<A> apiType, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {
