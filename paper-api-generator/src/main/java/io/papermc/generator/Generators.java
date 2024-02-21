@@ -1,5 +1,6 @@
 package io.papermc.generator;
 
+import io.papermc.generator.rewriter.CompositeRewriter;
 import io.papermc.generator.rewriter.SourceRewriter;
 import io.papermc.generator.rewriter.types.EnumCloneRewriter;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
@@ -157,12 +158,15 @@ public interface Generators {
                 return "%s.%s".formatted(NamedTextColor.class.getCanonicalName(), rarity.color().name());
             }
         },
-        new EnumCloneRewriter<>(Boat.Type.class, net.minecraft.world.entity.vehicle.Boat.Type.class, "BoatType", false) {
-            @Override
-            protected String rewriteEnumValue(net.minecraft.world.entity.vehicle.Boat.Type type) {
-                return "%s.%s".formatted(Material.class.getSimpleName(), BuiltInRegistries.BLOCK.getKey(type.getPlanks()).getPath().toUpperCase(Locale.ENGLISH));
-            }
-        },
+        CompositeRewriter.bind(
+            new EnumCloneRewriter<>(Boat.Type.class, net.minecraft.world.entity.vehicle.Boat.Type.class, "BoatType", false) {
+                @Override
+                protected String rewriteEnumValue(net.minecraft.world.entity.vehicle.Boat.Type type) {
+                    return "%s.%s".formatted(Material.class.getSimpleName(), BuiltInRegistries.BLOCK.getKey(type.getPlanks()).getPath().toUpperCase(Locale.ENGLISH));
+                }
+            },
+            new EnumCloneRewriter<>(Boat.Status.class, net.minecraft.world.entity.vehicle.Boat.Status.class, "BoatStatus", false)
+        ),
         new RegistryFieldRewriter<>(Structure.class, Registries.STRUCTURE, "Structure", "getStructure"),
         new RegistryFieldRewriter<>(StructureType.class, Registries.STRUCTURE_TYPE, "StructureType", "getStructureType"),
         new RegistryFieldRewriter<>(TrimPattern.class, Registries.TRIM_PATTERN, "TrimPattern", null),
