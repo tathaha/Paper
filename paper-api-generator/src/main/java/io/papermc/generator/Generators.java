@@ -7,6 +7,7 @@ import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.simple.MapPaletteRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
+import io.papermc.generator.rewriter.types.simple.MaterialRewriter;
 import io.papermc.generator.rewriter.types.simple.PatternTypeRewriter;
 import io.papermc.generator.utils.ExperimentalSounds;
 import io.papermc.generator.types.registry.GeneratedKeyType;
@@ -166,6 +167,11 @@ public interface Generators {
                 }
             },
             new EnumCloneRewriter<>(Boat.Status.class, net.minecraft.world.entity.vehicle.Boat.Status.class, "BoatStatus", false)
+        ),
+        CompositeRewriter.bind(
+            //new MaterialRewriter.IsTransparent("Material#isTransparent"),
+
+            new MaterialRewriter.GetEquipmentSlot("Material#getEquipmentSlot")
         ),
         new RegistryFieldRewriter<>(Structure.class, Registries.STRUCTURE, "Structure", "getStructure"),
         new RegistryFieldRewriter<>(StructureType.class, Registries.STRUCTURE_TYPE, "StructureType", "getStructureType"),

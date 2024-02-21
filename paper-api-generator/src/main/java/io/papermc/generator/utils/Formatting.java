@@ -84,6 +84,10 @@ public final class Formatting {
         return String.format("\"%s\"", value);
     }
 
+    public static String floatStr(float value) {
+        return Float.toString(value) + 'F';
+    }
+
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
 
     public static <T> Comparator<T> alphabeticKeyOrder(Function<T, String> mapper) {
