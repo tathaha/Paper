@@ -44,7 +44,7 @@ public class MaterialRewriter {
         @Override
         protected String rewriteEnumValue(Holder.Reference<Block> reference) {
             Block block = reference.value();
-            if (BlockStateMapping.SPECIAL_BLOCKS.contains(block.getClass())) {
+            if (BlockStateMapping.MAPPING.containsKey(block.getClass())) {
                 // some block can also be represented as item in that enum
                 // doing a double job
                 Optional<Item> equivalentItem = BuiltInRegistries.ITEM.getOptional(reference.key().location());
@@ -55,7 +55,10 @@ public class MaterialRewriter {
                     equivalentItem = Optional.of(block.asItem());
                 }
 
-                Class<?> blockData = BlockData.class; // todo block data need server gen
+                Class<?> blockData = BlockStateMapping.getBestSuitedApiClass(block.getClass());
+                if (blockData == null) {
+                    blockData = BlockData.class;
+                }
                 if (equivalentItem.isPresent() && equivalentItem.get().getDefaultMaxStackSize() != Item.DEFAULT_MAX_STACK_SIZE) {
                     return "%d, %d, %s.class".formatted(-1, equivalentItem.get().getDefaultMaxStackSize(), blockData.getSimpleName());
                 }
