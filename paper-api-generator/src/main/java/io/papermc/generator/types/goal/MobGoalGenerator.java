@@ -10,7 +10,6 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
-import com.squareup.javapoet.WildcardTypeName;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ScanResult;
 import io.papermc.generator.types.SimpleGenerator;

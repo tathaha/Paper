@@ -41,7 +41,7 @@ public final class Formatting {
                 continue;
             }
             if (featureFlagSet.contains(flag)) {
-                return formatFeatureFlag(flag);
+                return formatFeatureFlag(flag); // support multiple flags?
             }
         }
         return "";
@@ -86,6 +86,30 @@ public final class Formatting {
 
     public static String floatStr(float value) {
         return Float.toString(value) + 'F';
+    }
+
+    public static String stripWordOfCamelCaseName(String name, String word, boolean onlyOnce) {
+        String newName = name;
+        int startIndex = 0;
+        while (true) {
+            int baseIndex = newName.indexOf(word, startIndex);
+            if (baseIndex == -1) {
+                return newName;
+            }
+
+            if ((baseIndex > 0 && !Character.isLowerCase(newName.charAt(baseIndex - 1))) ||
+                (baseIndex + word.length() < newName.length() && !Character.isUpperCase(newName.charAt(baseIndex + word.length())))) {
+                startIndex = baseIndex + word.length();
+                continue;
+            }
+
+            newName = newName.substring(0, baseIndex) + newName.substring(baseIndex + word.length());
+            startIndex = baseIndex;
+            if (onlyOnce) {
+                break;
+            }
+        }
+        return newName;
     }
 
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);

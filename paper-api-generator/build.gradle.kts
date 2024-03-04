@@ -25,7 +25,8 @@ tasks.register<JavaExec>("generate") {
     mainClass.set("io.papermc.generator.Main")
     classpath(sourceSets.main.map { it.runtimeClasspath })
     args(file("generated").toString(),
-        project(":paper-api").sourceSets["main"].java.srcDirs.first().toString())
+        project(":paper-api").sourceSets["main"].java.srcDirs.first().toString(),
+        file("generatedServerTest").toString())
 }
 
 tasks.test {

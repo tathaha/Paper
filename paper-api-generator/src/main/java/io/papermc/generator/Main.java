@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.mojang.logging.LogUtils;
 import io.papermc.generator.rewriter.SourceRewriter;
 import io.papermc.generator.types.SourceGenerator;
+import io.papermc.generator.types.craftblockdata.CraftBlockDataGenerators;
 import io.papermc.generator.utils.TagCollector;
 import io.papermc.generator.utils.TagResult;
 import java.io.IOException;
@@ -55,22 +56,23 @@ public final class Main {
 
     public static void main(final String[] args) {
         LOGGER.info("Running API generators...");
+
         Main.generatedPath = Path.of(args[0]); // todo remove
         try {
             generate(Main.generatedPath, Generators.API);
             apply(Path.of(args[1]), Generators.API_REWRITE);
+            generateCraftBlockData(Path.of(args[2]));
         } catch (final RuntimeException ex) {
             throw ex;
-        } catch (final Exception ex) {
-            throw new RuntimeException(ex);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
     private static void generate(Path output, SourceGenerator[] generators) throws IOException {
-        if (Files.exists(output)) {
-            PathUtils.deleteDirectory(output);
+        if (Files.exists(Main.generatedPath)) {
+            PathUtils.deleteDirectory(Main.generatedPath);
         }
-        Files.createDirectories(output);
 
         for (final SourceGenerator generator : generators) {
             generator.writeToFile(output);
@@ -83,5 +85,12 @@ public final class Main {
         for (final SourceRewriter rewriter : rewriters) {
             rewriter.writeToFile(output);
         }
+    }
+
+    private static void generateCraftBlockData(Path output) throws IOException {
+        if (Files.exists(output)) {
+            PathUtils.deleteDirectory(output);
+        }
+        new CraftBlockDataGenerators(output).generate();
     }
 }
