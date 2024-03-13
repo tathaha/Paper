@@ -1,4 +1,4 @@
-package io.papermc.generator.types.craftblockdata.converter;
+package io.papermc.generator.types.craftblockdata.property.converter;
 
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.MethodSpec;
@@ -9,7 +9,7 @@ import net.minecraft.world.level.block.state.properties.RotationSegment;
 import org.bukkit.block.BlockFace;
 import org.bukkit.util.Vector;
 
-public class RotationConverter extends Converter<Integer, BlockFace> {
+public class RotationConverter implements Converter<Integer, BlockFace> {
 
     private static final String DIRECTION_VAR = "dir";
     private static final String ANGLE_VAR = "angle";
@@ -28,11 +28,16 @@ public class RotationConverter extends Converter<Integer, BlockFace> {
     public void convertSetter(final MethodSpec.Builder method, final FieldSpec field, final ParameterSpec parameter) {
         method.addStatement("$T $L = $N.getDirection()", Vector.class, DIRECTION_VAR, parameter);
         method.addStatement("$1T $2L = ($1T) -$3T.toDegrees($3T.atan2($4L.getX(), $4L.getZ()))", Float.TYPE, ANGLE_VAR, Math.class, DIRECTION_VAR);
-        method.addStatement("this.set($N, $T.convertToSegment($L))", field, RotationSegment.class, ANGLE_VAR);
+        method.addStatement(this.rawSetExprent().formatted("$N"), field, RotationSegment.class);
     }
 
     @Override
-    public void convertGetter(final MethodSpec.Builder method, final FieldSpec field) {
-        method.addCode("return CraftBlockData.ROTATION_CYCLE[this.get($N)];", field);
+    public String rawSetExprent() {
+        return "this.set(%s, $T.convertToSegment(angle))";
+    }
+
+    @Override
+    public String rawGetExprent() {
+        return "CraftBlockData.ROTATION_CYCLE[this.get(%s)]";
     }
 }

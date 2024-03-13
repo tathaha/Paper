@@ -1,8 +1,7 @@
-package io.papermc.generator.utils;
+package io.papermc.generator.utils.experimental;
 
 import com.mojang.serialization.Lifecycle;
 import io.papermc.generator.Main;
-import java.util.List;
 import java.util.Set;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
@@ -17,7 +16,7 @@ public record CollectingContext<T>(Set<ResourceKey<T>> registered,
                                    Registry<T> registry) implements BootstrapContext<T> {
 
     @Override
-    public Holder.Reference<T> register(final ResourceKey<T> resourceKey, final @NonNull T t, final Lifecycle lifecycle) {
+    public Holder.Reference<T> register(final ResourceKey<T> resourceKey, final @NonNull T value, final Lifecycle lifecycle) {
         this.registered.add(resourceKey);
         return Holder.Reference.createStandAlone(this.registry.holderOwner(), resourceKey);
     }

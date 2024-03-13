@@ -1,7 +1,6 @@
 package io.papermc.generator.utils;
 
 import com.google.common.collect.HashBiMap;
-import org.apache.commons.lang3.math.NumberUtils;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
@@ -9,6 +8,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import javax.lang.model.SourceVersion;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -16,6 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.flag.FeatureFlag;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
+import org.apache.commons.lang3.math.NumberUtils;
 
 public final class Formatting {
 
@@ -110,6 +111,13 @@ public final class Formatting {
             }
         }
         return newName;
+    }
+
+    public static String ensureValidName(String name) {
+        if (!SourceVersion.isName(name)) {
+            return "_" + name;
+        }
+        return name;
     }
 
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);
