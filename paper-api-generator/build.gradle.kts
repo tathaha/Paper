@@ -31,6 +31,7 @@ tasks.register<JavaExec>("generate") {
 
 tasks.test {
     useJUnitPlatform()
+    systemProperty("paper.generator.rewriter.container", file("generated").toString()) // todo move to the sourceset
 }
 
 group = "io.papermc.paper"
