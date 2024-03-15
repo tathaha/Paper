@@ -8,6 +8,7 @@ import io.papermc.generator.rewriter.types.simple.MapPaletteRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
 import io.papermc.generator.rewriter.types.simple.MaterialRewriter;
+import io.papermc.generator.rewriter.types.simple.MemoryKeyRewriter;
 import io.papermc.generator.rewriter.types.simple.PatternTypeRewriter;
 import io.papermc.generator.rewriter.types.simple.StatisticRewriter;
 import io.papermc.generator.utils.experimental.ExperimentalSounds;
@@ -188,6 +189,7 @@ public interface Generators {
         new RegistryFieldRewriter<>(GameEvent.class, Registries.GAME_EVENT, "GameEvent", "getEvent"),
         new RegistryFieldRewriter<>(MusicInstrument.class, Registries.INSTRUMENT, "MusicInstrument", "getInstrument"),
         new RegistryFieldRewriter<>(Wolf.Variant.class, Registries.WOLF_VARIANT, "WolfVariant", "getVariant"),
+        new MemoryKeyRewriter("MemoryKey"),
         new TagRewriter(Tag.class, "Tag"),
         new MapPaletteRewriter("MapPalette#colors"),
     };
