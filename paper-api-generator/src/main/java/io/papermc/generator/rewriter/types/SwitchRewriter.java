@@ -1,6 +1,7 @@
 package io.papermc.generator.rewriter.types;
 
 import com.google.common.collect.Multimap;
+import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.SearchMetadata;
 import io.papermc.generator.rewriter.SearchReplaceRewriter;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
@@ -12,6 +13,10 @@ public abstract class SwitchRewriter<T> extends SearchReplaceRewriter {
     protected @MonotonicNonNull Return<T> defaultValue;
 
     protected SwitchRewriter(final Class<?> rewriteClass, final String pattern, final boolean equalsSize) {
+        super(rewriteClass, pattern, equalsSize);
+    }
+
+    protected SwitchRewriter(final ClassNamed rewriteClass, final String pattern, final boolean equalsSize) {
         super(rewriteClass, pattern, equalsSize);
     }
 

@@ -1,6 +1,7 @@
 package io.papermc.generator.utils;
 
 import com.google.common.collect.HashBiMap;
+import io.papermc.generator.rewriter.ClassNamed;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Map;
@@ -71,14 +72,29 @@ public final class Formatting {
         return Optional.of(resourcePath.substring(tagsIndex + tagDir.length() + 1, dotIndex)); // namespace/tags/registry_key/[tag_key].json
     }
 
-    public static String incrementalIndent(String unit, Class<?> clazz) {
-        Class<?> parent = clazz.getEnclosingClass();
+    public static int countOccurrences(String value, char match) {
+        int count = 0;
+        for (int i = 0, len = value.length(); i < len; i++) {
+            if (value.charAt(i) == match) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public static String incrementalIndent(String unit, ClassNamed classNamed) {
+        if (classNamed.clazz() == null) {
+            return unit.repeat(countOccurrences(classNamed.dottedNestedName(), '.'));
+        }
+
+        Class<?> parent = classNamed.clazz().getEnclosingClass();
         StringBuilder indentBuilder = new StringBuilder(unit);
         while (parent != null) {
             indentBuilder.append(unit);
             parent = parent.getEnclosingClass();
         }
         return indentBuilder.toString();
+
     }
 
     public static String quoted(String value) {

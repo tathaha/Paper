@@ -141,9 +141,9 @@ public class MemoryKeyRewriter extends SearchReplaceRewriter {
 
             builder.append(metadata.indent());
             builder.append("%s %s %s ".formatted(PUBLIC, STATIC, FINAL));
-            builder.append("%s<%s>".formatted(this.rewriteClass.getSimpleName(), apiMemoryType.getSimpleName())).append(' ').append(this.rewriteFieldName(reference));
+            builder.append("%s<%s>".formatted(this.rewriteClass.simpleName(), apiMemoryType.getSimpleName())).append(' ').append(this.rewriteFieldName(reference));
             builder.append(" = ");
-            builder.append("new %s<>(%s.minecraft(%s), %s.class)".formatted(this.rewriteClass.getSimpleName(), NamespacedKey.class.getSimpleName(), quoted(pathKey), apiMemoryType.getSimpleName()));
+            builder.append("new %s<>(%s.minecraft(%s), %s.class)".formatted(this.rewriteClass.simpleName(), NamespacedKey.class.getSimpleName(), quoted(pathKey), apiMemoryType.getSimpleName()));
             builder.append(';');
 
             builder.append('\n');
