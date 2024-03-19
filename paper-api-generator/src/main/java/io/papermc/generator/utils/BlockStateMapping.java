@@ -313,6 +313,7 @@ public final class BlockStateMapping {
     remove some patches:
       - Add missing block data mins and maxes
       - Allow changing bed's 'occupied' property
+    rename module
     remove scrap of old spigot tooling (archetype)
      */
     @Nullable

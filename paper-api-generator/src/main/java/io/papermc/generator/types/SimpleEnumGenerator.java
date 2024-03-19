@@ -1,18 +1,17 @@
-package io.papermc.generator.types.enumgen;
+package io.papermc.generator.types;
 
 import com.squareup.javapoet.TypeSpec;
-import io.papermc.generator.types.SimpleGenerator;
 import io.papermc.generator.utils.Annotations;
 import javax.lang.model.element.Modifier;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
 
 @DefaultQualifier(NonNull.class)
-public class EnumGenerator<T extends Enum<T>> extends SimpleGenerator {
+public class SimpleEnumGenerator<T extends Enum<T>> extends SimpleGenerator {
 
     private final Class<T> enumClass;
 
-    public EnumGenerator(final Class<T> enumClass, final String pkg) {
+    public SimpleEnumGenerator(final Class<T> enumClass, final String pkg) {
         super(enumClass.getSimpleName(), pkg);
         this.enumClass = enumClass;
     }
