@@ -216,12 +216,12 @@ public class MobGoalGenerator extends SimpleGenerator {
         }
 
         for (final DeprecatedGoal deprecatedGoal : DEPRECATED_GOALS) {
-            TypeName typedKey = ParameterizedTypeName.get(GoalKey.class, deprecatedGoal.goalClass());
+            TypeName typedKey = ParameterizedTypeName.get(GoalKey.class, deprecatedGoal.mobClass());
 
             String fieldName = Formatting.formatKeyAsField(deprecatedGoal.path());
             FieldSpec.Builder fieldBuilder = FieldSpec.builder(typedKey, fieldName, PUBLIC, STATIC, FINAL)
                 .addAnnotation(Annotations.deprecatedVersioned(deprecatedGoal.removedVersion(), deprecatedGoal.removalVersion() != null))
-                .initializer("$N($S, $T.class)", createMethod.build(), deprecatedGoal.path(), deprecatedGoal.goalClass());
+                .initializer("$N($S, $T.class)", createMethod.build(), deprecatedGoal.path(), deprecatedGoal.mobClass());
 
             if (deprecatedGoal.removedVersion() != null) {
                 fieldBuilder.addJavadoc("Removed in $L", deprecatedGoal.removedVersion());
@@ -236,7 +236,7 @@ public class MobGoalGenerator extends SimpleGenerator {
         return typeBuilder.addMethod(createMethod.build()).build();
     }
 
-    record DeprecatedGoal(Class<? extends Mob> goalClass, String path, @Nullable String removalVersion,
+    record DeprecatedGoal(Class<? extends Mob> mobClass, String path, @Nullable String removalVersion,
                           @Nullable String removedVersion) {
     }
 }

@@ -9,7 +9,6 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.regex.Pattern;
-import javax.lang.model.SourceVersion;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -126,13 +125,6 @@ public final class Formatting {
             }
         }
         return newName;
-    }
-
-    public static String ensureValidName(String name) {
-        if (!SourceVersion.isName(name)) {
-            return "_" + name;
-        }
-        return name;
     }
 
     public static Comparator<String> ALPHABETIC_KEY_ORDER = alphabeticKeyOrder(path -> path);

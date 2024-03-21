@@ -81,15 +81,8 @@ public interface Generators {
         simpleKey("MobEffectKeys", PotionEffectType.class, Registries.MOB_EFFECT, RegistryKey.MOB_EFFECT, false),
         simpleKey("DamageTypeKeys", DamageType.class, Registries.DAMAGE_TYPE, RegistryKey.DAMAGE_TYPE, true),
         simpleKey("WolfVariantKeys", Wolf.Variant.class, Registries.WOLF_VARIANT, RegistryKey.WOLF_VARIANT, true),
-        new MobGoalGenerator("VanillaGoal", "com.destroystokyo.paper.entity.ai"),
-        /*new SoundGenerator("Sound", "org.bukkit"), todo extract fields
-        new BiomeGenerator("Biome", "org.bukkit.block"),
-        new AttributeGenerator("Attribute", "org.bukkit.attribute"),
-        new StructureTypeGenerator("StructureType", "org.bukkit.generator.structure"),
-        new StructureGenerator("Structure", "org.bukkit.generator.structure"),
-        new LegacyKeyedRegistryGenerator<>("TrimPattern", "org.bukkit.inventory.meta.trim", Registries.TRIM_PATTERN, RegistryKey.TRIM_PATTERN),
-        new LegacyKeyedRegistryGenerator<>("TrimMaterial", "org.bukkit.inventory.meta.trim", Registries.TRIM_MATERIAL, RegistryKey.TRIM_MATERIAL),
-        new TagGenerator("Tag", "org.bukkit")*/
+        new MobGoalGenerator("VanillaGoal", "com.destroystokyo.paper.entity.ai")
+        // todo extract fields for registry based api
     };
 
     private static <T, A> SourceGenerator simpleKey(final String className, final Class<A> apiType, final ResourceKey<? extends Registry<T>> registryKey, final RegistryKey<A> apiRegistryKey, final boolean publicCreateKeyMethod) {

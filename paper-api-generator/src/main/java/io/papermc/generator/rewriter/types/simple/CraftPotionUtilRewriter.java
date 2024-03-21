@@ -21,14 +21,11 @@ public class CraftPotionUtilRewriter extends SearchReplaceRewriter {
 
     @Override
     protected void insert(SearchMetadata metadata, StringBuilder builder) {
-        String upperStatePrefix = statePrefix.toUpperCase(Locale.ENGLISH);
-        BuiltInRegistries.POTION.holders()
-            .filter(reference -> {
-                ResourceLocation location = reference.key().location();
-                return BuiltInRegistries.POTION.containsKey(new ResourceLocation(location.getNamespace(), this.statePrefix + "_" + location.getPath()));
-            })
-            .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).forEach(reference -> {
-                String internalName = Formatting.formatKeyAsField(reference.key().location().getPath());
+        String upperStatePrefix = this.statePrefix.toUpperCase(Locale.ENGLISH);
+        BuiltInRegistries.POTION.keySet().stream()
+            .filter(key -> BuiltInRegistries.POTION.containsKey(new ResourceLocation(key.getNamespace(), this.statePrefix + "_" + key.getPath())))
+            .sorted(Formatting.alphabeticKeyOrder(ResourceLocation::getPath)).forEach(key -> {
+                String internalName = Formatting.formatKeyAsField(key.getPath());
                 builder.append(metadata.indent());
                 builder.append(".put(%s.%s, %s.%s_%s)".formatted(PotionType.class.getSimpleName(), internalName, PotionType.class.getSimpleName(), upperStatePrefix, internalName));
                 builder.append('\n');

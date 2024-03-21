@@ -7,12 +7,12 @@ import java.lang.reflect.ParameterizedType;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import io.papermc.generator.Main;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.Types;
 import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.Formatting;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.stats.StatType;
@@ -133,7 +133,7 @@ public class StatisticRewriter {
 
         @Override
         protected Iterable<Holder.Reference<StatType<?>>> getValues() {
-            return Main.REGISTRY_ACCESS.registryOrThrow(Registries.STAT_TYPE).holders().filter(reference -> reference.value() != Stats.CUSTOM)
+            return BuiltInRegistries.STAT_TYPE.holders().filter(reference -> reference.value() != Stats.CUSTOM)
                 .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
         }
 
@@ -161,7 +161,7 @@ public class StatisticRewriter {
 
         @Override
         protected Iterable<Holder.Reference<StatType<?>>> getValues() {
-            return Main.REGISTRY_ACCESS.registryOrThrow(Registries.STAT_TYPE).holders().filter(reference -> reference.value() != Stats.CUSTOM)
+            return BuiltInRegistries.STAT_TYPE.holders().filter(reference -> reference.value() != Stats.CUSTOM)
                 .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
         }
 

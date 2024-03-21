@@ -2,10 +2,10 @@ package io.papermc.generator.utils;
 
 import com.google.common.base.CaseFormat;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Predicate;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
+import javax.lang.model.SourceVersion;
 
 public class NamingManager {
 
@@ -72,16 +72,12 @@ public class NamingManager {
         } else {
             paramName = CaseFormat.UPPER_CAMEL.to(CaseFormat.LOWER_CAMEL, type.getSimpleName());
         }
-        return Formatting.ensureValidName(paramName);
+        return ensureValidName(paramName);
     }
 
-    private static final Set<String> CUSTOM_KEYWORD = Set.of("HAS", "IS", "CAN");
-
-    public static String stripFieldAccessKeyword(String name) {
-        for (String keyword : CUSTOM_KEYWORD) {
-            if (name.startsWith(keyword + "_")) {
-                return name.substring(keyword.length() + 1);
-            }
+    public static String ensureValidName(String name) {
+        if (!SourceVersion.isName(name)) {
+            return "_" + name;
         }
         return name;
     }
@@ -115,7 +111,8 @@ public class NamingManager {
 
         public String concat() {
             String finalName = this.keyword + this.preValue + this.name + this.postValue;
-            return Formatting.ensureValidName(finalName);
+            this.preValue = this.postValue = ""; // reset
+            return ensureValidName(finalName);
         }
     }
 
@@ -129,8 +126,8 @@ public class NamingManager {
         return new AccessKeyword(Optional.of(keyword), Optional.empty());
     }
 
-    public static AccessKeyword keywordSet(String prefix) {
-        return new AccessKeyword(Optional.empty(), Optional.of(prefix));
+    public static AccessKeyword keywordSet(String keyword) {
+        return new AccessKeyword(Optional.empty(), Optional.of(keyword));
     }
 
     public static AccessKeyword keywordGetSet(String getter, String setter) {
