@@ -127,7 +127,7 @@ public final class MobGoalNames {
     private static final Map<Class<? extends Goal>, Class<? extends Mob>> entityClassCache = new HashMap<>();
     public static final Map<Class<? extends net.minecraft.world.entity.Mob>, Class<? extends Mob>> bukkitMap = new HashMap<>();
 
-    static { // todo move serverside? via CraftEntityTypes
+    static {
         //<editor-fold defaultstate="collapsed" desc="bukkitMap Entities">
         bukkitMap.put(net.minecraft.world.entity.Mob.class, Mob.class);
         bukkitMap.put(net.minecraft.world.entity.AgeableMob.class, Ageable.class);

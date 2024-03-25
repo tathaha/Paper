@@ -46,13 +46,8 @@ public class OldGeneratedCodeTest {
                 continue;
             }
 
-            String filePath = "%s/%s.java".formatted(
-                srt.rewriteClass.packageName().replace('.', '/'),
-                srt.rewriteClass.rootClassSimpleName()
-            );
-
-            Path path = Path.of(container, filePath);
-            if (!Files.exists(path)) {
+            Path path = Path.of(container, srt.getFilePath());
+            if (Files.notExists(path)) {
                 continue;
             }
             try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
