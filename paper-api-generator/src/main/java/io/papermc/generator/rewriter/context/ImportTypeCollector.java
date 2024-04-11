@@ -1,8 +1,11 @@
 package io.papermc.generator.rewriter.context;
 
 import io.papermc.generator.rewriter.ClassNamed;
-import io.papermc.generator.utils.ClassHelper;
 import org.jetbrains.annotations.VisibleForTesting;
+import io.papermc.generator.rewriter.parser.StringReader;
+import io.papermc.generator.utils.Formatting;
+import it.unimi.dsi.fastutil.Pair;
+import java.lang.reflect.Modifier;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -10,11 +13,13 @@ import java.util.Set;
 
 public class ImportTypeCollector implements ImportCollector {
 
-    private final Map<Class<?>, String> typeCache = new HashMap<>();
+    private final Map<ClassNamed, String> typeCache = new HashMap<>();
 
     private final Set<String> imports = new HashSet<>();
     private final Set<String> globalImports = new HashSet<>();
-    private final Map<String, String> staticImports = new HashMap<>(); // <fqn.alias:alias>
+
+    private final Map<String, String> staticImports = new HashMap<>(); // <fqn.id:id>
+    private final Set<String> globalStaticImports = new HashSet<>();
 
     private final ClassNamed rewriteClass;
 
@@ -22,56 +27,130 @@ public class ImportTypeCollector implements ImportCollector {
         this.rewriteClass = rewriteClass;
     }
 
-    @VisibleForTesting
-    public void addImport(String fqn) {
-        if (fqn.endsWith("*")) {
-            this.globalImports.add(fqn.substring(0, fqn.lastIndexOf('.')));
+    @Override
+    public void addImport(String typeName) {
+        if (typeName.endsWith("*")) {
+            this.globalImports.add(typeName.substring(0, typeName.lastIndexOf('.')));
         } else {
-            this.imports.add(fqn);
+            this.imports.add(typeName);
         }
     }
 
-    @VisibleForTesting
-    public void addStaticImport(String fqn) { // todo support star import?
-        this.staticImports.put(fqn, fqn.substring(fqn.lastIndexOf('.') + 1));
+    @Override
+    public void addStaticImport(String typeName) {
+        if (typeName.endsWith("*")) {
+            this.globalStaticImports.add(typeName.substring(0, typeName.lastIndexOf('.')));
+        } else {
+            this.staticImports.put(typeName, typeName.substring(typeName.lastIndexOf('.') + 1));
+        }
     }
 
     @Override
-    public String getStaticAlias(String fqn) {
-        return this.staticImports.getOrDefault(fqn, fqn);
+    public String getStaticMemberShortName(String fullName) {
+        if (this.staticImports.containsKey(fullName)) {
+            return this.staticImports.get(fullName);
+        }
+
+        // global imports
+        int lastDotIndex = fullName.lastIndexOf('.');
+        if (lastDotIndex == -1) {
+            return fullName;
+        }
+
+        String parentCanonicalName = fullName.substring(0, lastDotIndex);
+        if (this.globalStaticImports.contains(parentCanonicalName)) {
+            return fullName.substring(lastDotIndex + 1);
+        }
+        return fullName;
     }
 
-    @Override
-    public String getTypeName(Class<?> clazz) {
-        return this.typeCache.computeIfAbsent(clazz, type -> {
-            Class<?> rootClass = ClassHelper.getRootClass(type);
-            final String typeName;
-            if (this.imports.contains(rootClass.getName()) ||
-                type.getPackageName().equals(this.rewriteClass.packageName()) || // same package don't need fqn too (include self class too)
-                this.globalImports.contains(type.getPackageName())) { // star import
-                typeName = ClassHelper.retrieveFullNestedName(type);
-            } else {
-                typeName = type.getCanonicalName();
+    private String getShortName0(ClassNamed type, Set<String> imports, Set<String> globalImports, boolean fetchStatic) {
+        ClassNamed foundClass = type;
+        int advancedNode = 0;
+        while (!imports.contains(foundClass.canonicalName()) &&
+            !globalImports.contains(foundClass.parent().canonicalName())) {
+            if (foundClass.isRoot() || // top classes with package check is handled before
+                (fetchStatic && !Modifier.isStatic(foundClass.knownClass().getModifiers())) // static imports are allowed for regular class too but only when the inner classes are all static
+            ) {
+                foundClass = null;
+                break;
             }
+            foundClass = foundClass.parent();
+            advancedNode++;
+        }
+        if (foundClass != null) {
+            String typeName;
+            if (advancedNode > 0) { // direct inner class import
+                String originalNestedName = type.dottedNestedName();
+                int skipNode = Formatting.countOccurrences(originalNestedName, '.') - advancedNode;
+                StringReader reader = new StringReader(originalNestedName);
+                while (skipNode > 0) {
+                    reader.skipString('.');
+                    reader.skip(); // skip dot
+                    skipNode--;
+                }
+                typeName = reader.readRemainingString();
+            } else {
+                typeName = type.simpleName();
+            }
+
             return typeName;
+        }
+
+        return type.canonicalName();
+    }
+
+    @Override
+    public String getShortName(ClassNamed type) {
+        return this.typeCache.computeIfAbsent(type, key -> {
+            if (key.knownClass() != null && Modifier.isStatic(key.knownClass().getModifiers())) {
+                // this is only supported when the class is known for now but generally static imports should stick to member of class not the class itself
+                String name = getShortName0(key, this.staticImports.keySet(), this.globalStaticImports, true);
+                if (!name.equals(key.canonicalName())) {
+                    return name;
+                }
+            }
+
+            if ((key.parent().isRoot() && this.globalImports.contains(key.packageName())) ||  // star import on package for top classes and one level classes only!
+                (key.isRoot() && key.packageName().equals(this.rewriteClass.packageName()))) {  // same package don't need fqn too for top classes
+                return key.dottedNestedName();
+            }
+
+            // self classes (with inner classes)
+            // todo rework this logic order should be smth like: root stuff -> regular import -> inner stuff (-> static import if valid)
+            // and remove the implicit part too
+            Set<String> currentImports = this.imports;
+            if (key.packageName().equals(this.rewriteClass.packageName()) &&
+                this.rewriteClass.root().equals(key.root())) {
+                int depth = Formatting.countOccurrences(key.dottedNestedName(), '.');
+                int fromDepth = Formatting.countOccurrences(this.rewriteClass.dottedNestedName(), '.');
+                if (fromDepth < depth) {
+                    ClassNamed parent = key;
+                    while (true) {
+                        ClassNamed up = parent.parent();
+                        if (this.rewriteClass.equals(up)) {
+                            break;
+                        }
+                        parent = up;
+                    }
+                    currentImports = new HashSet<>(this.imports);
+                    currentImports.add(parent.canonicalName()); // implicit import
+                } else {
+                    return type.simpleName();
+                }
+            }
+
+            return getShortName0(key, currentImports, this.globalImports, false);
         });
     }
 
-    private void addImportLine(String importLine) {
-        if (importLine.startsWith("import static ")) {
-            addStaticImport(importLine.substring("import static ".length()));
-        } else {
-            addImport(importLine.substring("import ".length()));
-        }
+    @VisibleForTesting
+    public Pair<Set<String>, Set<String>> getImports() {
+        return Pair.of(this.imports, this.globalImports);
     }
 
-    @Override
-    public void consume(String line) {
-        for (String rawImport : line.split(";")) {
-            String importLine = rawImport.trim();
-            if (importLine.startsWith("import ")) {
-                addImportLine(importLine);
-            }
-        }
+    @VisibleForTesting
+    public Pair<Set<String>, Set<String>> getStaticImports() {
+        return Pair.of(this.staticImports.keySet(), this.globalStaticImports);
     }
 }

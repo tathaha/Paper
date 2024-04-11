@@ -1,6 +1,6 @@
 package io.papermc.generator;
 
-import io.papermc.generator.rewriter.CompositeRewriter;
+import io.papermc.generator.rewriter.replace.CompositeRewriter;
 import io.papermc.generator.rewriter.SourceRewriter;
 import io.papermc.generator.rewriter.types.EnumCloneRewriter;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
@@ -90,7 +90,6 @@ public interface Generators {
     }
 
     SourceRewriter[] API_REWRITE = {
-        //new EnumCloneRewriter(Pose.class, net.minecraft.world.entity.Pose.class, "Pose", false)
         new EnumRegistryRewriter<>(Fluid.class, Registries.FLUID, "Fluid", false),
         new EnumRegistryRewriter<>(Sound.class, Registries.SOUND_EVENT, "Sound", true) {
             @Override
@@ -191,7 +190,7 @@ public interface Generators {
         new RegistryFieldRewriter<>(Wolf.Variant.class, Registries.WOLF_VARIANT, "WolfVariant", "getVariant"),
         new MemoryKeyRewriter("MemoryKey"),
         new TagRewriter(Tag.class, "Tag"),
-        new MapPaletteRewriter("MapPalette#colors"),
+        new MapPaletteRewriter("MapPalette#colors")
     };
 
 

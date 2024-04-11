@@ -71,7 +71,7 @@ public final class Formatting {
         return Optional.of(resourcePath.substring(tagsIndex + tagDir.length() + 1, dotIndex)); // namespace/tags/registry_key/[tag_key].json
     }
 
-    private static int countOccurrences(String value, char match) {
+    public static int countOccurrences(String value, char match) {
         int count = 0;
         for (int i = 0, len = value.length(); i < len; i++) {
             if (value.charAt(i) == match) {
@@ -96,7 +96,7 @@ public final class Formatting {
     }
 
     public static String quoted(String value) {
-        return String.format("\"%s\"", value);
+        return "\"" + value + "\"";
     }
 
     public static String floatStr(float value) {
