@@ -7,6 +7,7 @@ import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.simple.CraftBlockDataMapping;
 import io.papermc.generator.rewriter.types.simple.CraftBlockEntityStateMapping;
 import io.papermc.generator.rewriter.types.simple.CraftPotionUtilRewriter;
+import io.papermc.generator.rewriter.types.simple.EntityTypeRewriter;
 import io.papermc.generator.rewriter.types.simple.MapPaletteRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
@@ -107,7 +108,6 @@ public interface Generators {
         new EnumRegistryRewriter<>(Attribute.class, Registries.ATTRIBUTE, "Attribute", true),
         new EnumRegistryRewriter<>(Cat.Type.class, Registries.CAT_VARIANT, "CatType", true),
         new EnumRegistryRewriter<>(PotionType.class, Registries.POTION, "PotionType", true),
-        //new EnumRegistryRewriter<>(EntityType.class, Registries.ENTITY_TYPE, "EntityType", true), seems complex to get the typeId?
         new EnumRegistryRewriter<>(Art.class, Registries.PAINTING_VARIANT, "Art", true) {
 
             private static final int PIXELS_PER_BLOCK = 16;
@@ -121,6 +121,7 @@ public interface Generators {
                 );
             }
         },
+        new EntityTypeRewriter("EntityType"),
         new PatternTypeRewriter("PatternType"),
         new EnumRegistryRewriter<>(MapCursor.Type.class, Registries.MAP_DECORATION_TYPE, "MapCursorType", true) {
             @Override
