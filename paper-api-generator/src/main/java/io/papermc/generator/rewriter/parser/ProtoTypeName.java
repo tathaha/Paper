@@ -5,8 +5,8 @@ public class ProtoTypeName {
     private final String initialName;
     private StringBuilder currentName;
 
-    private ProtoTypeName(String name) {
-        this.initialName = name;
+    private ProtoTypeName(String initialName) {
+        this.initialName = initialName;
     }
 
     public void append(String part) {
@@ -16,7 +16,7 @@ public class ProtoTypeName {
         this.currentName.append(part);
     }
 
-    public String getName() {
+    public String getFinalName() {
         return this.currentName != null ? this.currentName.toString() : this.initialName;
     }
 
@@ -27,8 +27,8 @@ public class ProtoTypeName {
         return this.initialName.isEmpty() || this.initialName.lastIndexOf('.') == this.initialName.length() - 1;
     }
 
-    public static ProtoTypeName create(String name) {
-        return new ProtoTypeName(name);
+    public static ProtoTypeName create(String initialName) {
+        return new ProtoTypeName(initialName);
     }
 
 }

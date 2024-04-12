@@ -36,7 +36,7 @@ public final class ImportSteps implements StepHolder {
 
         if (!parser.skipComment(line)) {
             if (line.skipWhitespace() == 0) { // expect at least one space between import, static and type name unless a multi comment is here to fill the gap
-                parser.clearRemainingSteps();
+                parser.getSteps().clearRemaining();
             }
         }
     }
@@ -48,14 +48,14 @@ public final class ImportSteps implements StepHolder {
         }
 
         if (line.trySkipString("static")) {
-            parser.addPriorityStep(this.enforceSpaceStep);
+            parser.getSteps().addPriority(this.enforceSpaceStep);
             this.isStatic = true;
         }
         return false;
     }
 
     public void collectImport(StringReader line, LineParser parser) {
-        String name = this.name.getName();
+        String name = this.name.getFinalName();
         if (name.isEmpty() || NamingManager.hasIllegalKeyword(name)) { // keyword are checked after to simplify things
             return;
         }
@@ -73,8 +73,7 @@ public final class ImportSteps implements StepHolder {
             return true;
         }
 
-        String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespaceInName, true,
-            () -> this.name == null || this.name.shouldCheckStartIdentifier());
+        String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, true, this.name);
 
         if (line.canRead() && parser.nextSingleLineComment(line)) {
             // ignore single line comment at the end of the name

@@ -85,7 +85,7 @@ public class OldGeneratedCodeTest {
 
                         String generatedComment = "// %s ".formatted(Annotations.annotationStyle(GeneratedFrom.class));
                         if (nextLineIterator.trySkipString(generatedComment) && nextLineIterator.canRead()) {
-                            String generatedVersion = nextLineIterator.readRemainingString();
+                            String generatedVersion = nextLineIterator.getRemaining();
                             assertEquals(CURRENT_VERSION, generatedVersion,
                                 "Code at line %s in %s is marked as being generated in version %s when the current version is %s".formatted(
                                     lineCount, srt.getRewrittenClass().canonicalName(),

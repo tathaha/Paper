@@ -15,7 +15,7 @@ public class RepeatIterativeStep implements IterativeStep {
     @Override
     public void run(StringReader line, LineParser parser) {
         if (this.runner.test(line, parser)) {
-            parser.addPriorityStep(this);
+            parser.getSteps().addPriority(this);
         }
     }
 }

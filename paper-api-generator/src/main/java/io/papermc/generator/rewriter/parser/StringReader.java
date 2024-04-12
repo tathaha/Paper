@@ -4,6 +4,7 @@ import com.mojang.brigadier.ImmutableStringReader;
 import org.jetbrains.annotations.Nullable;
 import java.util.function.BiPredicate;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 // based on brigadier string reader with some extra/removed features for rewriter
 public class StringReader implements ImmutableStringReader {
@@ -106,7 +107,7 @@ public class StringReader implements ImmutableStringReader {
         return i;
     }
 
-    public void skipString(final char terminator) {
+    public void skipStringUntil(final char terminator) {
         while (this.canRead() && this.peek() != terminator) {
             this.skip();
         }
@@ -158,22 +159,16 @@ public class StringReader implements ImmutableStringReader {
         return false;
     }
 
-    public String readRemainingString() {
-        final int start = this.cursor;
-        this.cursor = this.getTotalLength();
-        return this.string.substring(start);
-    }
-
     public String readStringUntil(final char terminator) {
         final int start = this.cursor;
-        this.skipString(terminator);
+        this.skipStringUntil(terminator);
         return this.string.substring(start, this.cursor);
     }
 
     @Nullable
     public String getStringUntil(final char terminator) {
         final int start = this.cursor;
-        this.skipString(terminator);
+        this.skipStringUntil(terminator);
         if (!this.canRead()) {
             return null;
         }
@@ -181,9 +176,9 @@ public class StringReader implements ImmutableStringReader {
     }
 
     // cleaner is used to skip stuff like : net/* hi */./**/kyori.adventure.translation/**/.Translatable within the type name
-    public String getPartNameUntil(final char terminator, final BiPredicate<StringReader, NameCursorState> cleaner, final boolean forImport, final BooleanSupplier checkStartGetter) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
+    public String getPartNameUntil(final char terminator, final Predicate<StringReader> cleaner, final boolean forImport, final @Nullable ProtoTypeName currentName) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
         boolean hasCleaner = cleaner != null;
-        boolean checkStart = checkStartGetter.getAsBoolean();
+        boolean checkStart = currentName == null || currentName.shouldCheckStartIdentifier();
         StringBuilder name = new StringBuilder();
         while (this.canRead()) {
             int c = this.peekPoint();
@@ -192,14 +187,14 @@ public class StringReader implements ImmutableStringReader {
             }
 
             if (checkStart) { // had a dot before
-                if (hasCleaner && cleaner.test(this, NameCursorState.AFTER_DOT)) {
+                if (hasCleaner && cleaner.test(this)) {
                     continue;
                 }
             }
 
             boolean isJavaIdChar = checkStart ? Character.isJavaIdentifierStart(c) : Character.isJavaIdentifierPart(c);
             if (!isJavaIdChar && (checkStart || c != '.') && !(c == '*' && forImport)) { // star should be allowed only at the end for import todo
-                if (hasCleaner && cleaner.test(this, NameCursorState.INVALID_CHAR)) {
+                if (hasCleaner && cleaner.test(this)) {
                     continue;
                 } else {
                     break;

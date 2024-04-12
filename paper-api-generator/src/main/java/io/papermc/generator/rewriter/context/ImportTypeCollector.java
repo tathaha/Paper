@@ -37,11 +37,11 @@ public class ImportTypeCollector implements ImportCollector {
     }
 
     @Override
-    public void addStaticImport(String typeName) {
-        if (typeName.endsWith("*")) {
-            this.globalStaticImports.add(typeName.substring(0, typeName.lastIndexOf('.')));
+    public void addStaticImport(String fullName) {
+        if (fullName.endsWith("*")) {
+            this.globalStaticImports.add(fullName.substring(0, fullName.lastIndexOf('.')));
         } else {
-            this.staticImports.put(typeName, typeName.substring(typeName.lastIndexOf('.') + 1));
+            this.staticImports.put(fullName, fullName.substring(fullName.lastIndexOf('.') + 1));
         }
     }
 
@@ -85,11 +85,11 @@ public class ImportTypeCollector implements ImportCollector {
                 int skipNode = Formatting.countOccurrences(originalNestedName, '.') - advancedNode;
                 StringReader reader = new StringReader(originalNestedName);
                 while (skipNode > 0) {
-                    reader.skipString('.');
+                    reader.skipStringUntil('.');
                     reader.skip(); // skip dot
                     skipNode--;
                 }
-                typeName = reader.readRemainingString();
+                typeName = reader.getRemaining();
             } else {
                 typeName = type.simpleName();
             }

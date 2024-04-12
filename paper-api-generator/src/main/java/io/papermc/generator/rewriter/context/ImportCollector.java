@@ -11,7 +11,7 @@ public interface ImportCollector {
         }
 
         @Override
-        public void addStaticImport(final String typeName) {
+        public void addStaticImport(final String fullName) {
 
         }
 
@@ -29,7 +29,7 @@ public interface ImportCollector {
 
     void addImport(String typeName);
 
-    void addStaticImport(String typeName);
+    void addStaticImport(String fullName);
 
     String getStaticMemberShortName(String fullName);
 

@@ -243,7 +243,7 @@ public class SearchReplaceRewriter implements SourceRewriter {
             return EMPTY_MARKER;
         }
 
-        String pattern = lineIterator.readRemainingString();
+        String pattern = lineIterator.getRemaining();
         if (patterns == null || patterns.contains(pattern)) { // patterns will be null only for tests
             return new CommentMarker(pattern, foundStart, indentSize);
         }

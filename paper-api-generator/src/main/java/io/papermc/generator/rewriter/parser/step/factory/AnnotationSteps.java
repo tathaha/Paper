@@ -39,8 +39,7 @@ public final class AnnotationSteps implements StepHolder {
             return true;
         }
 
-        String name = line.getPartNameUntil('(', parser::skipCommentOrWhitespaceInName, false,
-            () -> checkStartId);
+        String name = line.getPartNameUntil('(', parser::skipCommentOrWhitespace, false, this.name);
 
         if (line.canRead() && parser.nextSingleLineComment(line)) {
             // ignore single line comment at the end and allow the name to continue
@@ -67,9 +66,9 @@ public final class AnnotationSteps implements StepHolder {
 
     // filter out @interface
     public void checkAnnotationName(StringReader line, LineParser parser) {
-        String name = this.name.getName();
+        String name = this.name.getFinalName();
         if (name.isEmpty() || NamingManager.hasIllegalKeyword(name)) { // keyword are checked after to simplify things
-            parser.clearRemainingSteps();
+            parser.getSteps().clearRemaining();
         }
     }
 
@@ -80,7 +79,7 @@ public final class AnnotationSteps implements StepHolder {
         }
 
         if (parser.advanceEnclosure(ClosureType.PARENTHESIS, line)) { // open parenthesis?
-            parser.addPriorityStep(this.skipParenthesesStep);
+            parser.getSteps().addPriority(this.skipParenthesesStep);
         }
         return false;
     }

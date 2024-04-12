@@ -3,6 +3,7 @@ package io.papermc.generator.rewriter.parser;
 import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.rewriter.parser.step.IterativeStep;
 import io.papermc.generator.rewriter.parser.step.StepHolder;
+import io.papermc.generator.rewriter.parser.step.StepManager;
 import io.papermc.generator.rewriter.parser.step.factory.AnnotationSteps;
 import io.papermc.generator.rewriter.parser.step.factory.ImportSteps;
 import org.jetbrains.annotations.ApiStatus;
@@ -15,7 +16,7 @@ import java.util.Set;
 public class LineParser {
 
     private final Set<ClosureType> closures = EnumSet.noneOf(ClosureType.class);
-    private final Deque<IterativeStep> steps = new ArrayDeque<>(10);
+    private final StepManager stepManager = new StepManager();
 
     public boolean advanceEnclosure(ClosureType type, StringReader line) {
         boolean inside = this.closures.contains(type);
@@ -60,24 +61,6 @@ public class LineParser {
         return skipped;
     }
 
-    public boolean skipCommentOrWhitespaceInName(StringReader line, NameCursorState state) {
-        if (state == NameCursorState.AFTER_DOT) {
-            return this.skipCommentOrWhitespace(line);
-        } else if (state == NameCursorState.INVALID_CHAR) { // this is tricky todo redo this part later
-            boolean skipped = this.trySkipCommentOrWhitespaceUntil(line, '.');
-            int previousCursor = line.getCursor();
-            if (!skipped && this.skipCommentOrWhitespace(line) && line.canRead() && this.nextSingleLineComment(line)) {
-                // ignore single line comment at the end of the name
-                line.setCursor(line.getTotalLength());
-                skipped = true;
-            } else {
-                line.setCursor(previousCursor);
-            }
-            return skipped;
-        }
-        return false;
-    }
-
     public boolean nextSingleLineComment(StringReader line) {
         return line.peek() == '/' && line.canRead(2) && line.peek(1) == '/';
     }
@@ -86,7 +69,7 @@ public class LineParser {
     outerLoop:
         while (line.canRead()) {
             IterativeStep step;
-            while ((step = this.steps.poll()) != null) {
+            while ((step = this.stepManager.getSteps().poll()) != null) {
                 step.run(line, this);
                 if (!line.canRead()) {
                     break outerLoop;
@@ -105,12 +88,12 @@ public class LineParser {
             // not commented
             char c = line.peek();
             if (AnnotationSteps.canStart(c)) { // handle annotation with param to avoid open curly bracket that occur in array argument
-                this.enqueue(new AnnotationSteps());
+                this.stepManager.enqueue(new AnnotationSteps());
                 continue;
             } else if (c == '{') {
                 return true;
             } else if (ImportSteps.canStart(line)) {
-                this.enqueue(new ImportSteps(collector));
+                this.stepManager.enqueue(new ImportSteps(collector));
                 continue;
             }
 
@@ -119,21 +102,7 @@ public class LineParser {
         return false;
     }
 
-    private void enqueue(StepHolder holder) {
-        for (IterativeStep step : holder.initialSteps()) {
-            if (!this.steps.offerLast(step)) {
-                throw new IllegalStateException("Cannot add a step into the queue!");
-            }
-        }
-    }
-
-    public void addPriorityStep(IterativeStep step) {
-        if (!this.steps.offerFirst(step)) {
-            throw new IllegalStateException("Cannot add a priority step into the queue!");
-        }
-    }
-
-    public void clearRemainingSteps() {
-        this.steps.clear();
+    public StepManager getSteps() {
+        return this.stepManager;
     }
 }

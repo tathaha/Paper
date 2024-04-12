@@ -2,7 +2,7 @@ package io.papermc.generator.rewriter.data.sample.parser.area;
 
 import org.jetbrains.annotations.ApiStatus;
 
-@SuppressWarnings//discord /**/
+@SuppressWarnings//discard /**/
     /* a*/   ( /* a b*/
         { /*a*/
             "DeprecatedIsStillUsed" /*a*/
