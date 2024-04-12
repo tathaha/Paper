@@ -3,14 +3,14 @@ package io.papermc.generator.rewriter.parser;
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.context.ImportTypeCollector;
 import io.papermc.generator.rewriter.data.sample.parser.imports.FancyInlinedImportType;
-import io.papermc.generator.rewriter.data.yml.ImportMapping;
-import io.papermc.generator.rewriter.data.yml.ImportSet;
+import io.papermc.generator.rewriter.data.yaml.ImportMapping;
+import io.papermc.generator.rewriter.data.yaml.ImportSet;
 import io.papermc.generator.rewriter.data.sample.parser.imports.FancyCommentImportType;
 import io.papermc.generator.rewriter.data.sample.parser.imports.FancyNewlineImportType;
 import io.papermc.generator.rewriter.data.sample.parser.imports.FancySpaceImportType;
 import io.papermc.generator.rewriter.data.sample.parser.imports.MixedCommentImportType;
 import io.papermc.generator.rewriter.data.sample.parser.imports.StandardImportType;
-import io.papermc.generator.rewriter.data.yml.YmlMappingConverter;
+import io.papermc.generator.rewriter.data.yaml.YamlMappingConverter;
 import it.unimi.dsi.fastutil.Pair;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.converter.ConvertWith;
@@ -29,7 +29,7 @@ public class ImportCollectTest extends ParserTest {
         return Arguments.of(
             CONTAINER.resolve(sampleClass.getCanonicalName().replace('.', '/') + ".java"),
             sampleClass,
-            "parser/expected/imports/%s.yml".formatted(sampleClass.getSimpleName())
+            "parser/expected/imports/%s.yaml".formatted(sampleClass.getSimpleName())
         );
     }
 
@@ -65,7 +65,7 @@ public class ImportCollectTest extends ParserTest {
         assertEquals(expectedStaticImports.global(), staticImports.right(), "Static global imports doesn't match for " + name);
     }
 
-    private static class ImportMappingConverter extends YmlMappingConverter<ImportMapping> {
+    private static class ImportMappingConverter extends YamlMappingConverter<ImportMapping> {
 
         protected ImportMappingConverter() {
             super(ImportMapping.class, null);

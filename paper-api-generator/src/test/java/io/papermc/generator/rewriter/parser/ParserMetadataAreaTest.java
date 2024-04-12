@@ -23,8 +23,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 public class ParserMetadataAreaTest extends ParserTest {
 
-    private static final Path CONTAINER = Path.of(System.getProperty("user.dir"), "src/test/java");
-
     private static Arguments file(Class<?> sampleClass, String expectedLastLine) {
         String name = sampleClass.getSimpleName();
         return Arguments.of(

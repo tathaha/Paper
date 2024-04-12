@@ -1,6 +1,6 @@
-package io.papermc.generator.rewriter.data.sample.parser.imports.name;
+package io.papermc.generator.rewriter.data.sample.parser.name;
 
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.one.*;
+import io.papermc.generator.rewriter.data.sample.parser.name.one.*;
 
 public class PackageClassImportType {
     {

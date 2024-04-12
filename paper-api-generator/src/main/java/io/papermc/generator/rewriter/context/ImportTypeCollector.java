@@ -68,14 +68,14 @@ public class ImportTypeCollector implements ImportCollector {
         ClassNamed foundClass = type;
         int advancedNode = 0;
         while (!imports.contains(foundClass.canonicalName()) &&
-            !globalImports.contains(foundClass.parent().canonicalName())) {
+            !globalImports.contains(foundClass.enclosing().canonicalName())) {
             if (foundClass.isRoot() || // top classes with package check is handled before
                 (fetchStatic && !Modifier.isStatic(foundClass.knownClass().getModifiers())) // static imports are allowed for regular class too but only when the inner classes are all static
             ) {
                 foundClass = null;
                 break;
             }
-            foundClass = foundClass.parent();
+            foundClass = foundClass.enclosing();
             advancedNode++;
         }
         if (foundClass != null) {
@@ -111,7 +111,7 @@ public class ImportTypeCollector implements ImportCollector {
                 }
             }
 
-            if ((key.parent().isRoot() && this.globalImports.contains(key.packageName())) ||  // star import on package for top classes and one level classes only!
+            if ((key.enclosing().isRoot() && this.globalImports.contains(key.packageName())) ||  // star import on package for top classes and one level classes only!
                 (key.isRoot() && key.packageName().equals(this.rewriteClass.packageName()))) {  // same package don't need fqn too for top classes
                 return key.dottedNestedName();
             }
@@ -127,7 +127,7 @@ public class ImportTypeCollector implements ImportCollector {
                 if (fromDepth < depth) {
                     ClassNamed parent = key;
                     while (true) {
-                        ClassNamed up = parent.parent();
+                        ClassNamed up = parent.enclosing();
                         if (this.rewriteClass.equals(up)) {
                             break;
                         }

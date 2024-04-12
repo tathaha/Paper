@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.data.yml;
+package io.papermc.generator.rewriter.data.yaml;
 
 import org.junit.jupiter.params.converter.TypedArgumentConverter;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -9,7 +9,7 @@ import org.yaml.snakeyaml.nodes.Tag;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class YmlMappingConverter<T> extends TypedArgumentConverter<String, T> {
+public class YamlMappingConverter<T> extends TypedArgumentConverter<String, T> {
 
     private static final LoaderOptions OPTIONS;
     static {
@@ -19,7 +19,7 @@ public class YmlMappingConverter<T> extends TypedArgumentConverter<String, T> {
 
     private final Constructor yamlConstructor;
 
-    protected YmlMappingConverter(Class<T> clazz, String relativePackage) {
+    protected YamlMappingConverter(Class<T> clazz, String relativePackage) {
         super(String.class, clazz);
         if (relativePackage == null) {
             this.yamlConstructor = new Constructor(clazz, OPTIONS);

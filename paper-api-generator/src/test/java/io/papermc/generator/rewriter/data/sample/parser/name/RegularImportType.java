@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.data.sample.parser.imports.name;
+package io.papermc.generator.rewriter.data.sample.parser.name;
 
 import org.bukkit.Material;
 import static org.bukkit.Statistic.ARMOR_CLEANED;

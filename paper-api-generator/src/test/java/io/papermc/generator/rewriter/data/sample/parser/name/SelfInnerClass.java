@@ -1,6 +1,6 @@
-package io.papermc.generator.rewriter.data.sample.parser.imports.name;
+package io.papermc.generator.rewriter.data.sample.parser.name;
 
-public class SelfInnerClassImportType {
+public class SelfInnerClass {
     public class A {
         public class B {
             public class C {

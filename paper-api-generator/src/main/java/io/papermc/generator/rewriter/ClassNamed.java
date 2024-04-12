@@ -47,7 +47,7 @@ public record ClassNamed(String packageName, String simpleName, String dottedNes
         return this.root() == this;
     }
 
-    public ClassNamed parent() {
+    public ClassNamed enclosing() {
         if (this.knownClass != null) {
             Class<?> parentClass = this.knownClass.getEnclosingClass();
             if (parentClass == null) {

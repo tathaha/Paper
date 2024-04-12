@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.data.sample.parser.imports.name.one;
+package io.papermc.generator.rewriter.data.sample.parser.name.one;
 
 public class OneDepthClass {
 

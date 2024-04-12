@@ -2,16 +2,16 @@ package io.papermc.generator.rewriter.parser;
 
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.context.ImportTypeCollector;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.GlobalImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.PackageClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.RegularImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.RemoteGlobalInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.RemoteInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.RemoteStaticGlobalInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.SamePackageClass;
-import io.papermc.generator.rewriter.data.sample.parser.imports.name.SelfInnerClassImportType;
-import io.papermc.generator.rewriter.data.yml.ImportShortNameMapping;
-import io.papermc.generator.rewriter.data.yml.YmlMappingConverter;
+import io.papermc.generator.rewriter.data.sample.parser.name.GlobalImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.PackageClassImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.RegularImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.RemoteGlobalInnerClassImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.RemoteInnerClassImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.RemoteStaticGlobalInnerClassImportType;
+import io.papermc.generator.rewriter.data.sample.parser.name.SamePackageClass;
+import io.papermc.generator.rewriter.data.sample.parser.name.SelfInnerClass;
+import io.papermc.generator.rewriter.data.yaml.ImportShortNameMapping;
+import io.papermc.generator.rewriter.data.yaml.YamlMappingConverter;
 import io.papermc.generator.utils.ClassHelper;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-public class TypeShortNameTest extends ParserTest {
+public class ShortNameTest extends ParserTest {
 
     private static Arguments rootClass(Class<?> sampleClass) {
         return innerClass(sampleClass, sampleClass);
@@ -38,7 +38,7 @@ public class TypeShortNameTest extends ParserTest {
             CONTAINER.resolve(sampleClass.getCanonicalName().replace('.', '/') + ".java"),
             sampleInnerClass,
             name,
-            "parser/expected/imports/name/%s.yml".formatted(sampleInnerClass.getName().substring(sampleInnerClass.getPackageName().length() + 1))
+            "parser/expected/name/%s.yaml".formatted(sampleInnerClass.getName().substring(sampleInnerClass.getPackageName().length() + 1))
         );
     }
 
@@ -50,8 +50,8 @@ public class TypeShortNameTest extends ParserTest {
             rootClass(RemoteGlobalInnerClassImportType.class),
             rootClass(RemoteStaticGlobalInnerClassImportType.class),
             rootClass(RemoteInnerClassImportType.class),
-            rootClass(SelfInnerClassImportType.class),
-            innerClass(SelfInnerClassImportType.class, SelfInnerClassImportType.A.B.C.class)
+            rootClass(SelfInnerClass.class),
+            innerClass(SelfInnerClass.class, SelfInnerClass.A.B.C.class)
         );
     }
 
@@ -64,26 +64,28 @@ public class TypeShortNameTest extends ParserTest {
         final ImportTypeCollector importCollector = new ImportTypeCollector(new ClassNamed(sampleClass));
         parseFile(path, importCollector);
 
-        assertFalse(mapping.getImports() == null && mapping.getStaticImports() == null, "Empty expected import mapping!");
+        assertFalse(mapping.getShortNames() == null && mapping.getMemberShortNames() == null, "Empty expected import mapping!");
 
-        if (mapping.getImports() != null) {
-            for (Map.Entry<String, String> expect : mapping.getImports().entrySet()) {
+        if (mapping.getShortNames() != null) {
+            for (Map.Entry<String, String> expect : mapping.getShortNames().entrySet()) {
+                String typeName = expect.getKey();
                 Class<?> runtimeClass = ClassHelper.classOr(expect.getKey(), null);
-                assertNotNull(runtimeClass, "Runtime class cannot be null for import " + expect.getKey());
+                assertNotNull(runtimeClass, "Runtime class cannot be null for import " + typeName);
                 assertEquals(expect.getValue(), importCollector.getShortName(runtimeClass),
-                    () -> "Short name of " + expect.getKey() + " doesn't match with collected imports for " + name + "! Import found: " + importCollector.getImports());
+                    "Short name of " + typeName + " doesn't match with collected imports for " + name + "! Import found: " + importCollector.getImports());
             }
         }
 
-        if (mapping.getStaticImports() != null) {
-            for (Map.Entry<String, String> expect : mapping.getStaticImports().entrySet()) {
-                assertEquals(expect.getValue(), importCollector.getStaticMemberShortName(expect.getKey()),
-                    () -> "Short name of static member/class " + expect.getKey() + " doesn't match with collected imports for " + name + "! Static imports found: " + importCollector.getStaticImports());
+        if (mapping.getMemberShortNames() != null) {
+            for (Map.Entry<String, String> expect : mapping.getMemberShortNames().entrySet()) {
+                String fullName = expect.getKey();
+                assertEquals(expect.getValue(), importCollector.getStaticMemberShortName(fullName),
+                    "Short name of static member/class " + fullName + " doesn't match with collected imports for " + name + "! Static imports found: " + importCollector.getStaticImports());
             }
         }
     }
 
-    private static class ImportShortNameMappingConverter extends YmlMappingConverter<ImportShortNameMapping> {
+    private static class ImportShortNameMappingConverter extends YamlMappingConverter<ImportShortNameMapping> {
 
         protected ImportShortNameMappingConverter() {
             super(ImportShortNameMapping.class, SamePackageClass.class.getPackageName());

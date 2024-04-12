@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.data.yml;
+package io.papermc.generator.rewriter.data.yaml;
 
 import java.util.Collections;
 import java.util.Set;
