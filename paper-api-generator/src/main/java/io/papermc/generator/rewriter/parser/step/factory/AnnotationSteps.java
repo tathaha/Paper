@@ -39,7 +39,7 @@ public final class AnnotationSteps implements StepHolder {
             return true;
         }
 
-        String name = line.getPartNameUntil('(', parser::skipCommentOrWhitespace, false, this.name);
+        String name = line.getPartNameUntil('(', parser::skipCommentOrWhitespace, this.name);
 
         if (line.canRead() && parser.nextSingleLineComment(line)) {
             // ignore single line comment at the end and allow the name to continue

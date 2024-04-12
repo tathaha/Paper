@@ -18,9 +18,10 @@ public final class ImportSteps implements StepHolder {
     }
 
     private final IterativeStep enforceSpaceStep = IterativeStep.create(this::enforceSpace);
+    private final IterativeStep skipUntilSemicolonStep = IterativeStep.createUntil(this::skipUntilSemicolon);
 
     private final ImportCollector collector;
-    private boolean isStatic;
+    private boolean isStatic, isGlobal;
     private @MonotonicNonNull ProtoTypeName name;
 
     public ImportSteps(ImportCollector collector) {
@@ -67,25 +68,65 @@ public final class ImportSteps implements StepHolder {
         }
     }
 
+    public boolean skipUntilSemicolon(StringReader line, LineParser parser) {
+        parser.skipCommentOrWhitespace(line);
+        if (!line.canRead()) {
+            return true;
+        }
+
+        if (parser.nextSingleLineComment(line)) {
+            line.setCursor(line.getTotalLength());
+        } else {
+            line.skipStringUntil(';');
+        }
+
+        if (line.canRead() && line.peek() == ';') {
+            this.pushToImportName("*");
+            line.skip();
+            return false;
+        }
+
+        if (line.canRead()) {
+            throw new IllegalStateException("Invalid java source, found a '*' char in the middle of import type name!");
+        }
+
+        return true;
+    }
+
     public boolean getPartName(StringReader line, LineParser parser) {
         parser.skipCommentOrWhitespace(line);
         if (!line.canRead()) {
             return true;
         }
 
-        String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, true, this.name);
+        String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, this.name);
 
-        if (line.canRead() && parser.nextSingleLineComment(line)) {
-            // ignore single line comment at the end of the name
-            line.setCursor(line.getTotalLength());
+        if (line.canRead()) {
+            if (line.peek() == '*') {
+                this.isGlobal = true;
+                line.skip();
+            } else if (parser.nextSingleLineComment(line)) {
+                // ignore single line comment at the end of the name
+                line.setCursor(line.getTotalLength());
+            }
         }
 
+        this.pushToImportName(name);
+
+        if (this.isGlobal) {
+            parser.getSteps().addPriority(this.skipUntilSemicolonStep);
+            return false;
+        }
+
+        return !line.canRead();
+    }
+
+    private void pushToImportName(String name) {
         if (this.name == null) {
             this.name = ProtoTypeName.create(name);
         } else {
             this.name.append(name);
         }
-        return !line.canRead();
     }
 
     @Override

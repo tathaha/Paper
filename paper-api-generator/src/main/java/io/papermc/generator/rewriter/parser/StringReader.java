@@ -176,7 +176,7 @@ public class StringReader implements ImmutableStringReader {
     }
 
     // cleaner is used to skip stuff like : net/* hi */./**/kyori.adventure.translation/**/.Translatable within the type name
-    public String getPartNameUntil(final char terminator, final Predicate<StringReader> cleaner, final boolean forImport, final @Nullable ProtoTypeName currentName) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
+    public String getPartNameUntil(final char terminator, final Predicate<StringReader> cleaner, final @Nullable ProtoTypeName currentName) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
         boolean hasCleaner = cleaner != null;
         boolean checkStart = currentName == null || currentName.shouldCheckStartIdentifier();
         StringBuilder name = new StringBuilder();
@@ -193,7 +193,7 @@ public class StringReader implements ImmutableStringReader {
             }
 
             boolean isJavaIdChar = checkStart ? Character.isJavaIdentifierStart(c) : Character.isJavaIdentifierPart(c);
-            if (!isJavaIdChar && (checkStart || c != '.') && !(c == '*' && forImport)) { // star should be allowed only at the end for import todo
+            if (!isJavaIdChar && (checkStart || c != '.')) {
                 if (hasCleaner && cleaner.test(this)) {
                     continue;
                 } else {
