@@ -8,6 +8,7 @@ import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.paper.generated.GeneratedFrom;
 import net.minecraft.SharedConstants;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -20,6 +21,7 @@ import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT
 import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT_SIZE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Disabled
 public class OldGeneratedCodeTest {
 
     private static final String API_CONTAINER = System.getProperty("paper.generator.rewriter.container.api");

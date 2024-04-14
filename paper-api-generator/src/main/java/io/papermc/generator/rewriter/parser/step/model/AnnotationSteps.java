@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.parser.step.factory;
+package io.papermc.generator.rewriter.parser.step.model;
 
 import io.papermc.generator.rewriter.parser.ClosureType;
 import io.papermc.generator.rewriter.parser.LineParser;
@@ -39,17 +39,11 @@ public final class AnnotationSteps implements StepHolder {
             return true;
         }
 
-        String name = line.getPartNameUntil('(', parser::skipCommentOrWhitespace, this.name);
+        this.name = line.getPartNameUntil('(', parser::skipCommentOrWhitespace, this.name);
 
         if (line.canRead() && parser.nextSingleLineComment(line)) {
             // ignore single line comment at the end and allow the name to continue
             line.setCursor(line.getTotalLength());
-        }
-
-        if (this.name == null) {
-            this.name = ProtoTypeName.create(name);
-        } else {
-            this.name.append(name);
         }
         return !line.canRead();
     }
@@ -64,11 +58,14 @@ public final class AnnotationSteps implements StepHolder {
         return false;
     }
 
-    // filter out @interface
     public void checkAnnotationName(StringReader line, LineParser parser) {
         String name = this.name.getFinalName();
-        if (name.isEmpty() || NamingManager.hasIllegalKeyword(name)) { // keyword are checked after to simplify things
-            parser.getSteps().clearRemaining();
+
+        if (name.isEmpty()) {
+            throw new IllegalStateException("Invalid java source, annotation name is empty!");
+        }
+        if (!NamingManager.isValidName(name, keyword -> keyword.equals("interface"))) { // keyword are checked after to simplify things
+            throw new IllegalStateException("Invalid java source, annotation name contains a reserved keyword or a syntax error!");
         }
     }
 

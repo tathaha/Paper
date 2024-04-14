@@ -1,4 +1,4 @@
-package io.papermc.generator.rewriter.parser.step.factory;
+package io.papermc.generator.rewriter.parser.step.model;
 
 import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.rewriter.parser.LineParser;
@@ -10,7 +10,7 @@ import io.papermc.generator.utils.NamingManager;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
 // start once "import" is detected unless commented
-// order is: enforceSpace -> checkStatic (-> enforceSpace) -> getPartName -> collectImport
+// order is: enforceSpace -> checkStatic (-> enforceSpace) -> getPartName (-> skipUntilSemicolonAfterStar) -> collectImport
 public final class ImportSteps implements StepHolder {
 
     public static boolean canStart(StringReader line) {
@@ -18,7 +18,7 @@ public final class ImportSteps implements StepHolder {
     }
 
     private final IterativeStep enforceSpaceStep = IterativeStep.create(this::enforceSpace);
-    private final IterativeStep skipUntilSemicolonStep = IterativeStep.createUntil(this::skipUntilSemicolon);
+    private final IterativeStep skipUntilSemicolonAfterStarStep = IterativeStep.createUntil(this::skipUntilSemicolonAfterStar);
 
     private final ImportCollector collector;
     private boolean isStatic;
@@ -57,8 +57,11 @@ public final class ImportSteps implements StepHolder {
 
     public void collectImport(StringReader line, LineParser parser) {
         String name = this.name.getFinalName();
-        if (name.isEmpty() || NamingManager.hasIllegalKeyword(name)) { // keyword are checked after to simplify things
-            return;
+        if (name.isEmpty()) {
+            throw new IllegalStateException("Invalid java source, import type name is empty!");
+        }
+        if (!NamingManager.isValidName(name)) { // keyword are checked after to simplify things
+            throw new IllegalStateException("Invalid java source, import type name contains a reserved keyword or a syntax error!");
         }
 
         if (this.isStatic) {
@@ -68,8 +71,7 @@ public final class ImportSteps implements StepHolder {
         }
     }
 
-    public boolean skipUntilSemicolon(StringReader line, LineParser parser) {
-        // this is only executed once for star imports!
+    public boolean skipUntilSemicolonAfterStar(StringReader line, LineParser parser) {
         parser.skipCommentOrWhitespace(line);
         if (!line.canRead()) {
             return true;
@@ -77,12 +79,10 @@ public final class ImportSteps implements StepHolder {
 
         if (parser.nextSingleLineComment(line)) {
             line.setCursor(line.getTotalLength());
-        } else {
-            line.skipStringUntil(';');
         }
 
         if (line.canRead() && line.peek() == ';') {
-            this.pushToImportName("*");
+            this.name.append('*');
             line.skip();
             return false;
         }
@@ -100,34 +100,20 @@ public final class ImportSteps implements StepHolder {
             return true;
         }
 
-        String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, this.name);
-        boolean isGlobal = false;
+        this.name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, this.name);
+
         if (line.canRead()) {
-            if (line.peek() == '*') {
-                isGlobal = true;
+            if (this.name.getLastChar() == '.' && line.peek() == '*') {
                 line.skip();
+                parser.getSteps().addPriority(this.skipUntilSemicolonAfterStarStep);
+                return false;
             } else if (parser.nextSingleLineComment(line)) {
                 // ignore single line comment at the end of the name
                 line.setCursor(line.getTotalLength());
             }
         }
 
-        this.pushToImportName(name);
-
-        if (isGlobal) {
-            parser.getSteps().addPriority(this.skipUntilSemicolonStep);
-            return false;
-        }
-
         return !line.canRead();
-    }
-
-    private void pushToImportName(String name) {
-        if (this.name == null) {
-            this.name = ProtoTypeName.create(name);
-        } else {
-            this.name.append(name);
-        }
     }
 
     @Override

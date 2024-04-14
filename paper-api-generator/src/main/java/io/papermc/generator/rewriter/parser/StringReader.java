@@ -2,8 +2,7 @@ package io.papermc.generator.rewriter.parser;
 
 import com.mojang.brigadier.ImmutableStringReader;
 import org.jetbrains.annotations.Nullable;
-import java.util.function.BiPredicate;
-import java.util.function.BooleanSupplier;
+
 import java.util.function.Predicate;
 
 // based on brigadier string reader with some extra/removed features for rewriter
@@ -176,10 +175,10 @@ public class StringReader implements ImmutableStringReader {
     }
 
     // cleaner is used to skip stuff like : net/* hi */./**/kyori.adventure.translation/**/.Translatable within the type name
-    public String getPartNameUntil(final char terminator, final Predicate<StringReader> cleaner, final @Nullable ProtoTypeName currentName) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
+    public ProtoTypeName getPartNameUntil(final char terminator, final Predicate<StringReader> cleaner,
+                                          @Nullable ProtoTypeName currentName) { // this break the concept of this a class a bit but it's not worth making a code point equivalent for only this method
         boolean hasCleaner = cleaner != null;
         boolean checkStart = currentName == null || currentName.shouldCheckStartIdentifier();
-        StringBuilder name = new StringBuilder();
         while (this.canRead()) {
             int c = this.peekPoint();
             if (c == terminator) {
@@ -195,6 +194,9 @@ public class StringReader implements ImmutableStringReader {
             boolean isJavaIdChar = checkStart ? Character.isJavaIdentifierStart(c) : Character.isJavaIdentifierPart(c);
             if (!isJavaIdChar && (checkStart || c != '.')) {
                 if (hasCleaner && cleaner.test(this)) {
+                    if (currentName != null) {
+                        currentName.expectIdTerminator();
+                    }
                     continue;
                 } else {
                     break;
@@ -202,10 +204,16 @@ public class StringReader implements ImmutableStringReader {
             }
 
             char[] chars = Character.toChars(c);
-            name.append(chars);
+            if (currentName != null) {
+                if (!currentName.append(chars)) {
+                    break;
+                }
+            } else {
+                currentName = new ProtoTypeName(chars);
+            }
             this.cursor += chars.length;
             checkStart = c == '.';
         }
-        return name.toString();
+        return currentName;
     }
 }

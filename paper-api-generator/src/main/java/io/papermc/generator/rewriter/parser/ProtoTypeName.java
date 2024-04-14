@@ -1,34 +1,46 @@
 package io.papermc.generator.rewriter.parser;
 
+import it.unimi.dsi.fastutil.chars.CharSet;
+
 public class ProtoTypeName {
 
-    private final String initialName;
-    private StringBuilder currentName;
+    private final StringBuilder currentName;
+    private char lastChar;
+    private boolean idTerminatorExpected;
 
-    private ProtoTypeName(String initialName) {
-        this.initialName = initialName;
+    public ProtoTypeName(char[] initialChars) {
+        this.currentName = new StringBuilder(initialChars.length);
+        this.append(initialChars);
     }
 
-    public void append(String part) {
-        if (this.currentName == null) {
-            this.currentName = new StringBuilder(this.initialName);
+    public boolean append(char... namePart) {
+        if (this.idTerminatorExpected) {
+            if (namePart[0] != '.') {
+                return false;
+            } else {
+                this.idTerminatorExpected = false;
+            }
         }
-        this.currentName.append(part);
+
+        this.currentName.append(namePart);
+        this.lastChar = namePart[namePart.length - 1];
+        return true;
+    }
+
+    public void expectIdTerminator() {
+        this.idTerminatorExpected = true;
+    }
+
+    public char getLastChar() {
+        return this.lastChar;
     }
 
     public String getFinalName() {
-        return this.currentName != null ? this.currentName.toString() : this.initialName;
+        return this.currentName.toString();
     }
 
     public boolean shouldCheckStartIdentifier() {
-        if (this.currentName != null) {
-            return this.currentName.isEmpty() || this.currentName.lastIndexOf(".") == this.currentName.length() - 1;
-        }
-        return this.initialName.isEmpty() || this.initialName.lastIndexOf('.') == this.initialName.length() - 1;
-    }
-
-    public static ProtoTypeName create(String initialName) {
-        return new ProtoTypeName(initialName);
+        return this.lastChar == '.';
     }
 
 }

@@ -2,13 +2,10 @@ package io.papermc.generator.rewriter.parser;
 
 import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.rewriter.parser.step.IterativeStep;
-import io.papermc.generator.rewriter.parser.step.StepHolder;
 import io.papermc.generator.rewriter.parser.step.StepManager;
-import io.papermc.generator.rewriter.parser.step.factory.AnnotationSteps;
-import io.papermc.generator.rewriter.parser.step.factory.ImportSteps;
+import io.papermc.generator.rewriter.parser.step.model.AnnotationSteps;
+import io.papermc.generator.rewriter.parser.step.model.ImportSteps;
 import org.jetbrains.annotations.ApiStatus;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.EnumSet;
 import java.util.Set;
 
