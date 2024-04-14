@@ -1,4 +1,4 @@
 package io.papermc.generator.rewriter.data.sample.parser.area;//{
 
-public class NearScopeClass{
+public class NearScopeClass{ // << 27
 }

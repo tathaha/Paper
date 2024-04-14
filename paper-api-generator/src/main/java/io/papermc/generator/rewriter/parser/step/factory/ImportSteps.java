@@ -21,7 +21,7 @@ public final class ImportSteps implements StepHolder {
     private final IterativeStep skipUntilSemicolonStep = IterativeStep.createUntil(this::skipUntilSemicolon);
 
     private final ImportCollector collector;
-    private boolean isStatic, isGlobal;
+    private boolean isStatic;
     private @MonotonicNonNull ProtoTypeName name;
 
     public ImportSteps(ImportCollector collector) {
@@ -69,6 +69,7 @@ public final class ImportSteps implements StepHolder {
     }
 
     public boolean skipUntilSemicolon(StringReader line, LineParser parser) {
+        // this is only executed once for star imports!
         parser.skipCommentOrWhitespace(line);
         if (!line.canRead()) {
             return true;
@@ -100,10 +101,10 @@ public final class ImportSteps implements StepHolder {
         }
 
         String name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, this.name);
-
+        boolean isGlobal = false;
         if (line.canRead()) {
             if (line.peek() == '*') {
-                this.isGlobal = true;
+                isGlobal = true;
                 line.skip();
             } else if (parser.nextSingleLineComment(line)) {
                 // ignore single line comment at the end of the name
@@ -113,7 +114,7 @@ public final class ImportSteps implements StepHolder {
 
         this.pushToImportName(name);
 
-        if (this.isGlobal) {
+        if (isGlobal) {
             parser.getSteps().addPriority(this.skipUntilSemicolonStep);
             return false;
         }

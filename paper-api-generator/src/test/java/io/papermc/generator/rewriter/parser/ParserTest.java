@@ -19,23 +19,26 @@ public class ParserTest {
         parseFile(path, importCollector, null, null);
     }
 
-    protected void parseFile(Path path, ImportCollector importCollector, @Nullable Consumer<String> enterBodyCallback, @Nullable Runnable eofCallback) throws IOException {
+    protected void parseFile(Path path, ImportCollector importCollector, @Nullable Consumer<StringReader> enterBodyCallback, @Nullable Runnable eofCallback) throws IOException {
         final LineParser lineParser = new LineParser();
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             while (true) {
-                String line = reader.readLine();
-                if (line == null) {
+                String textLine = reader.readLine();
+                if (textLine == null) {
                     if (eofCallback != null) {
                         eofCallback.run();
                     }
                     break;
                 }
 
-                if (!line.isEmpty() && lineParser.consumeImports(new StringReader(line), importCollector)) {
-                    if (enterBodyCallback != null) {
-                        enterBodyCallback.accept(line);
+                if (!textLine.isEmpty()) {
+                    StringReader line = new StringReader(textLine);
+                    if (lineParser.consumeImports(line, importCollector)) {
+                        if (enterBodyCallback != null) {
+                            enterBodyCallback.accept(line);
+                        }
+                        break;
                     }
-                    break;
                 }
             }
         }

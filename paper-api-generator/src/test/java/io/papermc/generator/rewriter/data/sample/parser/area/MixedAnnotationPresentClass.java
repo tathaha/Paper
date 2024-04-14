@@ -18,6 +18,6 @@ import org.jetbrains.annotations.ApiStatus;
 @/* a*/
     ApiStatus/* a*/./* a*/
         Experimental/* a*///a/* a*/
-public class MixedAnnotationPresentClass {
+public class MixedAnnotationPresentClass { // << 41
 
 }

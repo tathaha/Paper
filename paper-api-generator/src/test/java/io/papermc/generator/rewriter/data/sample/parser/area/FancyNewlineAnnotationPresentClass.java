@@ -9,6 +9,6 @@ package io.papermc.generator.rewriter.data.sample.parser.area;
         }
         )
 // Paper
-public class FancyNewlineAnnotationPresentClass {
+public class FancyNewlineAnnotationPresentClass { // << 48
 
 }

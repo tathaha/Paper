@@ -16,77 +16,59 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
-public class ParserMetadataAreaTest extends ParserTest {
+public class ParserFirstClassScopeAreaTest extends ParserTest {
 
-    private static Arguments file(Class<?> sampleClass, String expectedLastLine) {
+    private static Arguments fileToArgs(Class<?> sampleClass) {
         String name = sampleClass.getSimpleName();
         return Arguments.of(
             CONTAINER.resolve(sampleClass.getCanonicalName().replace('.', '/') + ".java"),
             sampleClass,
-            name,
-            expectedLastLine
+            name
         );
     }
 
     private static Stream<Arguments> fileProvider() {
         return Stream.of(
-            file(
-                SimpleTrapClass.class,
-                "public class SimpleTrapClass {"
-            ),
-            file(
-                AnnotationClass.class,
-                "public @interface AnnotationClass {"
-            ),
-            file(
-                AnnotationPresentClass.class,
-                "public class AnnotationPresentClass {"
-            ),
-            file(
-                FancyNewlineAnnotationPresentClass.class,
-                "public class FancyNewlineAnnotationPresentClass {"
-            ),
-            file(
-                MixedAnnotationPresentClass.class,
-                "public class MixedAnnotationPresentClass {"
-            ),
-            file(
-                NewlineScopedClass.class,
-                "{"
-            ),
-            file(
-                NearScopeClass.class,
-                "public class NearScopeClass{"
-            ),
-            file(
-                FancyScopeClass.class,
-                "    /* d */{//d"
-            ),
-            file(
-                FancyScopeClass2.class,
-                "public/* d */class/* d */FancyScopeClass2/* d */ /* d */{//d"
-            )
-        );
+            SimpleTrapClass.class,
+            AnnotationClass.class,
+            AnnotationPresentClass.class,
+            FancyNewlineAnnotationPresentClass.class,
+            MixedAnnotationPresentClass.class,
+            NewlineScopedClass.class,
+            NearScopeClass.class,
+            FancyScopeClass.class,
+            FancyScopeClass2.class
+        ).map(ParserFirstClassScopeAreaTest::fileToArgs);
     }
+
+    private static final Pattern EXPECTED_LINE = Pattern.compile("<< (?<cursor>\\d+?)$");
 
     @ParameterizedTest
     @MethodSource("fileProvider")
-    public void testAreaEnd(Path path,
+    public void testFirstClassScope(Path path,
                             Class<?> sampleClass,
-                            String name,
-                            String expectedLastLine) throws IOException {
+                            String name) throws IOException {
         final ImportTypeCollector importCollector = new ImportTypeCollector(new ClassNamed(sampleClass));
+
         parseFile(path, importCollector, line -> {
-                assertEquals(expectedLastLine, line, "Parser didn't stop at the expected line for " + name);
-            },
-            () -> {
-                fail("File is empty or doesn't contains the required top scope needed for this test to run");
+            String textLine = line.getString();
+            Matcher matcher = EXPECTED_LINE.matcher(textLine);
+            if (matcher.find()) {
+                int cursor = Integer.parseInt(matcher.group("cursor"));
+                assertEquals(cursor, line.getCursor(), "Parser didn't stop at the expected cursor for " + name);
+            } else {
+                fail("Parser didn't stop at the expected line, for " + name + "! found: " + textLine);
             }
-        );
+        },
+        () -> {
+            fail("File is empty or doesn't contains the required top scope needed for this test to run");
+        });
     }
 }

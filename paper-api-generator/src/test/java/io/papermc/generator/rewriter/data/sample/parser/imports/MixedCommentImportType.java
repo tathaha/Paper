@@ -3,7 +3,7 @@ package io.papermc.generator.rewriter.data.sample.parser.imports;
 import// discard?
     org /* hi */
         /* hi */ .
-        bukkit /* hi */ /*/
+        bukkit /* hi */ // /*/
         /* hi */      .
 
         NamespacedKey// discard?
