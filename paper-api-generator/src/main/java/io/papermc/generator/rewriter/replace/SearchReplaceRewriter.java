@@ -39,9 +39,6 @@ public class SearchReplaceRewriter implements SourceRewriter {
     @VisibleForTesting
     public static final String GENERATED_COMMENT_FORMAT = "// %s - Generated/%s"; // {0} = PAPER_START_FORMAT|PAPER_END_FORMAT {1} = pattern
 
-    @ApiStatus.Experimental // import collector is probably outdated in that case and new typeName are not handled
-    private static final boolean SEARCH_MARKER_IN_METADATA = Boolean.getBoolean("paper.generator.rewriter.searchMarkerInMetadata");
-
     protected final ClassNamed rewriteClass;
     protected final String pattern;
     private final boolean exactReplacement;
@@ -103,17 +100,15 @@ public class SearchReplaceRewriter implements SourceRewriter {
             StringReader lineIterator = new StringReader(line);
             // collect import to avoid fqn when not needed
             int previousCursor = lineIterator.getCursor();
-            if (importCollector != ImportCollector.NO_OP && !inBody && !line.isEmpty()) {
+            if (importCollector != ImportCollector.NO_OP && !inBody && foundRewriter == null && !line.isEmpty()) {
                 if (lineParser.consumeImports(lineIterator, importCollector)) {
                     inBody = true;
                 }
             }
-            if (SEARCH_MARKER_IN_METADATA) {
-                lineIterator.setCursor(previousCursor);
-            }
+            lineIterator.setCursor(previousCursor);
 
             CommentMarker marker = EMPTY_MARKER;
-            if (!line.isEmpty() && (inBody || SEARCH_MARKER_IN_METADATA)) {
+            if (!line.isEmpty()) {
                 marker = this.searchMarker(lineIterator, foundRewriter == null ? null : indent, remainingPatterns); // change this to patterns if needed to allow two rewrite of the same pattern in the same file
             }
 
@@ -229,7 +224,7 @@ public class SearchReplaceRewriter implements SourceRewriter {
         boolean strict = indent != null;
         final int indentSize;
         if (strict) {
-            if (!lineIterator.trySkipChars(indent.length(), indent.charAt(0))) {
+            if (!indent.isEmpty() && !lineIterator.trySkipChars(indent.length(), indent.charAt(0))) {
                 return EMPTY_MARKER;
             }
             indentSize = indent.length();
