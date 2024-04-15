@@ -192,7 +192,7 @@ public class StringReader implements ImmutableStringReader {
             }
 
             boolean isJavaIdChar = checkStart ? Character.isJavaIdentifierStart(c) : Character.isJavaIdentifierPart(c);
-            if (!isJavaIdChar && (checkStart || c != '.')) {
+            if (!isJavaIdChar && (checkStart || c != ProtoTypeName.IDENTIFIER_SEPARATOR)) {
                 if (hasCleaner && cleaner.test(this)) {
                     if (currentName != null) {
                         currentName.expectIdTerminator();
@@ -212,7 +212,7 @@ public class StringReader implements ImmutableStringReader {
                 currentName = new ProtoTypeName(chars);
             }
             this.cursor += chars.length;
-            checkStart = c == '.';
+            checkStart = c == ProtoTypeName.IDENTIFIER_SEPARATOR;
         }
         return currentName;
     }

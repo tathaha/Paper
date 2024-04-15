@@ -5,7 +5,7 @@ import static io.papermc.generator.rewriter.data.sample.parser.name.one.OneDepth
 
 public class RemoteInnerClassImportType {
     {
-        var b = NonStaticClass.class;
-        var c = StaticClass.class;
+        var a = NonStaticClass.class;
+        var b = StaticClass.class;
     }
 }

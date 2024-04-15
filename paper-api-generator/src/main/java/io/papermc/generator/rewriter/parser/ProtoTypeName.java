@@ -1,8 +1,8 @@
 package io.papermc.generator.rewriter.parser;
 
-import it.unimi.dsi.fastutil.chars.CharSet;
-
 public class ProtoTypeName {
+
+    public static final char IDENTIFIER_SEPARATOR = '.';
 
     private final StringBuilder currentName;
     private char lastChar;
@@ -15,7 +15,7 @@ public class ProtoTypeName {
 
     public boolean append(char... namePart) {
         if (this.idTerminatorExpected) {
-            if (namePart[0] != '.') {
+            if (namePart[0] != IDENTIFIER_SEPARATOR) {
                 return false;
             } else {
                 this.idTerminatorExpected = false;
@@ -40,7 +40,7 @@ public class ProtoTypeName {
     }
 
     public boolean shouldCheckStartIdentifier() {
-        return this.lastChar == '.';
+        return this.lastChar == IDENTIFIER_SEPARATOR;
     }
 
 }

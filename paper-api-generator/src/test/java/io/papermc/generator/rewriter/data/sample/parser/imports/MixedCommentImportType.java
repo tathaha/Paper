@@ -8,8 +8,10 @@ import// discard?
 
         NamespacedKey// discard?
     /* hi */; // multi line import
+;;;;; // will fail in Java 21+ but only in imports!
 
-import// discard?
+;;
+;;;import// discard?
     static// discard?
     org// discard?
         /* hi */    . /* hi */
@@ -24,7 +26,7 @@ import// discard?
     .
     *// discard?
     ; // multi line star import
-
+;;
 public class MixedCommentImportType {
 
 }

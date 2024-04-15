@@ -2,6 +2,7 @@ package io.papermc.generator.rewriter.parser.step.model;
 
 import io.papermc.generator.rewriter.parser.ClosureType;
 import io.papermc.generator.rewriter.parser.LineParser;
+import io.papermc.generator.rewriter.parser.ParserException;
 import io.papermc.generator.rewriter.parser.ProtoTypeName;
 import io.papermc.generator.rewriter.parser.step.IterativeStep;
 import io.papermc.generator.rewriter.parser.step.StepHolder;
@@ -29,7 +30,7 @@ public final class AnnotationSteps implements StepHolder {
         boolean checkStartId = this.name == null || this.name.shouldCheckStartIdentifier();
 
         if (!checkStartId) { // this part is not in the import steps since import always need a semicolon at their end so it's easier to parse them
-            if (!parser.trySkipCommentOrWhitespaceUntil(line, '.')) { // expect a dot for multi line annotation when the previous line doesn't end by a dot itself
+            if (!parser.trySkipCommentOrWhitespaceUntil(line, ProtoTypeName.IDENTIFIER_SEPARATOR)) { // expect a dot for multi line annotation when the previous line doesn't end by a dot itself
                 return false;
             }
         } else {
@@ -62,10 +63,18 @@ public final class AnnotationSteps implements StepHolder {
         String name = this.name.getFinalName();
 
         if (name.isEmpty()) {
-            throw new IllegalStateException("Invalid java source, annotation name is empty!");
+            throw new ParserException("Invalid java source, annotation name is empty", line);
         }
-        if (!NamingManager.isValidName(name, keyword -> keyword.equals("interface"))) { // keyword are checked after to simplify things
-            throw new IllegalStateException("Invalid java source, annotation name contains a reserved keyword or a syntax error!");
+
+        if (name.equals("interface")) {
+            // skip this one: annotation definition (@interface)
+            // note: this can't be skipped before (i.e. in canStart) since space/comments are allowed between '@' and 'interface'
+            parser.getSteps().clearRemaining();
+            return;
+        }
+
+        if (!NamingManager.isValidName(name)) { // keyword are checked after to simplify things
+            throw new ParserException("Invalid java source, annotation name contains a reserved keyword or a syntax error", line);
         }
     }
 

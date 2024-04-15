@@ -2,6 +2,7 @@ package io.papermc.generator.rewriter.parser.step.model;
 
 import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.rewriter.parser.LineParser;
+import io.papermc.generator.rewriter.parser.ParserException;
 import io.papermc.generator.rewriter.parser.ProtoTypeName;
 import io.papermc.generator.rewriter.parser.step.IterativeStep;
 import io.papermc.generator.rewriter.parser.step.StepHolder;
@@ -16,6 +17,9 @@ public final class ImportSteps implements StepHolder {
     public static boolean canStart(StringReader line) {
         return line.trySkipString("import");
     }
+
+    private static final char IMPORT_ON_DEMAND_IDENTIFIER = '*';
+    private static final char STATEMENT_TERMINATOR = ';';
 
     private final IterativeStep enforceSpaceStep = IterativeStep.create(this::enforceSpace);
     private final IterativeStep skipUntilSemicolonAfterStarStep = IterativeStep.createUntil(this::skipUntilSemicolonAfterStar);
@@ -58,10 +62,10 @@ public final class ImportSteps implements StepHolder {
     public void collectImport(StringReader line, LineParser parser) {
         String name = this.name.getFinalName();
         if (name.isEmpty()) {
-            throw new IllegalStateException("Invalid java source, import type name is empty!");
+            throw new ParserException("Invalid java source, import type name is empty", line);
         }
         if (!NamingManager.isValidName(name)) { // keyword are checked after to simplify things
-            throw new IllegalStateException("Invalid java source, import type name contains a reserved keyword or a syntax error!");
+            throw new ParserException("Invalid java source, import type name contains a reserved keyword or a syntax error", line);
         }
 
         if (this.isStatic) {
@@ -81,14 +85,14 @@ public final class ImportSteps implements StepHolder {
             line.setCursor(line.getTotalLength());
         }
 
-        if (line.canRead() && line.peek() == ';') {
-            this.name.append('*');
+        if (line.canRead() && line.peek() == STATEMENT_TERMINATOR) {
+            this.name.append(IMPORT_ON_DEMAND_IDENTIFIER);
             line.skip();
             return false;
         }
 
         if (line.canRead()) {
-            throw new IllegalStateException("Invalid java source, found a '*' char in the middle of import type name!");
+            throw new ParserException("Invalid java source, found a '*' char in the middle of import type name", line);
         }
 
         return true;
@@ -100,10 +104,14 @@ public final class ImportSteps implements StepHolder {
             return true;
         }
 
-        this.name = line.getPartNameUntil(';', parser::skipCommentOrWhitespace, this.name);
+        this.name = line.getPartNameUntil(STATEMENT_TERMINATOR, parser::skipCommentOrWhitespace, this.name);
 
         if (line.canRead()) {
-            if (this.name.getLastChar() == '.' && line.peek() == '*') {
+            if (line.peek() == IMPORT_ON_DEMAND_IDENTIFIER) {
+                if (this.name == null || this.name.getLastChar() != ProtoTypeName.IDENTIFIER_SEPARATOR) {
+                    throw new ParserException("Invalid java source, expected a dot before a '*' for import on demand", line);
+                }
+
                 line.skip();
                 parser.getSteps().addPriority(this.skipUntilSemicolonAfterStarStep);
                 return false;

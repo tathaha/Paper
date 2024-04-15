@@ -4,6 +4,7 @@ import com.google.common.base.CaseFormat;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import io.papermc.generator.rewriter.parser.ProtoTypeName;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 import javax.lang.model.SourceVersion;
@@ -83,20 +84,13 @@ public class NamingManager {
         return name;
     }
 
-    public static final Pattern FULLY_QUALIFIED_NAME_SEPARATOR = Pattern.compile(".", Pattern.LITERAL);
+    public static final Pattern NAME_SEPARATOR = Pattern.compile(String.valueOf(ProtoTypeName.IDENTIFIER_SEPARATOR), Pattern.LITERAL);
 
-    public static boolean isValidName(String typeName) {
-        return isValidName(typeName, keyword -> false);
-    }
-
-    // check only syntax error and keyword but if each id are valid identifier
-    public static boolean isValidName(String typeName, Predicate<String> validKeyword) {
-        for (String part : FULLY_QUALIFIED_NAME_SEPARATOR.split(typeName)) {
-            if (part.isEmpty()) {
+    // check only syntax error and keywords but not if each part are valid identifier
+    public static boolean isValidName(String name) {
+        for (String part : NAME_SEPARATOR.split(name)) {
+            if (part.isEmpty() || SourceVersion.isKeyword(part)) {
                 return false;
-            }
-            if (SourceVersion.isKeyword(part)) {
-                return validKeyword.test(part);
             }
         }
         return true;
