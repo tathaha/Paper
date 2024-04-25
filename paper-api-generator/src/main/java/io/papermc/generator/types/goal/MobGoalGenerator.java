@@ -194,7 +194,7 @@ public class MobGoalGenerator extends SimpleGenerator {
             classes = scanResult.getSubclasses(Goal.class.getName()).loadClasses(Goal.class);
         }
 
-        List<GoalKey<Mob>> vanillaNames = classes.stream()
+        List<GoalKey<Mob>> vanillaGoals = classes.stream()
             .filter(clazz -> !java.lang.reflect.Modifier.isAbstract(clazz.getModifiers()))
             .filter(clazz -> !clazz.isAnonymousClass() || ClassHelper.getRootClass(clazz) != GoalSelector.class)
             .filter(clazz -> !WrappedGoal.class.equals(clazz)) // TODO - properly fix
@@ -204,8 +204,7 @@ public class MobGoalGenerator extends SimpleGenerator {
             )
             .toList();
 
-
-        for (final GoalKey<?> goalKey : vanillaNames) {
+        for (final GoalKey<?> goalKey : vanillaGoals) {
             String keyPath = goalKey.getNamespacedKey().getKey();
             String fieldName = Formatting.formatKeyAsField(keyPath);
 
