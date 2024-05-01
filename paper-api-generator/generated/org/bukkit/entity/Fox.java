@@ -90,7 +90,7 @@ public interface Fox extends Animals, Sittable {
      */
     public enum Type {
         // Paper start - Generated/FoxType
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         RED,
         SNOW;
         // Paper end - Generated/FoxType

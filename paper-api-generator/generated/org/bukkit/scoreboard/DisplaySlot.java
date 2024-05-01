@@ -7,7 +7,7 @@ import net.kyori.adventure.text.format.NamedTextColor; // Paper
 public enum DisplaySlot {
     // Paper start
     // Paper start - Generated/DisplaySlot
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     PLAYER_LIST("list"),
     SIDEBAR("sidebar"),
     BELOW_NAME("below_name"),

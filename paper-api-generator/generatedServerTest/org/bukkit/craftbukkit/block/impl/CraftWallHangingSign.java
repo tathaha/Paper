@@ -11,7 +11,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.WallHangingSign;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftWallHangingSign extends CraftBlockData implements WallHangingSign {
     private static final DirectionProperty FACING = WallHangingSignBlock.FACING;

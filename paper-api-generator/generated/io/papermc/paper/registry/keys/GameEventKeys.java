@@ -446,62 +446,6 @@ public final class GameEventKeys {
      */
     public static final TypedKey<GameEvent> UNEQUIP = create(key("unequip"));
 
-    /**
-     * {@code minecraft:sculk_sensor_tendrils_clicking}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> SCULK_SENSOR_TENDRILS_CLICKING = create(key("sculk_sensor_tendrils_clicking"));
-
-    /**
-     * {@code minecraft:shear}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> SHEAR = create(key("shear"));
-
-    /**
-     * {@code minecraft:shriek}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> SHRIEK = create(key("shriek"));
-
-    /**
-     * {@code minecraft:splash}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> SPLASH = create(key("splash"));
-
-    /**
-     * {@code minecraft:step}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> STEP = create(key("step"));
-
-    /**
-     * {@code minecraft:swim}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> SWIM = create(key("swim"));
-
-    /**
-     * {@code minecraft:teleport}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> TELEPORT = create(key("teleport"));
-
-    /**
-     * {@code minecraft:unequip}
-     *
-     * @apiNote This field is version-dependant and may be removed in future Minecraft versions
-     */
-    public static final TypedKey<GameEvent> UNEQUIP = create(key("unequip"));
-
     private GameEventKeys() {
     }
 

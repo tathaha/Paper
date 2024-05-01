@@ -13,6 +13,7 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
+import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
 import io.papermc.paper.registry.RegistryKey;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -21,6 +22,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.flag.FeatureElement;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.MinecraftExperimental;
@@ -109,9 +111,9 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
             } else {
                 fieldBuilder.initializer("$N($S)", fetchMethod.build(), pathKey);
             }
-            @Nullable String experimentalValue = this.getExperimentalValue(reference);
-            if (experimentalValue != null) {
-                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(experimentalValue));
+            @Nullable FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
+            if (requiredFeatures != null) {
+                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(requiredFeatures));
             }
 
             typeBuilder.addField(fieldBuilder.build());
@@ -129,12 +131,12 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
     public abstract void addExtras(TypeSpec.Builder builder);
 
     @Nullable
-    public String getExperimentalValue(Holder.Reference<T> reference) {
+    public FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
         if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return Formatting.formatFeatureFlagSet(element.requiredFeatures());
+            return element.requiredFeatures();
         }
         if (this.experimentalKeys.get().contains(reference.key())) {
-            return Formatting.formatFeatureFlag(FeatureFlags.UPDATE_1_21);
+            return FlagSets.NEXT_UPDATE.get();
         }
         return null;
     }

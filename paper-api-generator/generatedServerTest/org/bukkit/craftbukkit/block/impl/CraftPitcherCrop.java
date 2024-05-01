@@ -10,7 +10,7 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import org.bukkit.block.data.type.PitcherCrop;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftPitcherCrop extends CraftBlockData implements PitcherCrop {
     private static final IntegerProperty AGE = PitcherCropBlock.AGE;

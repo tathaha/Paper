@@ -168,7 +168,7 @@ public interface Villager extends AbstractVillager {
     public enum Type implements Keyed {
 
         // Paper start - Generated/VillagerType
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         DESERT,
         JUNGLE,
         PLAINS,

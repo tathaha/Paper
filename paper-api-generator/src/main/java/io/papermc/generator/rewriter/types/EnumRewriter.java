@@ -56,12 +56,17 @@ public abstract class EnumRewriter<T, A extends Enum<A>> extends SearchReplaceRe
 
     @Override
     protected void replaceLine(final SearchMetadata metadata, final StringBuilder builder) {
-        appendEnumValue(builder, metadata, metadata.replacedContent().stripTrailing().endsWith(";"));
+        // todo (softspoon, after cleanup): appendEnumValue(builder, metadata, metadata.replacedContent().stripTrailing().endsWith(";"));
+        appendEnumValue(builder, metadata, metadata.replacedContent().stripTrailing().lastIndexOf(';') != -1);
     }
 
     @Override
     protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
-        boolean reachEnd = metadata.replacedContent().stripTrailing().endsWith(";");
+        // todo (softspoon, after cleanup): boolean reachEnd = metadata.replacedContent().stripTrailing().endsWith(";");
+        String replacedContent = metadata.replacedContent().stripTrailing(); // ignore last new line char
+        String lastLine = replacedContent.substring(replacedContent.lastIndexOf('\n') + 1);
+        boolean reachEnd = lastLine.lastIndexOf(';') != -1;
+        // this is super lenient but shouldn't really appear in the api comments/string anyway (handle trailing comments like in ItemRarity after semi colon)
 
         while (this.values.hasNext()) {
             appendEnumValue(builder, metadata, reachEnd);

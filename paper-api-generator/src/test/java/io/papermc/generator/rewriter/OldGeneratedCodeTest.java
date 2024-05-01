@@ -21,7 +21,7 @@ import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT
 import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT_SIZE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Disabled
+@Disabled("This test should run at a different lifecycle") // todo
 public class OldGeneratedCodeTest {
 
     private static final String API_CONTAINER = System.getProperty("paper.generator.rewriter.container.api");
@@ -42,7 +42,7 @@ public class OldGeneratedCodeTest {
             }
 
             Path path = Path.of(container, srt.getRelativeFilePath());
-            if (Files.notExists(path)) { // todo remove after the repo change
+            if (Files.notExists(path)) { // todo (softspoon): remove after
                 continue;
             }
             try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {

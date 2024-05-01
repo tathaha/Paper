@@ -13,7 +13,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.Chest;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftChest extends CraftBlockData implements Chest {
     private static final DirectionProperty FACING = ChestBlock.FACING;

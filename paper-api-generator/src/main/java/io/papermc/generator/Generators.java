@@ -15,7 +15,7 @@ import io.papermc.generator.rewriter.types.simple.MaterialRewriter;
 import io.papermc.generator.rewriter.types.simple.MemoryKeyRewriter;
 import io.papermc.generator.rewriter.types.simple.PatternTypeRewriter;
 import io.papermc.generator.rewriter.types.simple.StatisticRewriter;
-import io.papermc.generator.utils.experimental.ExperimentalSounds;
+import io.papermc.generator.utils.experimental.ExperimentalHelper;
 import io.papermc.generator.types.registry.GeneratedKeyType;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.types.goal.MobGoalGenerator;
@@ -31,6 +31,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.decoration.PaintingVariant;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.Rarity;
 import org.bukkit.Art;
 import org.bukkit.Fluid;
@@ -43,7 +44,6 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.block.Biome;
 import org.bukkit.damage.DamageType;
 import org.bukkit.enchantments.Enchantment;
-import org.bukkit.entity.Wolf;
 import org.bukkit.entity.Boat;
 import org.bukkit.entity.Cat;
 import org.bukkit.entity.Fox;
@@ -52,6 +52,7 @@ import org.bukkit.entity.Panda;
 import org.bukkit.entity.Sniffer;
 import org.bukkit.entity.TropicalFish;
 import org.bukkit.entity.Villager;
+import org.bukkit.entity.Wolf;
 import org.bukkit.generator.structure.Structure;
 import org.bukkit.generator.structure.StructureType;
 import org.bukkit.inventory.ItemRarity;
@@ -94,12 +95,12 @@ public interface Generators {
         new EnumRegistryRewriter<>(Fluid.class, Registries.FLUID, "Fluid", false),
         new EnumRegistryRewriter<>(Sound.class, Registries.SOUND_EVENT, "Sound", true) {
             @Override
-            protected String getExperimentalValue(Holder.Reference<SoundEvent> reference) {
-                String result = super.getExperimentalValue(reference);
+            protected FeatureFlagSet getRequiredFeatures(Holder.Reference<SoundEvent> reference) {
+                FeatureFlagSet result = super.getRequiredFeatures(reference);
                 if (result != null) {
                     return result;
                 }
-                return ExperimentalSounds.findExperimentalValue(reference.key().location());
+                return ExperimentalHelper.findSoundRelatedFeatureFlags(reference.key().location());
             }
         },
         new EnumRegistryRewriter<>(Biome.class, Registries.BIOME, "Biome", false),

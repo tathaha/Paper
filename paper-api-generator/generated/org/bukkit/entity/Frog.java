@@ -47,7 +47,7 @@ public interface Frog extends Animals {
     public enum Variant implements Keyed {
 
         // Paper start - Generated/FrogVariant
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         COLD,
         TEMPERATE,
         WARM;

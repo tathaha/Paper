@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public enum Art implements Keyed {
     // Paper start - Generated/Art
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     ALBAN(2, 1, 1),
     AZTEC(1, 1, 1),
     AZTEC2(3, 1, 1),

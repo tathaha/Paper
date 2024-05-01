@@ -14,7 +14,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.SculkVein;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftSculkVein extends CraftBlockData implements SculkVein {
     private static final BooleanProperty WATERLOGGED = BlockStateProperties.WATERLOGGED;

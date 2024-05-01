@@ -3,13 +3,12 @@ package io.papermc.generator.rewriter.utils;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.utils.ClassHelper;
-import io.papermc.generator.utils.Formatting;
+import io.papermc.generator.utils.experimental.ExperimentalHelper;
 import net.minecraft.world.flag.FeatureFlag;
+import net.minecraft.world.flag.FeatureFlagSet;
 import org.bukkit.MinecraftExperimental;
 import org.jetbrains.annotations.ApiStatus;
 import java.lang.annotation.Annotation;
-
-import static io.papermc.generator.utils.Formatting.quoted;
 
 public final class Annotations {
 
@@ -37,12 +36,15 @@ public final class Annotations {
         return "%s(%s)".formatted(annotation, value);
     }
 
-    public static void experimentalAnnotations(final StringBuilder builder, final SearchMetadata metadata, final FeatureFlag featureFlag) {
-        experimentalAnnotations(builder, metadata, Formatting.formatFeatureFlag(featureFlag));
+    public static void experimentalAnnotations(final StringBuilder builder, final SearchMetadata metadata, final FeatureFlagSet featureFlags) {
+        experimentalAnnotations(builder, metadata, ExperimentalHelper.onlyOneFlag(featureFlags));
     }
 
-    public static void experimentalAnnotations(final StringBuilder builder, final SearchMetadata metadata, final String value) {
-        builder.append(metadata.indent()).append(annotation(MinecraftExperimental.class, metadata.importCollector(), quoted(value))).append('\n');
+    public static void experimentalAnnotations(final StringBuilder builder, final SearchMetadata metadata, final FeatureFlag featureFlag) {
+        builder.append(metadata.indent()).append(annotation(MinecraftExperimental.class, metadata.importCollector(), "%s.%s".formatted(
+            metadata.importCollector().getShortName(MinecraftExperimental.Requires.class), ExperimentalHelper.toBukkitAnnotationMember(featureFlag).name()
+        ))).append('\n');
+
         builder.append(metadata.indent()).append(annotation(ApiStatus.Experimental.class, metadata.importCollector())).append('\n');
     }
 

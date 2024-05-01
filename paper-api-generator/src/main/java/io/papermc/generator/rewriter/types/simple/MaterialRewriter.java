@@ -6,6 +6,7 @@ import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.SwitchRewriter;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.Formatting;
+import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;
@@ -14,7 +15,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.flag.FeatureFlags;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.BundleItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -117,11 +118,11 @@ public class MaterialRewriter {
         }
 
         @Override
-        protected String getExperimentalValue(Holder.Reference<Item> reference) {
+        protected FeatureFlagSet getRequiredFeatures(Holder.Reference<Item> reference) {
             if (reference.value() instanceof BundleItem) {
-                return Formatting.formatFeatureFlag(FeatureFlags.BUNDLE); // special case since the item is not locked itself just in the creative menu
+                return FlagSets.BUNDLE.get(); // special case since the item is not locked itself just in the creative menu
             } else {
-                return super.getExperimentalValue(reference);
+                return super.getRequiredFeatures(reference);
             }
         }
     }

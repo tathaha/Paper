@@ -1,29 +1,39 @@
 package org.bukkit.attribute;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Translatable;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * Types of attributes which may be present on an {@link Attributable}.
  */
-public enum Attribute implements Keyed, net.kyori.adventure.translation.Translatable { // Paper - Adventure translations
+public enum Attribute implements Keyed, Translatable, net.kyori.adventure.translation.Translatable { // Paper - Adventure translations
 
     // Paper start - Generated/Attribute
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     GENERIC_ARMOR("generic.armor"),
     GENERIC_ARMOR_TOUGHNESS("generic.armor_toughness"),
     GENERIC_ATTACK_DAMAGE("generic.attack_damage"),
     GENERIC_ATTACK_KNOCKBACK("generic.attack_knockback"),
     GENERIC_ATTACK_SPEED("generic.attack_speed"),
+    GENERIC_FALL_DAMAGE_MULTIPLIER("generic.fall_damage_multiplier"),
     GENERIC_FLYING_SPEED("generic.flying_speed"),
     GENERIC_FOLLOW_RANGE("generic.follow_range"),
+    GENERIC_GRAVITY("generic.gravity"),
+    GENERIC_JUMP_STRENGTH("generic.jump_strength"),
     GENERIC_KNOCKBACK_RESISTANCE("generic.knockback_resistance"),
     GENERIC_LUCK("generic.luck"),
     GENERIC_MAX_ABSORPTION("generic.max_absorption"),
     GENERIC_MAX_HEALTH("generic.max_health"),
     GENERIC_MOVEMENT_SPEED("generic.movement_speed"),
-    HORSE_JUMP_STRENGTH("horse.jump_strength"),
+    GENERIC_SAFE_FALL_DISTANCE("generic.safe_fall_distance"),
+    GENERIC_SCALE("generic.scale"),
+    GENERIC_STEP_HEIGHT("generic.step_height"),
+    PLAYER_BLOCK_BREAK_SPEED("player.block_break_speed"),
+    PLAYER_BLOCK_INTERACTION_RANGE("player.block_interaction_range"),
+    PLAYER_ENTITY_INTERACTION_RANGE("player.entity_interaction_range"),
     ZOMBIE_SPAWN_REINFORCEMENTS("zombie.spawn_reinforcements");
     // Paper end - Generated/Attribute
 
@@ -38,10 +48,18 @@ public enum Attribute implements Keyed, net.kyori.adventure.translation.Translat
     public NamespacedKey getKey() {
         return key;
     }
+
+    @NotNull
+    @Override
+    public String getTranslationKey() {
+        return Bukkit.getUnsafe().getTranslationKey(this);
+    }
+
     // Paper start
+    @SuppressWarnings("deprecation")
     @Override
     public @NotNull String translationKey() {
-        return "attribute.name." + this.key.getKey();
+        return Bukkit.getUnsafe().getTranslationKey(this);
     }
     // Paper end
 }

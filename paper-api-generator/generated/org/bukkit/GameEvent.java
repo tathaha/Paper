@@ -13,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 public abstract class GameEvent implements Keyed {
 
     // Paper start - Generated/GameEvent
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     public static final GameEvent BLOCK_ACTIVATE = getEvent("block_activate");
 
     public static final GameEvent BLOCK_ATTACH = getEvent("block_attach");

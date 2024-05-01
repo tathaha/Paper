@@ -10,7 +10,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public enum Biome implements Keyed, net.kyori.adventure.translation.Translatable { // Paper
     // Paper start - Generated/Biome
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     BADLANDS,
     BAMBOO_JUNGLE,
     BASALT_DELTAS,

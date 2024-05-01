@@ -47,7 +47,7 @@ public final class MemoryKey<T> implements Keyed {
     private static final Map<NamespacedKey, MemoryKey> MEMORY_KEYS = new HashMap<>();
     //
     // Paper start - Generated/MemoryKey
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     public static final MemoryKey<Boolean> ADMIRING_DISABLED = new MemoryKey<>(NamespacedKey.minecraft("admiring_disabled"), Boolean.class);
 
     public static final MemoryKey<Boolean> ADMIRING_ITEM = new MemoryKey<>(NamespacedKey.minecraft("admiring_item"), Boolean.class);
@@ -61,6 +61,8 @@ public final class MemoryKey<T> implements Keyed {
     public static final MemoryKey<Long> CANT_REACH_WALK_TARGET_SINCE = new MemoryKey<>(NamespacedKey.minecraft("cant_reach_walk_target_since"), Long.class);
 
     public static final MemoryKey<Boolean> DANCING = new MemoryKey<>(NamespacedKey.minecraft("dancing"), Boolean.class);
+
+    public static final MemoryKey<Boolean> DANGER_DETECTED_RECENTLY = new MemoryKey<>(NamespacedKey.minecraft("danger_detected_recently"), Boolean.class);
 
     public static final MemoryKey<Boolean> DISABLE_WALK_TO_ADMIRE_ITEM = new MemoryKey<>(NamespacedKey.minecraft("disable_walk_to_admire_item"), Boolean.class);
 
@@ -128,8 +130,8 @@ public final class MemoryKey<T> implements Keyed {
 
     // Paper end - Generated/MemoryKey
     /**
-     * @deprecated this constant use the wrong generic type, the sniffer now store different positions
-     * from possibly different worlds. Use the relevant methods in the {@link org.bukkit.entity.Sniffer} directly
+     * @deprecated this constant uses the wrong generic type, the sniffer now stores different positions
+     * from possibly different worlds. Use the relevant methods in {@link org.bukkit.entity.Sniffer} directly
      * for now.
      */
     @Deprecated // Paper

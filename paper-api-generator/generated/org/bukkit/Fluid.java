@@ -9,7 +9,7 @@ import org.jetbrains.annotations.NotNull;
 public enum Fluid implements Keyed {
 
     // Paper start - Generated/Fluid
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     EMPTY,
     FLOWING_LAVA,
     FLOWING_WATER,

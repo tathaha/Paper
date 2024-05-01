@@ -21,7 +21,7 @@ import org.jetbrains.annotations.NotNull;
 public interface DamageType extends Keyed, Translatable {
 
     // Paper start - Generated/DamageType
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     DamageType ARROW = getDamageType("arrow");
 
     DamageType BAD_RESPAWN_POINT = getDamageType("bad_respawn_point");
@@ -90,6 +90,8 @@ public interface DamageType extends Keyed, Translatable {
 
     DamageType SONIC_BOOM = getDamageType("sonic_boom");
 
+    DamageType SPIT = getDamageType("spit");
+
     DamageType STALAGMITE = getDamageType("stalagmite");
 
     DamageType STARVE = getDamageType("starve");
@@ -105,6 +107,10 @@ public interface DamageType extends Keyed, Translatable {
     DamageType TRIDENT = getDamageType("trident");
 
     DamageType UNATTRIBUTED_FIREBALL = getDamageType("unattributed_fireball");
+
+    @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    DamageType WIND_CHARGE = getDamageType("wind_charge");
 
     DamageType WITHER = getDamageType("wither");
 

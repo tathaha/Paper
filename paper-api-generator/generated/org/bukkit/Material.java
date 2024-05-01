@@ -7,6 +7,7 @@ import java.lang.reflect.Constructor;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
+import org.bukkit.MinecraftExperimental.Requires;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.block.Block;
@@ -111,11 +112,14 @@ import org.bukkit.block.data.type.TrialSpawner;
 import org.bukkit.block.data.type.Tripwire;
 import org.bukkit.block.data.type.TripwireHook;
 import org.bukkit.block.data.type.TurtleEgg;
+import org.bukkit.block.data.type.Vault;
 import org.bukkit.block.data.type.Wall;
 import org.bukkit.block.data.type.WallHangingSign;
 import org.bukkit.block.data.type.WallSign;
 import org.bukkit.inventory.CreativeCategory;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.material.MaterialData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -127,7 +131,7 @@ import org.jetbrains.annotations.Nullable;
 public enum Material implements Keyed, Translatable, net.kyori.adventure.translation.Translatable { // Paper
     //<editor-fold desc="Materials" defaultstate="collapsed">
     // Paper start - Generated/Items
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     ACACIA_BOAT(-1, 1),
     ACACIA_CHEST_BOAT(-1, 1),
     AIR(-1, 0),
@@ -136,6 +140,8 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     ANGLER_POTTERY_SHERD(-1),
     APPLE(-1),
     ARCHER_POTTERY_SHERD(-1),
+    ARMADILLO_SCUTE(-1),
+    ARMADILLO_SPAWN_EGG(-1),
     ARMOR_STAND(-1, 16),
     ARMS_UP_POTTERY_SHERD(-1),
     ARROW(-1),
@@ -158,13 +164,22 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     BLAZE_ROD(-1),
     BLAZE_SPAWN_EGG(-1),
     BLUE_DYE(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    BOGGED_SPAWN_EGG(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    BOLT_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     BONE(-1),
     BONE_MEAL(-1),
     BOOK(-1),
     BOW(-1, 1, 384),
     BOWL(-1),
     BREAD(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    BREEZE_ROD(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     BREEZE_SPAWN_EGG(-1),
     BREWER_POTTERY_SHERD(-1),
@@ -172,7 +187,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     BROWN_DYE(-1),
     BRUSH(-1, 1, 64),
     BUCKET(-1, 16),
-    @MinecraftExperimental("bundle feature")
+    @MinecraftExperimental(Requires.BUNDLE)
     @org.jetbrains.annotations.ApiStatus.Experimental
     BUNDLE(-1, 1),
     BURN_POTTERY_SHERD(-1),
@@ -231,74 +246,71 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     DIAMOND_PICKAXE(-1, 1, 1561),
     DIAMOND_SHOVEL(-1, 1, 1561),
     DIAMOND_SWORD(-1, 1, 1561),
+    DISC_FRAGMENT_5(-1),
     DOLPHIN_SPAWN_EGG(-1),
     DONKEY_SPAWN_EGG(-1),
+    DRAGON_BREATH(-1),
+    DRIED_KELP(-1),
     DROWNED_SPAWN_EGG(-1),
     DUNE_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     ECHO_SHARD(-1),
-    ELDER_GUARDIAN_SPAWN_EGG(-1),
-    ENDER_DRAGON_SPAWN_EGG(-1),
-    ENDERMAN_SPAWN_EGG(-1),
-    ENDERMITE_SPAWN_EGG(-1),
-    EVOKER_SPAWN_EGG(-1),
-    EXPERIENCE_BOTTLE(-1),
-    FIRE_CHARGE(-1),
-    FIREWORK_ROCKET(-1),
-    FOX_SPAWN_EGG(-1),
-    FROG_SPAWN_EGG(-1),
-    GHAST_SPAWN_EGG(-1),
-    GLOW_ITEM_FRAME(-1),
-    GLOW_SQUID_SPAWN_EGG(-1),
-    GOAT_SPAWN_EGG(-1),
-    GOLDEN_CARROT(-1),
-    GUARDIAN_SPAWN_EGG(-1),
-    HOGLIN_SPAWN_EGG(-1),
-    HORSE_SPAWN_EGG(-1),
-    HUSK_SPAWN_EGG(-1),
-    IRON_GOLEM_SPAWN_EGG(-1),
-    ITEM_FRAME(-1),
-    LLAMA_SPAWN_EGG(-1),
-    MAGMA_CUBE_SPAWN_EGG(-1),
-    MAP(-1),
-    MOOSHROOM_SPAWN_EGG(-1),
-    MULE_SPAWN_EGG(-1),
-    MUSIC_DISC_5(-1, 1),
-    DISC_FRAGMENT_5(-1),
-    DRAGON_BREATH(-1),
-    DRIED_KELP(-1),
     EGG(-1, 16),
+    ELDER_GUARDIAN_SPAWN_EGG(-1),
     ELYTRA(-1, 1, 432),
     EMERALD(-1),
     ENCHANTED_BOOK(-1, 1),
     ENCHANTED_GOLDEN_APPLE(-1),
     END_CRYSTAL(-1),
+    ENDER_DRAGON_SPAWN_EGG(-1),
     ENDER_EYE(-1),
     ENDER_PEARL(-1, 16),
+    ENDERMAN_SPAWN_EGG(-1),
+    ENDERMITE_SPAWN_EGG(-1),
+    EVOKER_SPAWN_EGG(-1),
+    EXPERIENCE_BOTTLE(-1),
     EXPLORER_POTTERY_SHERD(-1),
     EYE_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     FEATHER(-1),
     FERMENTED_SPIDER_EYE(-1),
     FILLED_MAP(-1),
+    FIRE_CHARGE(-1),
+    FIREWORK_ROCKET(-1),
     FIREWORK_STAR(-1),
     FISHING_ROD(-1, 1, 64),
     FLINT(-1),
     FLINT_AND_STEEL(-1, 1, 64),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    FLOW_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    FLOW_BANNER_PATTERN(-1, 1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    FLOW_POTTERY_SHERD(-1),
     FLOWER_BANNER_PATTERN(-1, 1),
+    FOX_SPAWN_EGG(-1),
     FRIEND_POTTERY_SHERD(-1),
+    FROG_SPAWN_EGG(-1),
     FURNACE_MINECART(-1, 1),
+    GHAST_SPAWN_EGG(-1),
     GHAST_TEAR(-1),
     GLASS_BOTTLE(-1),
     GLISTERING_MELON_SLICE(-1),
     GLOBE_BANNER_PATTERN(-1, 1),
     GLOW_BERRIES(-1),
     GLOW_INK_SAC(-1),
+    GLOW_ITEM_FRAME(-1),
+    GLOW_SQUID_SPAWN_EGG(-1),
     GLOWSTONE_DUST(-1),
     GOAT_HORN(-1, 1),
+    GOAT_SPAWN_EGG(-1),
     GOLD_INGOT(-1),
     GOLD_NUGGET(-1),
     GOLDEN_APPLE(-1),
     GOLDEN_AXE(-1, 1, 32),
     GOLDEN_BOOTS(-1, 1, 91),
+    GOLDEN_CARROT(-1),
     GOLDEN_CHESTPLATE(-1, 1, 112),
     GOLDEN_HELMET(-1, 1, 77),
     GOLDEN_HOE(-1, 1, 32),
@@ -309,19 +321,30 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     GOLDEN_SWORD(-1, 1, 32),
     GRAY_DYE(-1),
     GREEN_DYE(-1),
+    GUARDIAN_SPAWN_EGG(-1),
     GUNPOWDER(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    GUSTER_BANNER_PATTERN(-1, 1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    GUSTER_POTTERY_SHERD(-1),
     HEART_OF_THE_SEA(-1),
     HEART_POTTERY_SHERD(-1),
     HEARTBREAK_POTTERY_SHERD(-1),
+    HOGLIN_SPAWN_EGG(-1),
     HONEY_BOTTLE(-1, 16),
     HONEYCOMB(-1),
     HOPPER_MINECART(-1, 1),
+    HORSE_SPAWN_EGG(-1),
     HOST_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     HOWL_POTTERY_SHERD(-1),
+    HUSK_SPAWN_EGG(-1),
     INK_SAC(-1),
     IRON_AXE(-1, 1, 250),
     IRON_BOOTS(-1, 1, 195),
     IRON_CHESTPLATE(-1, 1, 240),
+    IRON_GOLEM_SPAWN_EGG(-1),
     IRON_HELMET(-1, 1, 165),
     IRON_HOE(-1, 1, 250),
     IRON_HORSE_ARMOR(-1, 1),
@@ -331,6 +354,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     IRON_PICKAXE(-1, 1, 250),
     IRON_SHOVEL(-1, 1, 250),
     IRON_SWORD(-1, 1, 250),
+    ITEM_FRAME(-1),
     JUNGLE_BOAT(-1, 1),
     JUNGLE_CHEST_BOAT(-1, 1),
     KNOWLEDGE_BOOK(-1, 1),
@@ -347,18 +371,27 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     LIGHT_GRAY_DYE(-1),
     LIME_DYE(-1),
     LINGERING_POTION(-1, 1),
+    LLAMA_SPAWN_EGG(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    MACE(-1, 1, 250),
     MAGENTA_DYE(-1),
     MAGMA_CREAM(-1),
+    MAGMA_CUBE_SPAWN_EGG(-1),
     MANGROVE_BOAT(-1, 1),
     MANGROVE_CHEST_BOAT(-1, 1),
+    MAP(-1),
     MELON_SEEDS(-1),
     MELON_SLICE(-1),
     MILK_BUCKET(-1, 1),
     MINECART(-1, 1),
     MINER_POTTERY_SHERD(-1),
     MOJANG_BANNER_PATTERN(-1, 1),
+    MOOSHROOM_SPAWN_EGG(-1),
     MOURNER_POTTERY_SHERD(-1),
+    MULE_SPAWN_EGG(-1),
     MUSHROOM_STEW(-1, 1),
+    MUSIC_DISC_5(-1, 1),
     MUSIC_DISC_11(-1, 1),
     MUSIC_DISC_13(-1, 1),
     MUSIC_DISC_BLOCKS(-1, 1),
@@ -394,6 +427,12 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     OAK_BOAT(-1, 1),
     OAK_CHEST_BOAT(-1, 1),
     OCELOT_SPAWN_EGG(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    OMINOUS_BOTTLE(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    OMINOUS_TRIAL_KEY(-1),
     ORANGE_DYE(-1),
     PAINTING(-1),
     PANDA_SPAWN_EGG(-1),
@@ -445,7 +484,9 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     SALMON(-1),
     SALMON_BUCKET(-1, 1),
     SALMON_SPAWN_EGG(-1),
-    SCUTE(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    SCRAPE_POTTERY_SHERD(-1),
     SENTRY_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     SHAPER_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     SHEAF_POTTERY_SHERD(-1),
@@ -497,7 +538,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     TORCHFLOWER_SEEDS(-1),
     TOTEM_OF_UNDYING(-1, 1),
     TRADER_LLAMA_SPAWN_EGG(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TRIAL_KEY(-1),
     TRIDENT(-1, 1, 250),
@@ -505,6 +546,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     TROPICAL_FISH_BUCKET(-1, 1),
     TROPICAL_FISH_SPAWN_EGG(-1),
     TURTLE_HELMET(-1, 1, 275),
+    TURTLE_SCUTE(-1),
     TURTLE_SPAWN_EGG(-1),
     VEX_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
     VEX_SPAWN_EGG(-1),
@@ -519,9 +561,13 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     WHEAT_SEEDS(-1),
     WHITE_DYE(-1),
     WILD_ARMOR_TRIM_SMITHING_TEMPLATE(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    WIND_CHARGE(-1),
     WITCH_SPAWN_EGG(-1),
     WITHER_SKELETON_SPAWN_EGG(-1),
     WITHER_SPAWN_EGG(-1),
+    WOLF_ARMOR(-1, 1, 64),
     WOLF_SPAWN_EGG(-1),
     WOODEN_AXE(-1, 1, 59),
     WOODEN_HOE(-1, 1, 59),
@@ -538,7 +584,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     ZOMBIFIED_PIGLIN_SPAWN_EGG(-1),
     // Paper end - Generated/Items
     // Paper start - Generated/Blocks
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     ACACIA_BUTTON(-1, Switch.class),
     ACACIA_DOOR(-1, Door.class),
     ACACIA_FENCE(-1, Fence.class),
@@ -722,7 +768,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     CHEST(-1, Chest.class),
     CHIPPED_ANVIL(-1, Directional.class),
     CHISELED_BOOKSHELF(-1, ChiseledBookshelf.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     CHISELED_COPPER(-1),
     CHISELED_DEEPSLATE(-1),
@@ -732,10 +778,10 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     CHISELED_RED_SANDSTONE(-1),
     CHISELED_SANDSTONE(-1),
     CHISELED_STONE_BRICKS(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     CHISELED_TUFF(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     CHISELED_TUFF_BRICKS(-1),
     CHORUS_FLOWER(-1, Ageable.class),
@@ -759,17 +805,17 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     COMPOSTER(-1, Levelled.class),
     CONDUIT(-1, Waterlogged.class),
     COPPER_BLOCK(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     COPPER_GRATE(-1, Waterlogged.class),
     COPPER_ORE(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     COPPER_TRAPDOOR(-1, TrapDoor.class),
     CORNFLOWER(-1),
@@ -778,7 +824,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     CRACKED_NETHER_BRICKS(-1),
     CRACKED_POLISHED_BLACKSTONE_BRICKS(-1),
     CRACKED_STONE_BRICKS(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     CRAFTER(-1, Crafter.class),
     CRAFTING_TABLE(-1),
@@ -915,20 +961,20 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     END_STONE_BRICK_WALL(-1, Wall.class),
     END_STONE_BRICKS(-1),
     ENDER_CHEST(-1, EnderChest.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     EXPOSED_CHISELED_COPPER(-1),
     EXPOSED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     EXPOSED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     EXPOSED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     EXPOSED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     EXPOSED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     EXPOSED_CUT_COPPER(-1),
@@ -992,6 +1038,9 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     GRINDSTONE(-1, Grindstone.class),
     HANGING_ROOTS(-1, Waterlogged.class),
     HAY_BLOCK(-1, Orientable.class),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    HEAVY_CORE(-1, Waterlogged.class),
     HEAVY_WEIGHTED_PRESSURE_PLATE(-1, AnaloguePowerable.class),
     HONEY_BLOCK(-1),
     HONEYCOMB_BLOCK(-1),
@@ -1200,20 +1249,20 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     ORANGE_WALL_BANNER(-1, Directional.class),
     ORANGE_WOOL(-1),
     OXEYE_DAISY(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     OXIDIZED_CHISELED_COPPER(-1),
     OXIDIZED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     OXIDIZED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     OXIDIZED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     OXIDIZED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     OXIDIZED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     OXIDIZED_CUT_COPPER(-1),
@@ -1274,16 +1323,16 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     POLISHED_GRANITE(-1),
     POLISHED_GRANITE_SLAB(-1, Slab.class),
     POLISHED_GRANITE_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     POLISHED_TUFF(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     POLISHED_TUFF_SLAB(-1, Slab.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     POLISHED_TUFF_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     POLISHED_TUFF_WALL(-1, Wall.class),
     POPPY(-1),
@@ -1514,7 +1563,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     TORCHFLOWER(-1),
     TORCHFLOWER_CROP(-1, Ageable.class),
     TRAPPED_CHEST(-1, Chest.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TRIAL_SPAWNER(-1, TrialSpawner.class),
     TRIPWIRE(-1, Tripwire.class),
@@ -1524,30 +1573,33 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     TUBE_CORAL_FAN(-1, Waterlogged.class),
     TUBE_CORAL_WALL_FAN(-1, CoralWallFan.class),
     TUFF(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_BRICK_SLAB(-1, Slab.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_BRICK_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_BRICK_WALL(-1, Wall.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_BRICKS(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_SLAB(-1, Slab.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     TUFF_WALL(-1, Wall.class),
     TURTLE_EGG(-1, TurtleEgg.class),
     TWISTING_VINES(-1, Ageable.class),
     TWISTING_VINES_PLANT(-1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    VAULT(-1, Vault.class),
     VERDANT_FROGLIGHT(-1, Orientable.class),
     VINE(-1, MultipleFacing.class),
     VOID_AIR(-1),
@@ -1573,96 +1625,96 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     WARPED_WART_BLOCK(-1),
     WATER(-1, Levelled.class),
     WATER_CAULDRON(-1, Levelled.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_CHISELED_COPPER(-1),
     WAXED_COPPER_BLOCK(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     WAXED_CUT_COPPER(-1),
     WAXED_CUT_COPPER_SLAB(-1, Slab.class),
     WAXED_CUT_COPPER_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_EXPOSED_CHISELED_COPPER(-1),
     WAXED_EXPOSED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_EXPOSED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_EXPOSED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_EXPOSED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_EXPOSED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     WAXED_EXPOSED_CUT_COPPER(-1),
     WAXED_EXPOSED_CUT_COPPER_SLAB(-1, Slab.class),
     WAXED_EXPOSED_CUT_COPPER_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_OXIDIZED_CHISELED_COPPER(-1),
     WAXED_OXIDIZED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_OXIDIZED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_OXIDIZED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_OXIDIZED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_OXIDIZED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     WAXED_OXIDIZED_CUT_COPPER(-1),
     WAXED_OXIDIZED_CUT_COPPER_SLAB(-1, Slab.class),
     WAXED_OXIDIZED_CUT_COPPER_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_WEATHERED_CHISELED_COPPER(-1),
     WAXED_WEATHERED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_WEATHERED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_WEATHERED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_WEATHERED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WAXED_WEATHERED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     WAXED_WEATHERED_CUT_COPPER(-1),
     WAXED_WEATHERED_CUT_COPPER_SLAB(-1, Slab.class),
     WAXED_WEATHERED_CUT_COPPER_STAIRS(-1, Stairs.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WEATHERED_CHISELED_COPPER(-1),
     WEATHERED_COPPER(-1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WEATHERED_COPPER_BULB(-1, CopperBulb.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WEATHERED_COPPER_DOOR(-1, Door.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WEATHERED_COPPER_GRATE(-1, Waterlogged.class),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     WEATHERED_COPPER_TRAPDOOR(-1, TrapDoor.class),
     WEATHERED_CUT_COPPER(-1),
@@ -2724,10 +2776,12 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
      * Use {@link #isItem()} before this.
      *
      * @return the item rarity
+     * @deprecated use {@link org.bukkit.inventory.meta.ItemMeta#hasRarity()} and {@link org.bukkit.inventory.meta.ItemMeta#getRarity()}
      */
     @NotNull
+    @Deprecated(forRemoval = true, since = "1.20.5")
     public io.papermc.paper.inventory.ItemRarity getItemRarity() {
-        return Bukkit.getUnsafe().getItemRarity(this);
+        return new org.bukkit.inventory.ItemStack(this).getRarity();
     }
 
     /**
@@ -2740,9 +2794,9 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
      * @deprecated use {@link #getDefaultAttributeModifiers(EquipmentSlot)}
      */
     @NotNull
-    @Deprecated
+    @Deprecated(forRemoval = true, since = "1.20.5")
     public Multimap<Attribute, AttributeModifier> getItemAttributes(@NotNull EquipmentSlot equipmentSlot) {
-        return Bukkit.getUnsafe().getItemAttributes(this, equipmentSlot);
+        return this.getDefaultAttributeModifiers(equipmentSlot);
     }
 
     /**
@@ -2786,7 +2840,12 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
     }
 
     /**
-     * Gets the maximum amount of this material that can be held in a stack
+     * Gets the maximum amount of this material that can be held in a stack.
+     * <p>
+     * Note that this is the <strong>default</strong> maximum size for this Material.
+     * {@link ItemStack ItemStacks} are able to change their maximum stack size per
+     * stack with {@link ItemMeta#setMaxStackSize(Integer)}. If an ItemStack instance
+     * is available, {@link ItemStack#getMaxStackSize()} may be preferred.
      *
      * @return Maximum stack size for this material
      */
@@ -2895,7 +2954,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isBlock">
             // Paper start - Generated/Material#isBlock
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_BUTTON:
             case ACACIA_DOOR:
             case ACACIA_FENCE:
@@ -3324,6 +3383,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case GRINDSTONE:
             case HANGING_ROOTS:
             case HAY_BLOCK:
+            case HEAVY_CORE:
             case HEAVY_WEIGHTED_PRESSURE_PLATE:
             case HONEYCOMB_BLOCK:
             case HONEY_BLOCK:
@@ -3846,6 +3906,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case TURTLE_EGG:
             case TWISTING_VINES:
             case TWISTING_VINES_PLANT:
+            case VAULT:
             case VERDANT_FROGLIGHT:
             case VINE:
             case VOID_AIR:
@@ -3971,7 +4032,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isEdible">
             // Paper start - Generated/Material#isEdible
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case APPLE:
             case BAKED_POTATO:
             case BEEF:
@@ -3999,6 +4060,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case MELON_SLICE:
             case MUSHROOM_STEW:
             case MUTTON:
+            case OMINOUS_BOTTLE:
             case POISONOUS_POTATO:
             case PORKCHOP:
             case POTATO:
@@ -4150,7 +4212,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isRecord">
             // Paper start - Generated/Material#isRecord
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case MUSIC_DISC_5:
             case MUSIC_DISC_11:
             case MUSIC_DISC_13:
@@ -4187,7 +4249,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isSolid">
             // Paper start - Generated/Material#isSolid
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_DOOR:
             case ACACIA_FENCE:
             case ACACIA_FENCE_GATE:
@@ -4933,6 +4995,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case TUFF_STAIRS:
             case TUFF_WALL:
             case TURTLE_EGG:
+            case VAULT:
             case VERDANT_FROGLIGHT:
             case WARPED_DOOR:
             case WARPED_FENCE:
@@ -5238,7 +5301,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isAir">
             // Paper start - Generated/Material#isAir
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case AIR:
             case CAVE_AIR:
             case VOID_AIR:
@@ -5465,7 +5528,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isFlammable">
             // Paper start - Generated/Material#isFlammable
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_DOOR:
             case ACACIA_FENCE:
             case ACACIA_FENCE_GATE:
@@ -5816,7 +5879,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isBurnable">
             // Paper start - Generated/Material#isBurnable
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_FENCE:
             case ACACIA_FENCE_GATE:
             case ACACIA_LEAVES:
@@ -6046,7 +6109,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isFuel">
             // Paper start - Generated/Material#isFuel
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_BOAT:
             case ACACIA_BUTTON:
             case ACACIA_CHEST_BOAT:
@@ -6392,7 +6455,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isOccluding">
             // Paper start - Generated/Material#isOccluding
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_LOG:
             case ACACIA_PLANKS:
             case ACACIA_WOOD:
@@ -6729,6 +6792,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case TUBE_CORAL_BLOCK:
             case TUFF:
             case TUFF_BRICKS:
+            case VAULT:
             case VERDANT_FROGLIGHT:
             case WARPED_HYPHAE:
             case WARPED_NYLIUM:
@@ -6880,7 +6944,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="hasGravity">
             // Paper start - Generated/Material#hasGravity
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ANVIL:
             case BLACK_CONCRETE_POWDER:
             case BLUE_CONCRETE_POWDER:
@@ -6926,7 +6990,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             //<editor-fold defaultstate="collapsed" desc="isItem">
             // Paper start - Generated/Material#isItem
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_WALL_HANGING_SIGN:
             case ACACIA_WALL_SIGN:
             case ATTACHED_MELON_STEM:
@@ -7159,7 +7223,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="isInteractable">
             // Paper start - Generated/Material#isInteractable
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case ACACIA_BUTTON:
             case ACACIA_DOOR:
             case ACACIA_FENCE:
@@ -7415,6 +7479,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case SWEET_BERRY_BUSH:
             case TNT:
             case TRAPPED_CHEST:
+            case VAULT:
             case WARPED_BUTTON:
             case WARPED_DOOR:
             case WARPED_FENCE:
@@ -7465,7 +7530,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="getBlockHardness">
             // Paper start - Generated/Material#getHardness
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case BARRIER:
             case BEDROCK:
             case CHAIN_COMMAND_BLOCK:
@@ -8379,6 +8444,8 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case REDSTONE_BLOCK:
             case SPAWNER:
                 return 5.0F;
+            case HEAVY_CORE:
+                return 10.0F;
             case ENDER_CHEST:
                 return 22.5F;
             case ANCIENT_DEBRIS:
@@ -8388,6 +8455,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case OBSIDIAN:
             case RESPAWN_ANCHOR:
             case TRIAL_SPAWNER:
+            case VAULT:
                 return 50.0F;
             case REINFORCED_DEEPSLATE:
                 return 55.0F;
@@ -8416,7 +8484,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="getBlastResistance">
             // Paper start - Generated/Material#getBlastResistance
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case BIG_DRIPLEAF:
             case BIG_DRIPLEAF_STEM:
             case BLACK_CANDLE:
@@ -9315,6 +9383,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case END_STONE_BRICK_WALL:
                 return 9.0F;
             case TRIAL_SPAWNER:
+            case VAULT:
                 return 50.0F;
             case LAVA:
             case WATER:
@@ -9327,6 +9396,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
             case CRYING_OBSIDIAN:
             case DAMAGED_ANVIL:
             case ENCHANTING_TABLE:
+            case HEAVY_CORE:
             case NETHERITE_BLOCK:
             case OBSIDIAN:
             case REINFORCED_DEEPSLATE:
@@ -9369,7 +9439,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="getSlipperiness">
             // Paper start - Generated/Material#getSlipperiness
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case SLIME_BLOCK:
                 return 0.8F;
             case FROSTED_ICE:
@@ -9399,7 +9469,7 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="getCraftingRemainingItem">
             // Paper start - Generated/Material#getCraftingRemainingItem
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
             case LAVA_BUCKET:
             case MILK_BUCKET:
             case WATER_BUCKET:
@@ -9427,7 +9497,29 @@ public enum Material implements Keyed, Translatable, net.kyori.adventure.transla
         switch (this) {
             // <editor-fold defaultstate="collapsed" desc="getEquipmentSlot">
             // Paper start - Generated/Material#getEquipmentSlot
-            // @GeneratedFrom 1.20.4
+            // @GeneratedFrom 1.20.6
+            case BLACK_CARPET:
+            case BLUE_CARPET:
+            case BROWN_CARPET:
+            case CYAN_CARPET:
+            case DIAMOND_HORSE_ARMOR:
+            case GOLDEN_HORSE_ARMOR:
+            case GRAY_CARPET:
+            case GREEN_CARPET:
+            case IRON_HORSE_ARMOR:
+            case LEATHER_HORSE_ARMOR:
+            case LIGHT_BLUE_CARPET:
+            case LIGHT_GRAY_CARPET:
+            case LIME_CARPET:
+            case MAGENTA_CARPET:
+            case ORANGE_CARPET:
+            case PINK_CARPET:
+            case PURPLE_CARPET:
+            case RED_CARPET:
+            case WHITE_CARPET:
+            case WOLF_ARMOR:
+            case YELLOW_CARPET:
+                return EquipmentSlot.BODY;
             case CARVED_PUMPKIN:
             case CHAINMAIL_HELMET:
             case CREEPER_HEAD:

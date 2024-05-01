@@ -11,7 +11,7 @@ import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.type.LightningRod;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftLightningRod extends CraftBlockData implements LightningRod {
     private static final DirectionProperty FACING = LightningRodBlock.FACING;

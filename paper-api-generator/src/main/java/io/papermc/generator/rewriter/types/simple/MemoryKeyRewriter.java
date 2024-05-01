@@ -8,6 +8,7 @@ import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
+import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -32,6 +33,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.flag.FeatureElement;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
@@ -127,9 +129,9 @@ public class MemoryKeyRewriter extends SearchReplaceRewriter {
             ResourceKey<MemoryModuleType<?>> resourceKey = reference.key();
             String pathKey = resourceKey.location().getPath();
 
-            String experimentalValue = this.getExperimentalValue(reference);
-            if (experimentalValue != null) {
-                Annotations.experimentalAnnotations(builder, metadata, experimentalValue);
+            FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
+            if (requiredFeatures != null) {
+                Annotations.experimentalAnnotations(builder, metadata, requiredFeatures);
             }
 
             final Class<?> apiMemoryType;
@@ -159,12 +161,12 @@ public class MemoryKeyRewriter extends SearchReplaceRewriter {
     }
 
     @Nullable
-    protected String getExperimentalValue(Holder.Reference<MemoryModuleType<?>> reference) {
+    protected FeatureFlagSet getRequiredFeatures(Holder.Reference<MemoryModuleType<?>> reference) {
         if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return Formatting.formatFeatureFlagSet(element.requiredFeatures());
+            return element.requiredFeatures();
         }
         if (this.experimentalKeys.get().contains(reference.key())) {
-            return Formatting.formatFeatureFlag(FeatureFlags.UPDATE_1_21);
+            return FlagSets.NEXT_UPDATE.get();
         }
         return null;
     }

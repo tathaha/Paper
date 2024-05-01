@@ -7,6 +7,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
 import org.bukkit.Location;
 import org.bukkit.MinecraftExperimental;
+import org.bukkit.MinecraftExperimental.Requires;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Translatable;
 import org.bukkit.World;
@@ -28,9 +29,10 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
 
     // These strings MUST match the strings in nms.EntityTypes and are case sensitive.
     // Paper start - Generated/EntityType
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     ALLAY("allay", Allay.class, -1),
     AREA_EFFECT_CLOUD("area_effect_cloud", AreaEffectCloud.class, 3),
+    ARMADILLO("armadillo", Armadillo.class, -1),
     ARMOR_STAND("armor_stand", ArmorStand.class, 30),
     ARROW("arrow", Arrow.class, 10),
     AXOLOTL("axolotl", Axolotl.class, -1),
@@ -39,17 +41,23 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     BLAZE("blaze", Blaze.class, 61),
     BLOCK_DISPLAY("block_display", BlockDisplay.class, -1),
     BOAT("boat", Boat.class, 41),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    BOGGED("bogged", Bogged.class, -1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @ApiStatus.Experimental
     BREEZE("breeze", Breeze.class, -1),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    BREEZE_WIND_CHARGE("breeze_wind_charge", BreezeWindCharge.class, -1),
     CAMEL("camel", Camel.class, -1),
     CAT("cat", Cat.class, -1),
     CAVE_SPIDER("cave_spider", CaveSpider.class, 59),
     CHEST_BOAT("chest_boat", ChestBoat.class, -1),
-    MINECART_CHEST("chest_minecart", StorageMinecart.class, 43),
+    CHEST_MINECART("chest_minecart", StorageMinecart.class, 43),
     CHICKEN("chicken", Chicken.class, 93),
     COD("cod", Cod.class, -1),
-    MINECART_COMMAND("command_block_minecart", CommandMinecart.class, 40),
+    COMMAND_BLOCK_MINECART("command_block_minecart", CommandMinecart.class, 40),
     COW("cow", Cow.class, 92),
     CREEPER("creeper", Creeper.class, 50),
     DOLPHIN("dolphin", Dolphin.class, -1),
@@ -58,23 +66,23 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     DROWNED("drowned", Drowned.class, -1),
     EGG("egg", Egg.class, 7),
     ELDER_GUARDIAN("elder_guardian", ElderGuardian.class, 4),
-    ENDER_CRYSTAL("end_crystal", EnderCrystal.class, 200),
+    END_CRYSTAL("end_crystal", EnderCrystal.class, 200),
     ENDER_DRAGON("ender_dragon", EnderDragon.class, 63),
     ENDER_PEARL("ender_pearl", EnderPearl.class, 14),
     ENDERMAN("enderman", Enderman.class, 58),
     ENDERMITE("endermite", Endermite.class, 67),
     EVOKER("evoker", Evoker.class, 34),
     EVOKER_FANGS("evoker_fangs", EvokerFangs.class, 33),
-    THROWN_EXP_BOTTLE("experience_bottle", ThrownExpBottle.class, 17),
+    EXPERIENCE_BOTTLE("experience_bottle", ThrownExpBottle.class, 17),
     EXPERIENCE_ORB("experience_orb", ExperienceOrb.class, 2),
-    ENDER_SIGNAL("eye_of_ender", EnderSignal.class, 15),
+    EYE_OF_ENDER("eye_of_ender", EnderSignal.class, 15),
     FALLING_BLOCK("falling_block", FallingBlock.class, 21),
     FIREBALL("fireball", Fireball.class, 12),
-    FIREWORK("firework_rocket", Firework.class, 22),
-    FISHING_HOOK("fishing_bobber", FishHook.class, -1, false),
+    FIREWORK_ROCKET("firework_rocket", Firework.class, 22),
+    FISHING_BOBBER("fishing_bobber", FishHook.class, -1, false),
     FOX("fox", Fox.class, -1),
     FROG("frog", Frog.class, -1),
-    MINECART_FURNACE("furnace_minecart", PoweredMinecart.class, 44),
+    FURNACE_MINECART("furnace_minecart", PoweredMinecart.class, 44),
     GHAST("ghast", Ghast.class, 56),
     GIANT("giant", Giant.class, 53),
     GLOW_ITEM_FRAME("glow_item_frame", GlowItemFrame.class, -1),
@@ -82,25 +90,28 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     GOAT("goat", Goat.class, -1),
     GUARDIAN("guardian", Guardian.class, 68),
     HOGLIN("hoglin", Hoglin.class, -1),
-    MINECART_HOPPER("hopper_minecart", HopperMinecart.class, 46),
+    HOPPER_MINECART("hopper_minecart", HopperMinecart.class, 46),
     HORSE("horse", Horse.class, 100),
     HUSK("husk", Husk.class, 23),
     ILLUSIONER("illusioner", Illusioner.class, 37),
     INTERACTION("interaction", Interaction.class, -1),
     IRON_GOLEM("iron_golem", IronGolem.class, 99),
-    DROPPED_ITEM("item", Item.class, 1),
+    ITEM("item", Item.class, 1),
     ITEM_DISPLAY("item_display", ItemDisplay.class, -1),
     ITEM_FRAME("item_frame", ItemFrame.class, 18),
-    LEASH_HITCH("leash_knot", LeashHitch.class, 8),
-    LIGHTNING("lightning_bolt", LightningStrike.class, -1),
+    LEASH_KNOT("leash_knot", LeashHitch.class, 8),
+    LIGHTNING_BOLT("lightning_bolt", LightningStrike.class, -1),
     LLAMA("llama", Llama.class, 103),
     LLAMA_SPIT("llama_spit", LlamaSpit.class, 104),
     MAGMA_CUBE("magma_cube", MagmaCube.class, 62),
     MARKER("marker", Marker.class, -1),
     MINECART("minecart", Minecart.class, 42),
-    MUSHROOM_COW("mooshroom", MushroomCow.class, 96),
+    MOOSHROOM("mooshroom", MushroomCow.class, 96),
     MULE("mule", Mule.class, 32),
     OCELOT("ocelot", Ocelot.class, 98),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    OMINOUS_ITEM_SPAWNER("ominous_item_spawner", OminousItemSpawner.class, -1),
     PAINTING("painting", Painting.class, 9),
     PANDA("panda", Panda.class, -1),
     PARROT("parrot", Parrot.class, 105),
@@ -111,7 +122,7 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     PILLAGER("pillager", Pillager.class, -1),
     PLAYER("player", Player.class, -1, false),
     POLAR_BEAR("polar_bear", PolarBear.class, 102),
-    SPLASH_POTION("potion", ThrownPotion.class, 16),
+    POTION("potion", ThrownPotion.class, 16),
     PUFFERFISH("pufferfish", PufferFish.class, -1),
     RABBIT("rabbit", Rabbit.class, 101),
     RAVAGER("ravager", Ravager.class, -1),
@@ -125,9 +136,9 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     SLIME("slime", Slime.class, 55),
     SMALL_FIREBALL("small_fireball", SmallFireball.class, 13),
     SNIFFER("sniffer", Sniffer.class, -1),
-    SNOWMAN("snow_golem", Snowman.class, 97),
+    SNOW_GOLEM("snow_golem", Snowman.class, 97),
     SNOWBALL("snowball", Snowball.class, 11),
-    MINECART_MOB_SPAWNER("spawner_minecart", SpawnerMinecart.class, 47),
+    SPAWNER_MINECART("spawner_minecart", SpawnerMinecart.class, 47),
     SPECTRAL_ARROW("spectral_arrow", SpectralArrow.class, 24),
     SPIDER("spider", Spider.class, 52),
     SQUID("squid", Squid.class, 94),
@@ -135,8 +146,8 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     STRIDER("strider", Strider.class, -1),
     TADPOLE("tadpole", Tadpole.class, -1),
     TEXT_DISPLAY("text_display", TextDisplay.class, -1),
-    PRIMED_TNT("tnt", TNTPrimed.class, 20),
-    MINECART_TNT("tnt_minecart", ExplosiveMinecart.class, 45),
+    TNT("tnt", TNTPrimed.class, 20),
+    TNT_MINECART("tnt_minecart", ExplosiveMinecart.class, 45),
     TRADER_LLAMA("trader_llama", TraderLlama.class, -1),
     TRIDENT("trident", Trident.class, -1),
     TROPICAL_FISH("tropical_fish", TropicalFish.class, -1),
@@ -146,7 +157,7 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
     VINDICATOR("vindicator", Vindicator.class, 36),
     WANDERING_TRADER("wandering_trader", WanderingTrader.class, -1),
     WARDEN("warden", Warden.class, -1),
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @ApiStatus.Experimental
     WIND_CHARGE("wind_charge", WindCharge.class, -1),
     WITCH("witch", Witch.class, 66),
@@ -183,21 +194,6 @@ public enum EntityType implements Keyed, Translatable, net.kyori.adventure.trans
                 ID_MAP.put(type.typeId, type);
             }
         }
-
-        // Add legacy names
-        NAME_MAP.put("xp_orb", EXPERIENCE_ORB);
-        NAME_MAP.put("eye_of_ender_signal", ENDER_SIGNAL);
-        NAME_MAP.put("xp_bottle", THROWN_EXP_BOTTLE);
-        NAME_MAP.put("fireworks_rocket", FIREWORK);
-        NAME_MAP.put("evocation_fangs", EVOKER_FANGS);
-        NAME_MAP.put("evocation_illager", EVOKER);
-        NAME_MAP.put("vindication_illager", VINDICATOR);
-        NAME_MAP.put("illusion_illager", ILLUSIONER);
-        NAME_MAP.put("commandblock_minecart", MINECART_COMMAND);
-        NAME_MAP.put("snowman", SNOWMAN);
-        NAME_MAP.put("villager_golem", IRON_GOLEM);
-        NAME_MAP.put("ender_crystal", ENDER_CRYSTAL);
-        NAME_MAP.put("zombie_pigman", ZOMBIFIED_PIGLIN);
     }
 
     private EntityType(/*@Nullable*/ String name, /*@Nullable*/ Class<? extends Entity> clazz, int typeId) {

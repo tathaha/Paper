@@ -19,6 +19,8 @@ import net.minecraft.world.level.block.state.properties.Property;
 import org.bukkit.Axis;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Rail;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -86,13 +88,26 @@ public class PropertyWriter<T extends Comparable<T>> implements PropertyMaker {
         }
     }
 
-    public static Pair<Class<?>, String> referenceField(Class<? extends Block> from, Property<?> property, Map<String, String> fieldNames) {
+    public static Pair<Class<?>, String> referenceField(Class<? extends Block> from, Property<?> property, Map<Property<?>, Field> fields) {
         Class<?> fieldAccess = from;
-        String fieldName = fieldNames.get(property.getName());
-        if (fieldName == null) {
+        Field field = fields.get(property);
+        if (field == null || !Modifier.isPublic(field.getModifiers())) {
             fieldAccess = BlockStateProperties.class;
-            fieldName = BlockStateMapping.FALLBACK_GENERIC_FIELD_NAMES.get(property);
+            field = BlockStateMapping.FALLBACK_GENERIC_FIELDS.get(property);
         }
-        return Pair.of(fieldAccess, fieldName);
+        return Pair.of(fieldAccess, field.getName());
+    }
+
+    public static Pair<Class<?>, String> referenceFieldFromVar(Class<? extends Block> from, Property<?> property, Map<Property<?>, Field> fields) {
+        Class<?> fieldAccess = from;
+        Field field = fields.get(property);
+        Field genericField = BlockStateMapping.FALLBACK_GENERIC_FIELDS.get(property);
+        if (field == null || !Modifier.isPublic(field.getModifiers()) || !genericField.getType().equals(field.getType())) {
+            // field type can differ from BlockStateProperties constants (that's the case for the shulker box (#FACING) and the vault (#STATE)) ref: 1.20.5
+            // in that case fallback to the more accurate type to avoid compile error
+            fieldAccess = BlockStateProperties.class;
+            field = genericField;
+        }
+        return Pair.of(fieldAccess, field.getName());
     }
 }

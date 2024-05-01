@@ -15,7 +15,7 @@ import org.bukkit.Registry;
 public abstract class StructureType implements Keyed {
 
     // Paper start - Generated/StructureType
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     public static final StructureType BURIED_TREASURE = getStructureType("buried_treasure");
 
     public static final StructureType DESERT_PYRAMID = getStructureType("desert_pyramid");

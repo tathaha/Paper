@@ -42,7 +42,7 @@ public final class MapPalette {
     @NotNull
     static final Color[] colors = {
         // Paper start - Generated/MapPalette#colors
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         new Color(0, 0, 0, 0),
         new Color(0, 0, 0, 0),
         new Color(0, 0, 0, 0),

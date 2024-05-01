@@ -47,7 +47,7 @@ public interface Cat extends Tameable, Sittable, io.papermc.paper.entity.CollarC
      */
     public enum Type implements Keyed {
         // Paper start - Generated/CatType
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         ALL_BLACK("all_black"),
         BLACK("black"),
         BRITISH_SHORTHAIR("british_shorthair"),

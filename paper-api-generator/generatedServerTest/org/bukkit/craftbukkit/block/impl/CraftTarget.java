@@ -7,10 +7,10 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import org.bukkit.block.data.AnaloguePowerable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftTarget extends CraftBlockData implements AnaloguePowerable {
-    private static final IntegerProperty POWER = BlockStateProperties.POWER;
+    private static final IntegerProperty OUTPUT_POWER = BlockStateProperties.POWER;
 
     public CraftTarget(BlockState state) {
         super(state);
@@ -18,16 +18,16 @@ public class CraftTarget extends CraftBlockData implements AnaloguePowerable {
 
     @Override
     public int getPower() {
-        return this.get(POWER);
+        return this.get(OUTPUT_POWER);
     }
 
     @Override
     public void setPower(final int power) {
-        this.set(POWER, power);
+        this.set(OUTPUT_POWER, power);
     }
 
     @Override
     public int getMaximumPower() {
-        return POWER.max;
+        return OUTPUT_POWER.max;
     }
 }

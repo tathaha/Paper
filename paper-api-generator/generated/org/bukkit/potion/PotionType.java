@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.function.Supplier;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
+import org.bukkit.MinecraftExperimental;
+import org.bukkit.MinecraftExperimental.Requires;
 import org.bukkit.NamespacedKey;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
@@ -16,14 +18,16 @@ import org.jetbrains.annotations.Nullable;
  */
 public enum PotionType implements Keyed {
     // Paper start - Generated/PotionType
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     AWKWARD("awkward"),
-    UNCRAFTABLE("empty"),
     FIRE_RESISTANCE("fire_resistance"),
-    INSTANT_DAMAGE("harming"),
-    INSTANT_HEAL("healing"),
+    HARMING("harming"),
+    HEALING("healing"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    INFESTED("infested"),
     INVISIBILITY("invisibility"),
-    JUMP("leaping"),
+    LEAPING("leaping"),
     LONG_FIRE_RESISTANCE("long_fire_resistance"),
     LONG_INVISIBILITY("long_invisibility"),
     LONG_LEAPING("long_leaping"),
@@ -40,8 +44,11 @@ public enum PotionType implements Keyed {
     LUCK("luck"),
     MUNDANE("mundane"),
     NIGHT_VISION("night_vision"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    OOZING("oozing"),
     POISON("poison"),
-    REGEN("regeneration"),
+    REGENERATION("regeneration"),
     SLOW_FALLING("slow_falling"),
     SLOWNESS("slowness"),
     STRENGTH("strength"),
@@ -54,12 +61,18 @@ public enum PotionType implements Keyed {
     STRONG_STRENGTH("strong_strength"),
     STRONG_SWIFTNESS("strong_swiftness"),
     STRONG_TURTLE_MASTER("strong_turtle_master"),
-    SPEED("swiftness"),
+    SWIFTNESS("swiftness"),
     THICK("thick"),
     TURTLE_MASTER("turtle_master"),
     WATER("water"),
     WATER_BREATHING("water_breathing"),
-    WEAKNESS("weakness");
+    WEAKNESS("weakness"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    WEAVING("weaving"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @ApiStatus.Experimental
+    WIND_CHARGED("wind_charged");
     // Paper end - Generated/PotionType
 
     private final NamespacedKey key;

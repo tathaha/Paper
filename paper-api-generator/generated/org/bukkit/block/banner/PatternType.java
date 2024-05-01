@@ -3,6 +3,8 @@ package org.bukkit.block.banner;
 import java.util.HashMap;
 import java.util.Map;
 import org.bukkit.Keyed;
+import org.bukkit.MinecraftExperimental;
+import org.bukkit.MinecraftExperimental.Requires;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.jetbrains.annotations.Contract;
@@ -11,31 +13,37 @@ import org.jetbrains.annotations.Nullable;
 
 public enum PatternType implements Keyed {
     // Paper start - Generated/PatternType
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     BASE("b", "base"),
     BORDER("bo", "border"),
     BRICKS("bri", "bricks"),
-    CIRCLE_MIDDLE("mc", "circle"),
+    CIRCLE("mc", "circle"),
     CREEPER("cre", "creeper"),
     CROSS("cr", "cross"),
     CURLY_BORDER("cbo", "curly_border"),
     DIAGONAL_LEFT("ld", "diagonal_left"),
-    DIAGONAL_RIGHT_MIRROR("rud", "diagonal_right"),
-    DIAGONAL_LEFT_MIRROR("lud", "diagonal_up_left"),
-    DIAGONAL_RIGHT("rd", "diagonal_up_right"),
+    DIAGONAL_RIGHT("rud", "diagonal_right"),
+    DIAGONAL_UP_LEFT("lud", "diagonal_up_left"),
+    DIAGONAL_UP_RIGHT("rd", "diagonal_up_right"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    FLOW("flw", "flow"),
     FLOWER("flo", "flower"),
     GLOBE("glb", "globe"),
     GRADIENT("gra", "gradient"),
     GRADIENT_UP("gru", "gradient_up"),
+    @MinecraftExperimental(Requires.UPDATE_1_21)
+    @org.jetbrains.annotations.ApiStatus.Experimental
+    GUSTER("gus", "guster"),
     HALF_HORIZONTAL("hh", "half_horizontal"),
-    HALF_HORIZONTAL_MIRROR("hhb", "half_horizontal_bottom"),
+    HALF_HORIZONTAL_BOTTOM("hhb", "half_horizontal_bottom"),
     HALF_VERTICAL("vh", "half_vertical"),
-    HALF_VERTICAL_MIRROR("vhr", "half_vertical_right"),
+    HALF_VERTICAL_RIGHT("vhr", "half_vertical_right"),
     MOJANG("moj", "mojang"),
     PIGLIN("pig", "piglin"),
-    RHOMBUS_MIDDLE("mr", "rhombus"),
+    RHOMBUS("mr", "rhombus"),
     SKULL("sku", "skull"),
-    STRIPE_SMALL("ss", "small_stripes"),
+    SMALL_STRIPES("ss", "small_stripes"),
     SQUARE_BOTTOM_LEFT("bl", "square_bottom_left"),
     SQUARE_BOTTOM_RIGHT("br", "square_bottom_right"),
     SQUARE_TOP_LEFT("tl", "square_top_left"),
@@ -70,6 +78,13 @@ public enum PatternType implements Keyed {
         this.key = NamespacedKey.minecraft(key);
     }
 
+    // Paper start - deprecate getKey
+    /**
+     * @deprecated use {@link Registry#getKey(Keyed)} and {@link Registry#BANNER_PATTERN}. PatternTypes
+     * can exist without a key.
+     */
+    @Deprecated
+    // Paper end - deprecate getKey
     @Override
     @NotNull
     public NamespacedKey getKey() {
@@ -85,7 +100,7 @@ public enum PatternType implements Keyed {
      * @deprecated magic value
      */
     @NotNull
-    @Deprecated
+    @Deprecated(forRemoval = true)
     public String getIdentifier() {
         return identifier;
     }
@@ -101,7 +116,7 @@ public enum PatternType implements Keyed {
      */
     @Contract("null -> null")
     @Nullable
-    @Deprecated
+    @Deprecated(forRemoval = true)
     public static PatternType getByIdentifier(@Nullable String identifier) {
         return byString.get(identifier);
     }

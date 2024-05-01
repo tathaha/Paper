@@ -7,10 +7,12 @@ import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
+import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
+import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Set;
@@ -57,19 +59,19 @@ public class EnumRegistryRewriter<T, A extends Enum<A>> extends EnumRewriter<Hol
 
     @Override
     protected void rewriteAnnotation(Holder.Reference<T> reference, StringBuilder builder, SearchMetadata metadata) {
-        String experimentalValue = this.getExperimentalValue(reference);
-        if (experimentalValue != null) {
-            Annotations.experimentalAnnotations(builder, metadata, experimentalValue);
+        FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
+        if (requiredFeatures != null) {
+            Annotations.experimentalAnnotations(builder, metadata, requiredFeatures);
         }
     }
 
     @Nullable
-    protected String getExperimentalValue(Holder.Reference<T> reference) {
+    protected FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
         if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return Formatting.formatFeatureFlagSet(element.requiredFeatures());
+            return element.requiredFeatures();
         }
         if (this.experimentalKeys.get().contains(reference.key())) {
-            return Formatting.formatFeatureFlag(FeatureFlags.UPDATE_1_21);
+            return FlagSets.NEXT_UPDATE.get();
         }
         return null;
     }

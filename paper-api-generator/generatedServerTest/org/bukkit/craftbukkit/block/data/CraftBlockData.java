@@ -13,7 +13,6 @@ import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.block.Block;
@@ -249,13 +248,13 @@ public class CraftBlockData implements BlockData {
         return stateString.toString();
     }
 
-    public CompoundTag toStates() {
-        CompoundTag compound = new CompoundTag();
+    public Map<String, String> toStates() {
+        Map<String, String> compound = new HashMap<>();
 
         for (Map.Entry<Property<?>, Comparable<?>> entry : this.state.getValues().entrySet()) {
             Property iblockstate = (Property) entry.getKey();
 
-            compound.putString(iblockstate.getName(), iblockstate.getName(entry.getValue()));
+            compound.put(iblockstate.getName(), iblockstate.getName(entry.getValue()));
         }
 
         return compound;
@@ -367,7 +366,7 @@ public class CraftBlockData implements BlockData {
     static {
         //<editor-fold desc="CraftBlockData Registration" defaultstate="collapsed">
         // Paper start - Generated/CraftBlockData#MAP
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         register(net.minecraft.world.level.block.AmethystClusterBlock.class, org.bukkit.craftbukkit.block.impl.CraftAmethystCluster::new);
         register(net.minecraft.world.level.block.AnvilBlock.class, org.bukkit.craftbukkit.block.impl.CraftAnvil::new);
         register(net.minecraft.world.level.block.AttachedStemBlock.class, org.bukkit.craftbukkit.block.impl.CraftAttachedStem::new);
@@ -440,6 +439,7 @@ public class CraftBlockData implements BlockData {
         register(net.minecraft.world.level.block.GrindstoneBlock.class, org.bukkit.craftbukkit.block.impl.CraftGrindstone::new);
         register(net.minecraft.world.level.block.HangingRootsBlock.class, org.bukkit.craftbukkit.block.impl.CraftHangingRoots::new);
         register(net.minecraft.world.level.block.HayBlock.class, org.bukkit.craftbukkit.block.impl.CraftHay::new);
+        register(net.minecraft.world.level.block.HeavyCoreBlock.class, org.bukkit.craftbukkit.block.impl.CraftHeavyCore::new);
         register(net.minecraft.world.level.block.HopperBlock.class, org.bukkit.craftbukkit.block.impl.CraftHopper::new);
         register(net.minecraft.world.level.block.HugeMushroomBlock.class, org.bukkit.craftbukkit.block.impl.CraftHugeMushroom::new);
         register(net.minecraft.world.level.block.InfestedRotatedPillarBlock.class, org.bukkit.craftbukkit.block.impl.CraftInfestedRotatedPillar::new);
@@ -518,6 +518,7 @@ public class CraftBlockData implements BlockData {
         register(net.minecraft.world.level.block.TripWireHookBlock.class, org.bukkit.craftbukkit.block.impl.CraftTripWireHook::new);
         register(net.minecraft.world.level.block.TurtleEggBlock.class, org.bukkit.craftbukkit.block.impl.CraftTurtleEgg::new);
         register(net.minecraft.world.level.block.TwistingVinesBlock.class, org.bukkit.craftbukkit.block.impl.CraftTwistingVines::new);
+        register(net.minecraft.world.level.block.VaultBlock.class, org.bukkit.craftbukkit.block.impl.CraftVault::new);
         register(net.minecraft.world.level.block.VineBlock.class, org.bukkit.craftbukkit.block.impl.CraftVine::new);
         register(net.minecraft.world.level.block.WallBannerBlock.class, org.bukkit.craftbukkit.block.impl.CraftWallBanner::new);
         register(net.minecraft.world.level.block.WallBlock.class, org.bukkit.craftbukkit.block.impl.CraftWall::new);
@@ -751,7 +752,7 @@ public class CraftBlockData implements BlockData {
         net.minecraft.world.item.ItemStack nmsItemStack = CraftItemStack.unwrap(itemStack);
         float speed = nmsItemStack.getDestroySpeed(this.state);
         if (speed > 1.0F && considerEnchants) {
-            int enchantLevel = net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.BLOCK_EFFICIENCY, nmsItemStack);
+            int enchantLevel = net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY, nmsItemStack);
             if (enchantLevel > 0) {
                 speed += enchantLevel * enchantLevel + 1;
             }

@@ -1,13 +1,20 @@
 package io.papermc.generator.types;
 
+import com.mojang.logging.LogUtils;
 import com.squareup.javapoet.MethodSpec;
 import io.papermc.generator.utils.Annotations;
+import org.slf4j.Logger;
+
+import java.util.Arrays;
 
 import static javax.lang.model.element.Modifier.PUBLIC;
 
 public abstract class StructuredGenerator<T> extends SimpleGenerator {
 
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     protected final Class<? extends T> baseClass;
+    protected boolean printWarningOnMissingOverride;
 
     protected StructuredGenerator(final Class<T> baseClass, final String className, final String packageName) {
         super(className, packageName);
@@ -19,6 +26,10 @@ public abstract class StructuredGenerator<T> extends SimpleGenerator {
             .addModifiers(PUBLIC);
         if (methodExists(name, parameterTypes)) {
             methodBuilder.addAnnotation(Annotations.OVERRIDE);
+        } else {
+            if (this.printWarningOnMissingOverride) {
+                LOGGER.warn("Method " + name + Arrays.toString(parameterTypes) + " didn't override a known api method!");
+            }
         }
         return methodBuilder;
     }

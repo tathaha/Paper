@@ -2,6 +2,7 @@ package org.bukkit.generator.structure;
 
 import org.bukkit.Keyed;
 import org.bukkit.MinecraftExperimental;
+import org.bukkit.MinecraftExperimental.Requires;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.jetbrains.annotations.NotNull;
@@ -16,7 +17,7 @@ import org.jetbrains.annotations.NotNull;
 public abstract class Structure implements Keyed {
 
     // Paper start - Generated/Structure
-    // @GeneratedFrom 1.20.4
+    // @GeneratedFrom 1.20.6
     public static final Structure ANCIENT_CITY = getStructure("ancient_city");
 
     public static final Structure BASTION_REMNANT = getStructure("bastion_remnant");
@@ -73,7 +74,7 @@ public abstract class Structure implements Keyed {
 
     public static final Structure TRAIL_RUINS = getStructure("trail_ruins");
 
-    @MinecraftExperimental("update 1.21")
+    @MinecraftExperimental(Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
     public static final Structure TRIAL_CHAMBERS = getStructure("trial_chambers");
 
@@ -99,4 +100,13 @@ public abstract class Structure implements Keyed {
      */
     @NotNull
     public abstract StructureType getStructureType();
+    // Paper start - deprecate getKey
+    /**
+     * @deprecated use {@link Registry#getKey(Keyed)} and {@link Registry#STRUCTURE}. Structures
+     * can exist without a key.
+     */
+    @Override
+    @Deprecated
+    public abstract @NotNull NamespacedKey getKey();
+    // Paper end - deprecate getKey
 }

@@ -9,8 +9,11 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.LevelAccessor;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.entity.BannerBlockEntity;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BeaconBlockEntity;
@@ -34,7 +37,7 @@ import net.minecraft.world.level.block.entity.DaylightDetectorBlockEntity;
 import net.minecraft.world.level.block.entity.DecoratedPotBlockEntity;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import net.minecraft.world.level.block.entity.DropperBlockEntity;
-import net.minecraft.world.level.block.entity.EnchantmentTableBlockEntity;
+import net.minecraft.world.level.block.entity.EnchantingTableBlockEntity;
 import net.minecraft.world.level.block.entity.EnderChestBlockEntity;
 import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
 import net.minecraft.world.level.block.entity.HangingSignBlockEntity;
@@ -55,6 +58,7 @@ import net.minecraft.world.level.block.entity.TheEndGatewayBlockEntity;
 import net.minecraft.world.level.block.entity.TheEndPortalBlockEntity;
 import net.minecraft.world.level.block.entity.TrappedChestBlockEntity;
 import net.minecraft.world.level.block.entity.TrialSpawnerBlockEntity;
+import net.minecraft.world.level.block.entity.vault.VaultBlockEntity;
 import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -129,7 +133,7 @@ public final class CraftBlockStates {
 
     static {
         // Paper start - Generated/CraftBlockEntityStates
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         register(BlockEntityType.BANNER, CraftBanner.class, CraftBanner::new);
         register(BlockEntityType.BARREL, CraftBarrel.class, CraftBarrel::new);
         register(BlockEntityType.BEACON, CraftBeacon.class, CraftBeacon::new);
@@ -173,6 +177,7 @@ public final class CraftBlockStates {
         register(BlockEntityType.STRUCTURE_BLOCK, CraftStructureBlock.class, CraftStructureBlock::new);
         register(BlockEntityType.TRAPPED_CHEST, CraftChest.class, CraftChest::new);
         register(BlockEntityType.TRIAL_SPAWNER, CraftTrialSpawner.class, CraftTrialSpawner::new);
+        register(BlockEntityType.VAULT, CraftVault.class, CraftVault::new);
         // Paper end - Generated/CraftBlockEntityStates
     }
 
@@ -257,35 +262,39 @@ public final class CraftBlockStates {
         // Paper end
     }
 
-    public static BlockState getBlockState(Material material, @Nullable CompoundTag blockEntityTag) {
-        return CraftBlockStates.getBlockState(BlockPos.ZERO, material, blockEntityTag);
+    @Deprecated
+    public static BlockState getBlockState(BlockPos blockPosition, Material material, @Nullable CompoundTag blockEntityTag) {
+        return CraftBlockStates.getBlockState(MinecraftServer.getDefaultRegistryAccess(), blockPosition, material, blockEntityTag);
     }
 
-    public static BlockState getBlockState(BlockPos blockPosition, Material material, @Nullable CompoundTag blockEntityTag) {
+    public static BlockState getBlockState(LevelReader world, BlockPos blockPosition, Material material, @Nullable CompoundTag blockEntityTag) {
+        return CraftBlockStates.getBlockState(world.registryAccess(), blockPosition, material, blockEntityTag);
+    }
+
+    public static BlockState getBlockState(RegistryAccess registry, BlockPos blockPosition, Material material, @Nullable CompoundTag blockEntityTag) {
         Preconditions.checkNotNull(material, "material is null");
         net.minecraft.world.level.block.state.BlockState blockData = CraftBlockType.bukkitToMinecraft(material).defaultBlockState();
-        return CraftBlockStates.getBlockState(blockPosition, blockData, blockEntityTag);
+        return CraftBlockStates.getBlockState(registry, blockPosition, blockData, blockEntityTag);
     }
 
+    @Deprecated
     public static BlockState getBlockState(net.minecraft.world.level.block.state.BlockState blockData, @Nullable CompoundTag blockEntityTag) {
-        return CraftBlockStates.getBlockState(BlockPos.ZERO, blockData, blockEntityTag);
+        return CraftBlockStates.getBlockState(MinecraftServer.getDefaultRegistryAccess(), BlockPos.ZERO, blockData, blockEntityTag);
     }
 
-    public static BlockState getBlockState(BlockPos blockPosition, net.minecraft.world.level.block.state.BlockState blockData, @Nullable CompoundTag blockEntityTag) {
+    public static BlockState getBlockState(LevelReader world, BlockPos blockPosition, net.minecraft.world.level.block.state.BlockState blockData, @Nullable CompoundTag blockEntityTag) {
+        return CraftBlockStates.getBlockState(world.registryAccess(), blockPosition, blockData, blockEntityTag);
+    }
+
+    public static BlockState getBlockState(RegistryAccess registry, BlockPos blockPosition, net.minecraft.world.level.block.state.BlockState blockData, @Nullable CompoundTag blockEntityTag) {
         Preconditions.checkNotNull(blockPosition, "blockPosition is null");
         Preconditions.checkNotNull(blockData, "blockData is null");
-        BlockEntity tileEntity = (blockEntityTag == null) ? null : BlockEntity.loadStatic(blockPosition, blockData, blockEntityTag);
+        BlockEntity tileEntity = (blockEntityTag == null) ? null : BlockEntity.loadStatic(blockPosition, blockData, blockEntityTag, registry);
         return CraftBlockStates.getBlockState(null, blockPosition, blockData, tileEntity);
     }
-    // Paper start - add exploded state
-    public static BlockState getUnplacedBlockState(net.minecraft.world.level.BlockGetter levelAccessor, BlockPos blockPos, net.minecraft.world.level.block.state.BlockState blockData) {
-        BlockEntity tileEntity = levelAccessor.getBlockEntity(blockPos);
-        return CraftBlockStates.getBlockState(null, blockPos, blockData, tileEntity);
-    }
-    // Paper end - add exploded state
 
     // See BlockStateFactory#createBlockState(World, BlockPosition, IBlockData, TileEntity)
-    private static CraftBlockState getBlockState(World world, BlockPos blockPosition, net.minecraft.world.level.block.state.BlockState blockData, BlockEntity tileEntity) {
+    public static CraftBlockState getBlockState(World world, BlockPos blockPosition, net.minecraft.world.level.block.state.BlockState blockData, BlockEntity tileEntity) {
         Material material = CraftBlockType.minecraftToBukkit(blockData.getBlock());
         BlockStateFactory<?> factory;
         // For some types of TileEntity blocks (eg. moving pistons), Minecraft may in some situations (eg. when using Block#setType or the

@@ -12,7 +12,7 @@ import org.bukkit.block.data.type.Skull;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 import org.bukkit.util.Vector;
 
-@GeneratedFrom("1.20.4")
+@GeneratedFrom("1.20.6")
 @SuppressWarnings("unused")
 public class CraftSkull extends CraftBlockData implements Skull {
     private static final BooleanProperty POWERED = SkullBlock.POWERED;

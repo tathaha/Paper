@@ -137,7 +137,7 @@ public interface Boat extends Vehicle {
      */
     public enum Type {
         // Paper start - Generated/BoatType
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         OAK(Material.OAK_PLANKS),
         SPRUCE(Material.SPRUCE_PLANKS),
         BIRCH(Material.BIRCH_PLANKS),
@@ -173,7 +173,7 @@ public interface Boat extends Vehicle {
 
         NOT_IN_WORLD, // Paper
         // Paper start - Generated/BoatStatus
-        // @GeneratedFrom 1.20.4
+        // @GeneratedFrom 1.20.6
         IN_WATER,
         UNDER_WATER,
         UNDER_FLOWING_WATER,
