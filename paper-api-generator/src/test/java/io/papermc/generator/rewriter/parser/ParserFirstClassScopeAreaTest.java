@@ -1,17 +1,17 @@
 package io.papermc.generator.rewriter.parser;
 
+import area.AnnotationClass;
+import area.AnnotationPresentClass;
+import area.AnnotationTrapClass;
+import area.FancyNewlineAnnotationPresentClass;
+import area.FancyScopeClass;
+import area.FancyScopeClass2;
+import area.MixedAnnotationPresentClass;
+import area.NearScopeClass;
+import area.NewlineScopedClass;
+import area.SimpleTrapClass;
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.context.ImportTypeCollector;
-import io.papermc.generator.rewriter.data.sample.parser.area.AnnotationClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.AnnotationPresentClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.AnnotationTrapClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.FancyNewlineAnnotationPresentClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.FancyScopeClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.FancyScopeClass2;
-import io.papermc.generator.rewriter.data.sample.parser.area.MixedAnnotationPresentClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.NearScopeClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.NewlineScopedClass;
-import io.papermc.generator.rewriter.data.sample.parser.area.SimpleTrapClass;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;

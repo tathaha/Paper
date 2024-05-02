@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 @Tag("parser")
 public class ParserTest {
 
-    protected static final Path CONTAINER = Path.of(System.getProperty("user.dir"), "src/test/java");
+    protected static final Path CONTAINER = Path.of(System.getProperty("user.dir"), "src/testData/java");
 
     protected void parseFile(Path path, ImportCollector importCollector) throws IOException {
         parseFile(path, importCollector, null, null);

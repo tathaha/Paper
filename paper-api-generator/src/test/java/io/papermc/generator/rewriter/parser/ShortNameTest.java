@@ -2,21 +2,21 @@ package io.papermc.generator.rewriter.parser;
 
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.context.ImportTypeCollector;
-import io.papermc.generator.rewriter.data.sample.parser.name.GlobalImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.PackageClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.RegularImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.RemoteGlobalInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.RemoteInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.RemoteStaticGlobalInnerClassImportType;
-import io.papermc.generator.rewriter.data.sample.parser.name.SamePackageClass;
-import io.papermc.generator.rewriter.data.sample.parser.name.SelfInnerClass;
-import io.papermc.generator.rewriter.data.yaml.ImportShortNameMapping;
-import io.papermc.generator.rewriter.data.yaml.YamlMappingConverter;
+import io.papermc.generator.rewriter.yaml.ImportShortNameMapping;
+import io.papermc.generator.rewriter.yaml.YamlMappingConverter;
 import io.papermc.generator.utils.ClassHelper;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.stream.Stream;
+import name.GlobalImportType;
+import name.PackageClassImportType;
+import name.RegularImportType;
+import name.RemoteGlobalInnerClassImportType;
+import name.RemoteInnerClassImportType;
+import name.RemoteStaticGlobalInnerClassImportType;
+import name.SamePackageClass;
+import name.SelfInnerClass;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.converter.ConvertWith;
 import org.junit.jupiter.params.provider.Arguments;
@@ -38,7 +38,7 @@ public class ShortNameTest extends ParserTest {
             CONTAINER.resolve(sampleClass.getCanonicalName().replace('.', '/') + ".java"),
             sampleInnerClass,
             name,
-            "parser/expected/name/%s.yaml".formatted(sampleInnerClass.getName().substring(sampleInnerClass.getPackageName().length() + 1))
+            "expected/name/%s.yaml".formatted(sampleInnerClass.getName().substring(sampleInnerClass.getPackageName().length() + 1))
         );
     }
 
@@ -88,7 +88,7 @@ public class ShortNameTest extends ParserTest {
     private static class ImportShortNameMappingConverter extends YamlMappingConverter<ImportShortNameMapping> {
 
         protected ImportShortNameMappingConverter() {
-            super(ImportShortNameMapping.class, SamePackageClass.class.getPackageName());
+            super(ImportShortNameMapping.class);
         }
     }
 }

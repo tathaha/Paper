@@ -11,6 +11,8 @@ extensions.configure(PaperweightSourceGeneratorExt::class) {
     atFile.set(projectDir.toPath().resolve("wideners.at").toFile())
 }
 
+val testData = sourceSets.create("testData")
+
 dependencies {
     implementation("com.squareup:javapoet:1.13.0")
     implementation(project(":paper-api"))
@@ -18,6 +20,7 @@ dependencies {
     implementation("org.jetbrains:annotations:24.0.1")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(testData.output)
 }
 
 tasks.register<JavaExec>("generate") {
@@ -40,6 +43,7 @@ tasks {
                 // excludeTags("parser") // comment this line while working on parser related things
             }
         }
+        inputs.files(testData.output.files)
     }
 
     compileTestJava {
