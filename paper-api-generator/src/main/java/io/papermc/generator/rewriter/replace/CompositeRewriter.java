@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions;
 import io.papermc.generator.rewriter.ClassNamed;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,17 +37,24 @@ public class CompositeRewriter extends SearchReplaceRewriter {
     }
 
     @Override
+    public void dump(StringBuilder content) {
+        for (SearchReplaceRewriter rewriter : this.getRewriters()) {
+            rewriter.dump(content);
+        }
+    }
+
+    @Override
     protected SearchReplaceRewriter getRewriterFor(String pattern) {
         return this.rewriterByPattern.get(pattern);
     }
 
     @Override
     public Set<String> getPatterns() {
-        return this.rewriterByPattern.keySet();
+        return Collections.unmodifiableSet(this.rewriterByPattern.keySet());
     }
 
     public Collection<SearchReplaceRewriter> getRewriters() {
-        return this.rewriterByPattern.values();
+        return Collections.unmodifiableCollection(this.rewriterByPattern.values());
     }
 
     public static CompositeRewriter bind(SearchReplaceRewriter... rewriters) {

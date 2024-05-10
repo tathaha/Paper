@@ -13,26 +13,31 @@ public interface TrimMaterial extends Keyed, Translatable {
 
     // Paper start - Generated/TrimMaterial
     // @GeneratedFrom 1.20.6
-    TrimMaterial AMETHYST = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("amethyst"));
+    TrimMaterial AMETHYST = getTrimMaterial("amethyst");
 
-    TrimMaterial COPPER = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("copper"));
+    TrimMaterial COPPER = getTrimMaterial("copper");
 
-    TrimMaterial DIAMOND = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("diamond"));
+    TrimMaterial DIAMOND = getTrimMaterial("diamond");
 
-    TrimMaterial EMERALD = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("emerald"));
+    TrimMaterial EMERALD = getTrimMaterial("emerald");
 
-    TrimMaterial GOLD = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("gold"));
+    TrimMaterial GOLD = getTrimMaterial("gold");
 
-    TrimMaterial IRON = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("iron"));
+    TrimMaterial IRON = getTrimMaterial("iron");
 
-    TrimMaterial LAPIS = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("lapis"));
+    TrimMaterial LAPIS = getTrimMaterial("lapis");
 
-    TrimMaterial NETHERITE = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("netherite"));
+    TrimMaterial NETHERITE = getTrimMaterial("netherite");
 
-    TrimMaterial QUARTZ = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("quartz"));
+    TrimMaterial QUARTZ = getTrimMaterial("quartz");
 
-    TrimMaterial REDSTONE = Registry.TRIM_MATERIAL.get(NamespacedKey.minecraft("redstone"));
+    TrimMaterial REDSTONE = getTrimMaterial("redstone");
     // Paper end - Generated/TrimMaterial
+
+    private static TrimMaterial getTrimMaterial(String name) {
+        NamespacedKey key = NamespacedKey.minecraft(name);
+        return io.papermc.paper.registry.RegistryAccess.registryAccess().getRegistry(io.papermc.paper.registry.RegistryKey.TRIM_MATERIAL).get(key);
+    }
 
     // Paper start - adventure
     /**

@@ -1,7 +1,10 @@
 package io.papermc.generator.types;
 
 import com.squareup.javapoet.ClassName;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.framework.qual.DefaultQualifier;
 
+@DefaultQualifier(NonNull.class)
 public final class Types {
 
     public static final String BASE_PACKAGE = "org.bukkit.craftbukkit";

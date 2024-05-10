@@ -1,7 +1,7 @@
 package io.papermc.generator.rewriter.parser;
 
 import com.mojang.brigadier.ImmutableStringReader;
-import org.jetbrains.annotations.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.function.Predicate;
 

@@ -2,10 +2,13 @@ package io.papermc.generator.types;
 
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.TypeSpec;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.framework.qual.DefaultQualifier;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
+@DefaultQualifier(NonNull.class)
 public abstract class SimpleGenerator implements SourceGenerator {
 
     protected final String className;
@@ -26,7 +29,7 @@ public abstract class SimpleGenerator implements SourceGenerator {
     public void writeToFile(Path parent) throws IOException {
         JavaFile.Builder builder = JavaFile.builder(this.packageName, this.getTypeSpec());
         this.file(builder)
-            .indent("    ")
+            .indent(INDENT_UNIT)
             .skipJavaLangImports(true);
 
         builder.build().writeTo(parent, StandardCharsets.UTF_8);

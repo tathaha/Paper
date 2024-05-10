@@ -17,31 +17,31 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static io.papermc.generator.rewriter.replace.CommentMarker.EMPTY_MARKER;
-import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT_CHAR;
-import static io.papermc.generator.rewriter.replace.SearchReplaceRewriter.INDENT_SIZE;
+import static io.papermc.generator.SourceWriter.INDENT_CHAR;
+import static io.papermc.generator.SourceWriter.INDENT_SIZE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Disabled("This test should run at a different lifecycle") // todo
 public class OldGeneratedCodeTest {
 
-    private static final String API_CONTAINER = System.getProperty("paper.generator.rewriter.container.api");
-    private static final String SERVER_CONTAINER = System.getProperty("paper.generator.rewriter.container.server");
+    private static final String CURRENT_VERSION;
 
-    private static String CURRENT_VERSION;
-
-    @BeforeAll
-    public static void initializeVersion() {
+    static {
         SharedConstants.tryDetectVersion();
         CURRENT_VERSION = SharedConstants.getCurrentVersion().getName();
     }
 
-    private void checkOutdated(String container, SourceRewriter[] rewriters) throws IOException {
+    public static void main(String[] args) throws IOException {
+        checkOutdated(Path.of(args[0]), Generators.API_REWRITE);
+        checkOutdated(Path.of(args[1]), Generators.SERVER_REWRITE);
+    }
+
+    private static void checkOutdated(Path container, SourceRewriter[] rewriters) throws IOException {
         for (SourceRewriter rewriter : rewriters) {
             if (!(rewriter instanceof SearchReplaceRewriter srt) || !srt.isVersionDependant()) {
                 continue;
             }
 
-            Path path = Path.of(container, srt.getRelativeFilePath());
+            Path path = container.resolve(srt.getRelativeFilePath());
             if (Files.notExists(path)) { // todo (softspoon): remove after
                 continue;
             }
@@ -95,11 +95,5 @@ public class OldGeneratedCodeTest {
                 }
             }
         }
-    }
-
-    @Test
-    public void testOutdatedCode() throws IOException {
-        checkOutdated(API_CONTAINER, Generators.API_REWRITE);
-        checkOutdated(SERVER_CONTAINER, Generators.SERVER_REWRITE);
     }
 }

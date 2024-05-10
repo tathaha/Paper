@@ -24,6 +24,7 @@ import net.minecraft.world.level.block.WallSignBlock;
 import org.bukkit.Material;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.inventory.EquipmentSlot;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 @Deprecated(forRemoval = true)
 public class MaterialRewriter {
@@ -56,7 +57,7 @@ public class MaterialRewriter {
                     equivalentItem = Optional.of(block.asItem());
                 }
 
-                Class<?> blockData = BlockStateMapping.getBestSuitedApiClass(block.getClass());
+                @Nullable Class<?> blockData = BlockStateMapping.getBestSuitedApiClass(block.getClass());
                 if (blockData == null) {
                     blockData = BlockData.class;
                 }
@@ -118,7 +119,7 @@ public class MaterialRewriter {
         }
 
         @Override
-        protected FeatureFlagSet getRequiredFeatures(Holder.Reference<Item> reference) {
+        protected @Nullable FeatureFlagSet getRequiredFeatures(Holder.Reference<Item> reference) {
             if (reference.value() instanceof BundleItem) {
                 return FlagSets.BUNDLE.get(); // special case since the item is not locked itself just in the creative menu
             } else {

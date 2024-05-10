@@ -103,7 +103,7 @@ import org.bukkit.block.data.type.TechnicalPiston;
 import org.bukkit.block.data.type.TrialSpawner;
 import org.bukkit.block.data.type.Vault;
 import org.bukkit.block.data.type.Wall;
-import org.jetbrains.annotations.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 public final class BlockStateMapping {
 

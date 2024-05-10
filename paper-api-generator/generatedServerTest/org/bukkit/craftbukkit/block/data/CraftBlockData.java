@@ -29,6 +29,7 @@ import org.bukkit.SoundGroup;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.BlockSupport;
+import org.bukkit.block.BlockType;
 import org.bukkit.block.PistonMoveReaction;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.structure.Mirror;
@@ -563,12 +564,11 @@ public class CraftBlockData implements BlockData {
     }
     // Paper end - cache block data strings
 
-    public static CraftBlockData newData(Material material, String data) {
-        Preconditions.checkArgument(material == null || material.isBlock(), "Cannot get data for not block %s", material);
+    public static CraftBlockData newData(BlockType blockType, String data) {
 
         // Paper start - cache block data strings
-        if (material != null) {
-            Block block = CraftBlockType.bukkitToMinecraft(material);
+        if (blockType != null) {
+            Block block = CraftBlockType.bukkitToMinecraftNew(blockType);
             if (block != null) {
                 net.minecraft.resources.ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
                 data = data == null ? key.toString() : key + data;
@@ -579,10 +579,10 @@ public class CraftBlockData implements BlockData {
         return (CraftBlockData) cached.clone();
     }
 
-    private static CraftBlockData createNewData(Material material, String data) {
+    private static CraftBlockData createNewData(BlockType blockType, String data) {
         // Paper end - cache block data strings
         net.minecraft.world.level.block.state.BlockState blockData;
-        Block block = CraftBlockType.bukkitToMinecraft(material);
+        Block block = blockType == null ? null : ((CraftBlockType<?>) blockType).getHandle();
         Map<Property<?>, Comparable<?>> parsed = null;
 
         // Data provided, use it

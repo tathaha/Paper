@@ -10,11 +10,14 @@ import net.minecraft.world.entity.monster.RangedAttackMob;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.*;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.framework.qual.DefaultQualifier;
 
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 
+@DefaultQualifier(NonNull.class)
 public final class MobGoalNames { // todo sync with MobGoalHelper ideally this should not be duplicated
 
     private static final Map<Class<? extends Goal>, Class<? extends Mob>> entityClassCache = new HashMap<>();

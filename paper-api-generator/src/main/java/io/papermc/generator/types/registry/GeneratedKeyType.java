@@ -26,9 +26,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static com.squareup.javapoet.TypeSpec.classBuilder;
 import static io.papermc.generator.utils.Annotations.EXPERIMENTAL_API_ANNOTATION;
@@ -40,7 +38,6 @@ import static javax.lang.model.element.Modifier.PRIVATE;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
 
-@DefaultQualifier(NonNull.class)
 public class GeneratedKeyType<T, A> extends SimpleGenerator {
 
     private static final String CREATE_JAVADOC = """

@@ -31,5 +31,4 @@ public class CraftPotionUtilRewriter extends SearchReplaceRewriter {
                 builder.append('\n');
             });
     }
-
 }

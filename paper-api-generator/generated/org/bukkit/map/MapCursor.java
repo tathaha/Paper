@@ -221,8 +221,8 @@ public final class MapCursor {
      */
     @Deprecated(forRemoval = true, since = "1.20.2") // Paper
     public void setRawType(byte type) {
-        if (type < 0 || type > 26) {
-            throw new IllegalArgumentException("Type must be in the range 0-26");
+        if (type < 0 || type > Type.UPPER_MAP_CURSOR_TYPE_BOUND) { // Paper
+            throw new IllegalArgumentException("Type must be in the range 0-" + Type.UPPER_MAP_CURSOR_TYPE_BOUND); // Paper
         }
         this.type = type;
     }
@@ -322,6 +322,8 @@ public final class MapCursor {
         VILLAGE_SNOWY(30, "village_snowy"),
         VILLAGE_TAIGA(31, "village_taiga");
         // Paper end - Generated/MapCursorType
+
+        static final int UPPER_MAP_CURSOR_TYPE_BOUND = Type.values().length - 1; // Paper - cached max value of Type
 
         private byte value;
         private final NamespacedKey key;

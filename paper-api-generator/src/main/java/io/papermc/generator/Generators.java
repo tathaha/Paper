@@ -4,10 +4,12 @@ import io.papermc.generator.rewriter.replace.CompositeRewriter;
 import io.papermc.generator.rewriter.SourceRewriter;
 import io.papermc.generator.rewriter.types.EnumCloneRewriter;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
+import io.papermc.generator.rewriter.types.simple.BlockTypeRewriter;
 import io.papermc.generator.rewriter.types.simple.CraftBlockDataMapping;
 import io.papermc.generator.rewriter.types.simple.CraftBlockEntityStateMapping;
 import io.papermc.generator.rewriter.types.simple.CraftPotionUtilRewriter;
 import io.papermc.generator.rewriter.types.simple.EntityTypeRewriter;
+import io.papermc.generator.rewriter.types.simple.ItemTypeRewriter;
 import io.papermc.generator.rewriter.types.simple.MapPaletteRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
@@ -184,13 +186,15 @@ public interface Generators {
         ),
         new RegistryFieldRewriter<>(Structure.class, Registries.STRUCTURE, "Structure", "getStructure"),
         new RegistryFieldRewriter<>(StructureType.class, Registries.STRUCTURE_TYPE, "StructureType", "getStructureType"),
-        new RegistryFieldRewriter<>(TrimPattern.class, Registries.TRIM_PATTERN, "TrimPattern", null),
-        new RegistryFieldRewriter<>(TrimMaterial.class, Registries.TRIM_MATERIAL, "TrimMaterial", null),
+        new RegistryFieldRewriter<>(TrimPattern.class, Registries.TRIM_PATTERN, "TrimPattern", "getTrimPattern"),
+        new RegistryFieldRewriter<>(TrimMaterial.class, Registries.TRIM_MATERIAL, "TrimMaterial", "getTrimMaterial"),
         new RegistryFieldRewriter<>(DamageType.class, Registries.DAMAGE_TYPE, "DamageType", "getDamageType"),
         new RegistryFieldRewriter<>(GameEvent.class, Registries.GAME_EVENT, "GameEvent", "getEvent"),
         new RegistryFieldRewriter<>(MusicInstrument.class, Registries.INSTRUMENT, "MusicInstrument", "getInstrument"),
         new RegistryFieldRewriter<>(Wolf.Variant.class, Registries.WOLF_VARIANT, "WolfVariant", "getVariant"),
         new MemoryKeyRewriter("MemoryKey"),
+        new ItemTypeRewriter("ItemType"),
+        new BlockTypeRewriter("BlockType"),
         new TagRewriter(Tag.class, "Tag"),
         new MapPaletteRewriter("MapPalette#colors")
     };

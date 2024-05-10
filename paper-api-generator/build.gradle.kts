@@ -23,14 +23,24 @@ dependencies {
     testImplementation(testData.output)
 }
 
+val generatedApiPath = file("generated");
+val generatedServerPath = file("generatedServerTest");
+
 tasks.register<JavaExec>("generate") {
     dependsOn(tasks.check)
     mainClass.set("io.papermc.generator.Main")
     classpath(sourceSets.main.map { it.runtimeClasspath })
-    args(file("generated").toString(),
+    args(generatedApiPath.toString(),
         project(":paper-api").sourceSets["main"].java.srcDirs.first().toString(),
-        file("generatedServerTest").toString(),
+        generatedServerPath.toString(),
         project(":paper-server").sourceSets["main"].java.srcDirs.first().toString())
+}
+
+tasks.register<JavaExec>("scanOldGeneratedSourceCode") {
+    mainClass.set("io.papermc.generator.rewriter.OldGeneratedCodeTest")
+    classpath(sourceSets.test.map { it.runtimeClasspath })
+    args(generatedApiPath.toString(),
+        generatedServerPath.toString())
 }
 
 tasks {

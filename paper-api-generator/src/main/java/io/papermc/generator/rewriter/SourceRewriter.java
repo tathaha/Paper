@@ -1,10 +1,12 @@
 package io.papermc.generator.rewriter;
 
-import java.io.IOException;
-import java.nio.file.Path;
+import io.papermc.generator.SourceWriter;
 
-public interface SourceRewriter {
+public interface SourceRewriter extends SourceWriter {
 
-    void writeToFile(Path parent) throws IOException;
+    String PAPER_START_FORMAT = "Paper start";
+    String PAPER_END_FORMAT = "Paper end";
+    String SEARCH_COMMENT_MARKER_FORMAT = "// %s - Generated/%s"; // {0} = PAPER_START_FORMAT|PAPER_END_FORMAT {1} = pattern
 
+    void dump(StringBuilder into);
 }

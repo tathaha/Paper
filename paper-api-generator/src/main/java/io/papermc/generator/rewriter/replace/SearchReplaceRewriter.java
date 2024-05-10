@@ -1,6 +1,7 @@
 package io.papermc.generator.rewriter.replace;
 
 import com.google.common.base.Preconditions;
+import com.mojang.logging.LogUtils;
 import io.papermc.generator.Main;
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.SourceRewriter;
@@ -12,9 +13,9 @@ import io.papermc.generator.rewriter.parser.StringReader;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.paper.generated.GeneratedFrom;
 import net.minecraft.SharedConstants;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.VisibleForTesting;
+import org.slf4j.Logger;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,17 +28,7 @@ import static io.papermc.generator.rewriter.replace.CommentMarker.EMPTY_MARKER;
 
 public class SearchReplaceRewriter implements SourceRewriter {
 
-    protected static final String INDENT_UNIT = "    ";
-    @VisibleForTesting
-    public static final int INDENT_SIZE = INDENT_UNIT.length();
-    @VisibleForTesting
-    public static final char INDENT_CHAR = INDENT_UNIT.charAt(0);
-
-    @VisibleForTesting
-    public static final String PAPER_START_FORMAT = "Paper start";
-    private static final String PAPER_END_FORMAT = "Paper end";
-    @VisibleForTesting
-    public static final String GENERATED_COMMENT_FORMAT = "// %s - Generated/%s"; // {0} = PAPER_START_FORMAT|PAPER_END_FORMAT {1} = pattern
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     protected final ClassNamed rewriteClass;
     protected final String pattern;
@@ -196,20 +187,64 @@ public class SearchReplaceRewriter implements SourceRewriter {
         String filePath = this.getRelativeFilePath();
 
         Path path = parent.resolve(filePath);
+        final Path createdPath;
         StringBuilder content = new StringBuilder();
-        try (BufferedReader buffer = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            this.searchAndReplace(buffer, content);
+
+        if (Files.isRegularFile(path)) {
+            try (BufferedReader buffer = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+                this.searchAndReplace(buffer, content);
+            }
+        } else if (!this.exactReplacement) {
+            LOGGER.warn("Target source file '{}' doesn't exists, dumping rewriters data instead...", filePath);
+            this.dumpAll(content);
+            filePath += ".dump";
+            path = parent.resolve(filePath);
         }
 
         // Files.writeString(path, content.toString(), StandardCharsets.UTF_8); // todo
-        Path createdPath;
-        if (this.rewriteClass.knownClass() != null) {
+        if (path.toString().contains("Paper/Paper-API/src/")) {
             createdPath = Main.generatedPath.resolve(filePath);
         } else {
             createdPath = Main.generatedServerPath.resolve(filePath);
         }
+
         Files.createDirectories(createdPath.getParent());
         Files.writeString(createdPath, content, StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public void dump(StringBuilder content) {
+        content.append('\n');
+        content.append(this.pattern);
+        content.append('\n');
+        content.append("Start comment marker : ").append(SEARCH_COMMENT_MARKER_FORMAT.formatted(PAPER_START_FORMAT, this.pattern));
+        content.append('\n');
+        content.append("End comment marker : ").append(SEARCH_COMMENT_MARKER_FORMAT.formatted(PAPER_END_FORMAT, this.pattern));
+        content.append('\n');
+        content.append('\n');
+
+        content.append(">".repeat(30));
+        content.append('\n');
+
+        this.insert(new SearchMetadata(ImportCollector.NO_OP, INDENT_UNIT, "", -1), content);
+
+        content.append("<".repeat(30));
+        content.append('\n');
+    }
+
+    public void dumpAll(StringBuilder content) {
+        content.append("Dump of the rewriters that apply to the file : ").append(this.getRelativeFilePath());
+        content.append('\n');
+        content.append('\n');
+
+        content.append("Configuration :");
+        content.append('\n');
+        content.append("Indent unit : \"").append(INDENT_UNIT).append("\" (").append(INDENT_SIZE).append(" char)");
+        content.append('\n');
+        content.append("Indent char : '").append(INDENT_CHAR).append("' (").append(INDENT_UNIT.codePointAt(0)).append(")");
+        content.append('\n');
+
+        this.dump(content);
     }
 
     private void appendGeneratedComment(StringBuilder builder, String indent) {
@@ -232,8 +267,8 @@ public class SearchReplaceRewriter implements SourceRewriter {
             indentSize = lineIterator.skipChars(INDENT_CHAR);
         }
 
-        boolean foundStart = lineIterator.trySkipString(GENERATED_COMMENT_FORMAT.formatted(PAPER_START_FORMAT, ""));
-        boolean foundEnd = !foundStart && lineIterator.trySkipString(GENERATED_COMMENT_FORMAT.formatted(PAPER_END_FORMAT, ""));
+        boolean foundStart = lineIterator.trySkipString(SEARCH_COMMENT_MARKER_FORMAT.formatted(PAPER_START_FORMAT, ""));
+        boolean foundEnd = !foundStart && lineIterator.trySkipString(SEARCH_COMMENT_MARKER_FORMAT.formatted(PAPER_END_FORMAT, ""));
         if (!foundStart && !foundEnd) {
             return EMPTY_MARKER;
         }

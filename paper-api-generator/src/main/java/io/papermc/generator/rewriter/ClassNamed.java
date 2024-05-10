@@ -1,7 +1,7 @@
 package io.papermc.generator.rewriter;
 
 import io.papermc.generator.utils.ClassHelper;
-import org.jetbrains.annotations.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Objects;
 
 public record ClassNamed(String packageName, String simpleName, String dottedNestedName, @Nullable Class<?> knownClass) {

@@ -31,8 +31,6 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
 import org.bukkit.entity.EntityType;
-import org.checkerframework.checker.nullness.qual.NonNull;
-import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static com.squareup.javapoet.TypeSpec.interfaceBuilder;
 import static io.papermc.generator.utils.Annotations.NOT_NULL;
@@ -43,7 +41,6 @@ import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
 
-@DefaultQualifier(NonNull.class)
 public class TagGenerator extends SimpleGenerator {
 
     public static String CLASS_HEADER_JAVADOC = """

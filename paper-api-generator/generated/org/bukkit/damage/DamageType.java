@@ -120,7 +120,7 @@ public interface DamageType extends Keyed, Translatable {
     @NotNull
     private static DamageType getDamageType(@NotNull String key) {
         NamespacedKey namespacedKey = NamespacedKey.minecraft(key);
-        return Preconditions.checkNotNull(Registry.DAMAGE_TYPE.get(namespacedKey), "No DamageType found for %s. This is a bug.", namespacedKey);
+        return Registry.DAMAGE_TYPE.get(namespacedKey);
     }
 
     /**

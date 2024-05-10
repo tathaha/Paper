@@ -65,8 +65,7 @@ public class EnumRegistryRewriter<T, A extends Enum<A>> extends EnumRewriter<Hol
         }
     }
 
-    @Nullable
-    protected FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
+    protected @Nullable FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
         if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
             return element.requiredFeatures();
         }

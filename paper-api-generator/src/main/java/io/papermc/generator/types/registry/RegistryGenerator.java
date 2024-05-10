@@ -27,9 +27,7 @@ import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.MinecraftExperimental;
 import org.bukkit.NamespacedKey;
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static com.squareup.javapoet.TypeSpec.classBuilder;
 import static com.squareup.javapoet.TypeSpec.interfaceBuilder;
@@ -41,7 +39,6 @@ import static javax.lang.model.element.Modifier.PRIVATE;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
 
-@DefaultQualifier(NonNull.class)
 public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
 
     private final ClassName apiType;

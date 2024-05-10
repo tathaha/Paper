@@ -807,6 +807,15 @@ public interface Tag<T extends Keyed> extends Keyed {
     @Deprecated
     Tag<Material> FOX_FOOD = ITEMS_FOX_FOOD;
     /**
+     * Vanilla item tag representing all tools.
+     *
+     * @deprecated removed in Minecraft 1.20.5. Do not use. Will be removed at a later date. Until then,
+     * this constant now acts as a reference to {@link #ITEMS_BREAKS_DECORATED_POTS} which largely shares
+     * the same contents of the old "minecraft:tools" tag.
+     */
+    @Deprecated(forRemoval = true)
+    Tag<Material> ITEMS_TOOLS = ITEMS_BREAKS_DECORATED_POTS;
+    /**
      * Vanilla item tag representing all items which tempt axolotls.
      *
      * @deprecated use {@link #ITEMS_AXOLOTL_FOOD}

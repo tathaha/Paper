@@ -5,8 +5,8 @@ import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import io.papermc.generator.rewriter.parser.ProtoTypeName;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.Contract;
-import org.jetbrains.annotations.Nullable;
 import javax.lang.model.SourceVersion;
 
 public class NamingManager {
@@ -15,7 +15,7 @@ public class NamingManager {
     private final String baseName;
     private final String lowerCamelName, upperCamelName;
 
-    public NamingManager(@Nullable NamingManager.AccessKeyword accessKeyword, CaseFormat format, String baseName) {
+    public NamingManager(NamingManager.@Nullable AccessKeyword accessKeyword, CaseFormat format, String baseName) {
         this.accessKeyword = accessKeyword; // this is a little bit too restrictive for extra data hmm
         this.baseName = baseName;
         this.upperCamelName = format.to(CaseFormat.UPPER_CAMEL, baseName);

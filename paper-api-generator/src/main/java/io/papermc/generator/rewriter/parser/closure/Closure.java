@@ -2,7 +2,7 @@ package io.papermc.generator.rewriter.parser.closure;
 
 import io.papermc.generator.rewriter.parser.ParserException;
 import io.papermc.generator.rewriter.parser.StringReader;
-import org.jetbrains.annotations.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.function.Supplier;
 
 public interface Closure {

@@ -2,7 +2,6 @@ package io.papermc.generator;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.mojang.logging.LogUtils;
-import io.papermc.generator.rewriter.SourceRewriter;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.types.craftblockdata.CraftBlockDataGenerators;
 import io.papermc.generator.utils.experimental.TagCollector;
@@ -79,16 +78,13 @@ public final class Main {
             PathUtils.deleteDirectory(output);
         }
 
-        for (final SourceGenerator generator : generators) {
-            generator.writeToFile(output);
-        }
-
+        apply(output, generators);
         LOGGER.info("Files written to {}", output.toAbsolutePath());
     }
 
-    private static void apply(Path output, SourceRewriter[] rewriters) throws IOException {
-        for (final SourceRewriter rewriter : rewriters) {
-            rewriter.writeToFile(output);
+    private static void apply(Path output, SourceWriter[] writers) throws IOException {
+        for (final SourceWriter writer : writers) {
+            writer.writeToFile(output);
         }
     }
 
@@ -96,6 +92,7 @@ public final class Main {
         if (Files.exists(output)) {
             PathUtils.deleteDirectory(output);
         }
+
         CraftBlockDataGenerators.generate(output);
         LOGGER.info("Files written to {}", output.toAbsolutePath());
     }

@@ -15,44 +15,49 @@ public interface TrimPattern extends Keyed, Translatable {
     // @GeneratedFrom 1.20.6
     @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
-    TrimPattern BOLT = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("bolt"));
+    TrimPattern BOLT = getTrimPattern("bolt");
 
-    TrimPattern COAST = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("coast"));
+    TrimPattern COAST = getTrimPattern("coast");
 
-    TrimPattern DUNE = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("dune"));
+    TrimPattern DUNE = getTrimPattern("dune");
 
-    TrimPattern EYE = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("eye"));
+    TrimPattern EYE = getTrimPattern("eye");
 
     @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.UPDATE_1_21)
     @org.jetbrains.annotations.ApiStatus.Experimental
-    TrimPattern FLOW = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("flow"));
+    TrimPattern FLOW = getTrimPattern("flow");
 
-    TrimPattern HOST = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("host"));
+    TrimPattern HOST = getTrimPattern("host");
 
-    TrimPattern RAISER = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("raiser"));
+    TrimPattern RAISER = getTrimPattern("raiser");
 
-    TrimPattern RIB = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("rib"));
+    TrimPattern RIB = getTrimPattern("rib");
 
-    TrimPattern SENTRY = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("sentry"));
+    TrimPattern SENTRY = getTrimPattern("sentry");
 
-    TrimPattern SHAPER = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("shaper"));
+    TrimPattern SHAPER = getTrimPattern("shaper");
 
-    TrimPattern SILENCE = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("silence"));
+    TrimPattern SILENCE = getTrimPattern("silence");
 
-    TrimPattern SNOUT = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("snout"));
+    TrimPattern SNOUT = getTrimPattern("snout");
 
-    TrimPattern SPIRE = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("spire"));
+    TrimPattern SPIRE = getTrimPattern("spire");
 
-    TrimPattern TIDE = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("tide"));
+    TrimPattern TIDE = getTrimPattern("tide");
 
-    TrimPattern VEX = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("vex"));
+    TrimPattern VEX = getTrimPattern("vex");
 
-    TrimPattern WARD = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("ward"));
+    TrimPattern WARD = getTrimPattern("ward");
 
-    TrimPattern WAYFINDER = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("wayfinder"));
+    TrimPattern WAYFINDER = getTrimPattern("wayfinder");
 
-    TrimPattern WILD = Registry.TRIM_PATTERN.get(NamespacedKey.minecraft("wild"));
+    TrimPattern WILD = getTrimPattern("wild");
     // Paper end - Generated/TrimPattern
+
+    private static TrimPattern getTrimPattern(String name) {
+        NamespacedKey key = NamespacedKey.minecraft(name);
+        return io.papermc.paper.registry.RegistryAccess.registryAccess().getRegistry(io.papermc.paper.registry.RegistryKey.TRIM_PATTERN).get(key);
+    }
 
     // Paper start - adventure
     /**
