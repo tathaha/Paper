@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Owen1212055 <23108066+Owen1212055@users.noreply.github.com>
+Date: Sat, 11 May 2024 17:27:42 -0400
+Subject: [PATCH] Use Brig Dispatcher when Possible
+
+
+diff --git a/src/main/java/net/minecraft/commands/Commands.java b/src/main/java/net/minecraft/commands/Commands.java
+index 2b33c5f5a7c5c87cf975c5237a2c9ba8cc0d2bdf..c69c3b1a0790d2c88be099c7f3f17d055bdb3c48 100644
+--- a/src/main/java/net/minecraft/commands/Commands.java
++++ b/src/main/java/net/minecraft/commands/Commands.java
+@@ -335,6 +335,7 @@ public class Commands {
+         this.performCommand(parseresults, s, label, false);
+     }
+     public void performCommand(ParseResults<CommandSourceStack> parseresults, String s, String label, boolean throwCommandError) {
++        org.spigotmc.AsyncCatcher.catchOp("Cannot perform command async");
+         // Paper end
+         CommandSourceStack commandlistenerwrapper = (CommandSourceStack) parseresults.getContext().getSource();
+ 
+diff --git a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+index 2eb9c584cc77237f1c82d880a51a3f8b51008d73..4f148e303ae06648d93e3f9a934ef59205ed272f 100644
+--- a/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
++++ b/src/main/java/net/minecraft/server/dedicated/DedicatedServer.java
+@@ -517,8 +517,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             if (event.isCancelled()) continue;
+             servercommand = new ConsoleInput(event.getCommand(), servercommand.source);
+ 
+-            // this.getCommands().performPrefixedCommand(servercommand.source, servercommand.msg); // Called in dispatchServerCommand
+-            this.server.dispatchServerCommand(this.console, servercommand);
++            this.getCommands().performCommand(this.getCommands().getDispatcher().parse(servercommand.msg, servercommand.source), servercommand.msg); // Paper - Use brig dispatcher
+             // CraftBukkit end
+         }
+ 
+@@ -809,7 +808,7 @@ public class DedicatedServer extends MinecraftServer implements ServerInterface
+             } else {
+             // Paper end
+             ConsoleInput serverCommand = new ConsoleInput(event.getCommand(), wrapper);
+-            this.server.dispatchServerCommand(event.getSender(), serverCommand);
++            this.getCommands().performCommand(this.getCommands().getDispatcher().parse(serverCommand.msg, wrapper), serverCommand.msg); // Paper - Use brig dispatcher
+             } // Paper
+         });
+         // Paper start
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index 7c165ed8b1fd8072bbfbed7b4f865b72f677a2a3..ad56388d05065efdb23fe5b44f7c7ace793446e2 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -965,9 +965,7 @@ public final class CraftServer implements Server {
+         Preconditions.checkArgument(commandLine != null, "commandLine cannot be null");
+         org.spigotmc.AsyncCatcher.catchOp("Command Dispatched Async: " + commandLine); // Spigot // Paper - Include command in error message
+ 
+-        if (this.commandMap.dispatch(sender, commandLine)) {
+-            return true;
+-        }
++        // Paper - don't go through command map
+ 
+         return this.dispatchCommand(VanillaCommandWrapper.getListener(sender), commandLine);
+     }
+@@ -983,6 +981,7 @@ public final class CraftServer implements Server {
+ 
+         try {
+             commands.performCommand(results, commandLine, commandLine, true);
++            return true;
+         } catch (CommandException ex) {
+             this.pluginManager.callEvent(new com.destroystokyo.paper.event.server.ServerExceptionEvent(new com.destroystokyo.paper.exception.ServerCommandException(ex, target, sender, args))); // Paper
+             //target.timings.stopTiming(); // Spigot // Paper
+@@ -994,8 +993,6 @@ public final class CraftServer implements Server {
+             throw new CommandException(msg, ex);
+         }
+         // Paper end
+-
+-        return false;
+     }
+ 
+     @Override
