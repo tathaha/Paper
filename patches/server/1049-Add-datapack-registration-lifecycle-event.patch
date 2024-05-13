@@ -7,20 +7,18 @@ Subject: [PATCH] Add datapack registration lifecycle event
 public net/minecraft/server/packs/repository/FolderRepositorySource$FolderPackDetector
 public net/minecraft/server/packs/repository/FolderRepositorySource$FolderPackDetector <init>(Lnet/minecraft/world/level/validation/DirectoryValidator;)V
 
-diff --git a/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java b/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java
+diff --git a/src/main/java/io/papermc/paper/datapack/PaperDatapackRegistrarImpl.java b/src/main/java/io/papermc/paper/datapack/PaperDatapackRegistrarImpl.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..8279142e5ece897c0e0a2f1d1bf34933eb38edfa
+index 0000000000000000000000000000000000000000..d9634a37a9fc5fe4fd1b69a19f013483a0f03828
 --- /dev/null
-+++ b/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java
-@@ -0,0 +1,87 @@
++++ b/src/main/java/io/papermc/paper/datapack/PaperDatapackRegistrarImpl.java
+@@ -0,0 +1,120 @@
 +package io.papermc.paper.datapack;
 +
 +import com.mojang.logging.LogUtils;
 +import io.papermc.paper.adventure.PaperAdventure;
 +import io.papermc.paper.plugin.bootstrap.BootstrapContext;
-+import io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner;
 +import io.papermc.paper.plugin.lifecycle.event.registrar.PaperRegistrar;
-+import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 +import java.io.IOException;
 +import java.net.URI;
 +import java.nio.file.Path;
@@ -36,7 +34,6 @@ index 0000000000000000000000000000000000000000..8279142e5ece897c0e0a2f1d1bf34933
 +import net.minecraft.server.packs.repository.FolderRepositorySource;
 +import net.minecraft.server.packs.repository.Pack;
 +import net.minecraft.server.packs.repository.PackDetector;
-+import net.minecraft.server.packs.repository.RepositorySource;
 +import net.minecraft.world.level.validation.ContentValidationException;
 +import net.minecraft.world.level.validation.DirectoryValidator;
 +import net.minecraft.world.level.validation.ForbiddenSymlinkInfo;
@@ -48,11 +45,114 @@ index 0000000000000000000000000000000000000000..8279142e5ece897c0e0a2f1d1bf34933
 +import static java.util.Objects.requireNonNull;
 +
 +@DefaultQualifier(NonNull.class)
-+public class PluginDatapackRepositorySource implements RepositorySource {
++public class PaperDatapackRegistrarImpl implements PaperRegistrar<BootstrapContext>, DatapackRegistrar {
 +
 +    private static final Logger LOGGER = LogUtils.getLogger();
-+    // TODO make this configurable when the plugin adds the pack
-+    private static final PackSelectionConfig DISCOVERED_PACK_SELECTION_CONFIG = new PackSelectionConfig(false, Pack.Position.TOP, false);
++
++    private final PackDetector<Pack.ResourcesSupplier> detector;
++    private final Consumer<Pack> packAdder;
++    private @Nullable BootstrapContext owner;
++
++    PaperDatapackRegistrarImpl(final DirectoryValidator symlinkValidator, final Consumer<Pack> packAdder) {
++        this.detector = new FolderRepositorySource.FolderPackDetector(symlinkValidator);
++        this.packAdder = packAdder;
++    }
++
++    @Override
++    public void setCurrentContext(final @Nullable BootstrapContext owner) {
++        this.owner = owner;
++    }
++
++    @Override
++    public void addDatapack(final URI uri, final String id, final Consumer<Configurer> configurer) throws IOException {
++        this.addDatapack(VanillaPackResourcesBuilder.safeGetPath(uri), id, configurer);
++    }
++
++    @Override
++    public void addDatapack(final Path path, final String id, final Consumer<Configurer> configurer) throws IOException {
++        final List<ForbiddenSymlinkInfo> badLinks = new ArrayList<>();
++        final Pack.@Nullable ResourcesSupplier resourcesSupplier = this.detector.detectPackResources(path, badLinks);
++        if (!badLinks.isEmpty()) {
++            LOGGER.warn("Ignoring potential pack entry: {}", ContentValidationException.getMessage(path, badLinks));
++        } else if (resourcesSupplier != null) {
++            final String packId = requireNonNull(this.owner).getPluginMeta().getName() + "/" + id;
++            final ConfigurerImpl configurerImpl = new ConfigurerImpl(Component.text(packId));
++            configurer.accept(configurerImpl);
++            final PackLocationInfo locInfo = new PackLocationInfo(packId,
++                PaperAdventure.asVanilla(configurerImpl.title),
++                PluginPackSource.INSTANCE,
++                Optional.empty()
++            );
++            final @Nullable Pack pack = Pack.readMetaAndCreate(locInfo,
++                resourcesSupplier,
++                PackType.SERVER_DATA,
++                new PackSelectionConfig(
++                    configurerImpl.required,
++                    configurerImpl.position,
++                    configurerImpl.fixedPosition
++                ));
++            if (pack != null) {
++                this.packAdder.accept(pack);
++            }
++        } else {
++            LOGGER.info("Found non-pack entry '{}', ignoring", path);
++        }
++    }
++
++    static final class ConfigurerImpl implements Configurer {
++
++        private Component title;
++        private boolean required = false;
++        private boolean fixedPosition = false;
++        private Pack.Position position = Pack.Position.TOP;
++
++        ConfigurerImpl(final Component title) {
++            this.title = title;
++        }
++
++        @Override
++        public Configurer title(final Component title) {
++            this.title = title;
++            return this;
++        }
++
++        @Override
++        public Configurer required(final boolean required) {
++            this.required = required;
++            return this;
++        }
++
++        @Override
++        public Configurer position(final boolean fixed, final Position position) {
++            this.fixedPosition = fixed;
++            this.position = switch (position) {
++                case TOP -> Pack.Position.TOP;
++                case BOTTOM -> Pack.Position.BOTTOM;
++            };
++            return this;
++        }
++    }
++}
+diff --git a/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java b/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..e4363316480cb18bcb825f1d921daddcd32d7d88
+--- /dev/null
++++ b/src/main/java/io/papermc/paper/datapack/PluginDatapackRepositorySource.java
+@@ -0,0 +1,29 @@
++package io.papermc.paper.datapack;
++
++import io.papermc.paper.plugin.bootstrap.BootstrapContext;
++import io.papermc.paper.plugin.lifecycle.event.LifecycleEventRunner;
++import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
++import java.util.function.Consumer;
++import net.minecraft.server.packs.repository.Pack;
++import net.minecraft.server.packs.repository.RepositorySource;
++import net.minecraft.world.level.validation.DirectoryValidator;
++import org.checkerframework.checker.nullness.qual.NonNull;
++import org.checkerframework.framework.qual.DefaultQualifier;
++
++@DefaultQualifier(NonNull.class)
++public class PluginDatapackRepositorySource implements RepositorySource {
 +
 +    private final DirectoryValidator validator;
 +
@@ -62,42 +162,10 @@ index 0000000000000000000000000000000000000000..8279142e5ece897c0e0a2f1d1bf34933
 +
 +    @Override
 +    public void loadPacks(final Consumer<Pack> packAdder) {
-+
-+        class RegistrarImpl implements PaperRegistrar<BootstrapContext>, DatapackRegistrar {
-+
-+            private final PackDetector<Pack.ResourcesSupplier> detector = new FolderRepositorySource.FolderPackDetector(PluginDatapackRepositorySource.this.validator);
-+            private @Nullable BootstrapContext owner;
-+
-+            @Override
-+            public void setCurrentContext(final @Nullable BootstrapContext owner) {
-+                this.owner = owner;
-+            }
-+
-+            @Override
-+            public void addDatapack(final URI uri, final String id, final Component title) throws IOException {
-+                this.addDatapack(VanillaPackResourcesBuilder.safeGetPath(uri), id, title);
-+            }
-+
-+            @Override
-+            public void addDatapack(final Path path, final String id, final Component title) throws IOException {
-+                final List<ForbiddenSymlinkInfo> badLinks = new ArrayList<>();
-+                final Pack.@Nullable ResourcesSupplier resourcesSupplier = this.detector.detectPackResources(path, badLinks);
-+                if (!badLinks.isEmpty()) {
-+                    LOGGER.warn("Ignoring potential pack entry: {}", ContentValidationException.getMessage(path, badLinks));
-+                } else if (resourcesSupplier != null) {
-+                    final String packId = requireNonNull(this.owner).getPluginMeta().getName() + "/" + id;
-+                    final PackLocationInfo locInfo = new PackLocationInfo(packId, PaperAdventure.asVanilla(title), PluginPackSource.INSTANCE, Optional.empty());
-+                    final @Nullable Pack pack = Pack.readMetaAndCreate(locInfo, resourcesSupplier, PackType.SERVER_DATA, DISCOVERED_PACK_SELECTION_CONFIG);
-+                    if (pack != null) {
-+                        packAdder.accept(pack);
-+                    }
-+                } else {
-+                    LOGGER.info("Found non-pack entry '{}', ignoring", path);
-+                }
-+            }
-+        }
-+
-+        LifecycleEventRunner.INSTANCE.callStaticRegistrarEvent(LifecycleEvents.DATAPACK_REGISTRATION, new RegistrarImpl(), BootstrapContext.class);
++        LifecycleEventRunner.INSTANCE.callStaticRegistrarEvent(LifecycleEvents.DATAPACK_REGISTRATION,
++            new PaperDatapackRegistrarImpl(this.validator, packAdder),
++            BootstrapContext.class
++        );
 +    }
 +}
 diff --git a/src/main/java/io/papermc/paper/datapack/PluginPackSource.java b/src/main/java/io/papermc/paper/datapack/PluginPackSource.java
