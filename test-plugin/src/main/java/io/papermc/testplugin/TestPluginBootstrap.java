@@ -19,11 +19,11 @@ public class TestPluginBootstrap implements PluginBootstrap {
     public void bootstrap(@NotNull BootstrapContext context) {
         // io.papermc.testplugin.brigtests.Registration.registerViaBootstrap(context);
         final LifecycleEventManager<BootstrapContext> manager = context.getLifecycleManager();
-        manager.registerEventHandler(LifecycleEvents.DATAPACK_REGISTRATION, event -> {
+        manager.registerEventHandler(LifecycleEvents.DATAPACK_DISCOVERY, event -> {
             final DatapackRegistrar registrar = event.registrar();
             try {
                 final URI uri = Objects.requireNonNull(TestPluginBootstrap.class.getResource("/pack")).toURI();
-                registrar.addDatapack(uri, "test", text("HEY THERE"));
+                registrar.discoverPack(uri, "test");
             } catch (final URISyntaxException | IOException e) {
                 throw new RuntimeException(e);
             }
