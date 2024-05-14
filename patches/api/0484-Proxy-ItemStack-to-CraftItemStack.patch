@@ -1,0 +1,363 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Jake Potrebic <jake.m.potrebic@gmail.com>
+Date: Tue, 14 May 2024 11:57:51 -0700
+Subject: [PATCH] Proxy ItemStack to CraftItemStack
+
+
+diff --git a/src/main/java/org/bukkit/inventory/ItemStack.java b/src/main/java/org/bukkit/inventory/ItemStack.java
+index c64413a6740b604282984dea2a8430a6e7478d68..fd919122162dd93899452cbe833d7a084d3e530f 100644
+--- a/src/main/java/org/bukkit/inventory/ItemStack.java
++++ b/src/main/java/org/bukkit/inventory/ItemStack.java
+@@ -28,10 +28,8 @@ import org.jetbrains.annotations.Nullable;
+  * returns false.</b>
+  */
+ public class ItemStack implements Cloneable, ConfigurationSerializable, Translatable, net.kyori.adventure.text.event.HoverEventSource<net.kyori.adventure.text.event.HoverEvent.ShowItem>, net.kyori.adventure.translation.Translatable { // Paper
+-    private Material type = Material.AIR;
+-    private int amount = 0;
++    private ItemStack craftDelegate; // Paper - always delegate to server-backed stack
+     private MaterialData data = null;
+-    private ItemMeta meta;
+ 
+     @Utility
+     protected ItemStack() {}
+@@ -86,8 +84,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+     @Deprecated
+     public ItemStack(@NotNull final Material type, final int amount, final short damage, @Nullable final Byte data) {
+         Preconditions.checkArgument(type != null, "Material cannot be null");
+-        this.type = type;
+-        this.amount = amount;
++        this.craftDelegate = java.util.Objects.requireNonNull(type.asItemType(), type + " is not an item").createItemStack(amount); // Paper - delegate
+         if (damage != 0) {
+             setDurability(damage);
+         }
+@@ -105,14 +102,10 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     public ItemStack(@NotNull final ItemStack stack) throws IllegalArgumentException {
+         Preconditions.checkArgument(stack != null, "Cannot copy null stack");
+-        this.type = stack.getType();
+-        this.amount = stack.getAmount();
+-        if (this.type.isLegacy()) {
++        this.craftDelegate = stack.clone(); // Paper - delegate
++        if (stack.getType().isLegacy()) {
+             this.data = stack.getData();
+         }
+-        if (stack.hasItemMeta()) {
+-            setItemMeta0(stack.getItemMeta(), type);
+-        }
+     }
+ 
+     /**
+@@ -123,7 +116,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+     @Utility
+     @NotNull
+     public Material getType() {
+-        return type;
++        return this.craftDelegate.getType(); // Paper - delegate
+     }
+ 
+     /**
+@@ -150,15 +143,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+     @Deprecated // Paper
+     public void setType(@NotNull Material type) {
+         Preconditions.checkArgument(type != null, "Material cannot be null");
+-        this.type = type;
+-        if (this.meta != null) {
+-            this.meta = Bukkit.getItemFactory().asMetaFor(meta, type);
+-        }
+-        if (type.isLegacy()) {
+-            createData((byte) 0);
+-        } else {
+-            this.data = null;
+-        }
++        this.craftDelegate.setType(type); // Paper - delegate
+     }
+     // Paper start
+     /**
+@@ -170,12 +155,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+     @NotNull
+     @org.jetbrains.annotations.Contract(value = "_ -> new", pure = true)
+     public ItemStack withType(@NotNull Material type) {
+-        ItemStack itemStack = new ItemStack(type, this.amount);
+-        if (this.hasItemMeta()) {
+-            itemStack.setItemMeta(this.getItemMeta());
+-        }
+-
+-        return itemStack;
++        return this.craftDelegate.withType(type); // Paper - delegate
+     }
+     // Paper end
+ 
+@@ -185,7 +165,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @return Amount of items in this stack
+      */
+     public int getAmount() {
+-        return amount;
++        return this.craftDelegate.getAmount(); // Paper - delegate
+     }
+ 
+     /**
+@@ -194,7 +174,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @param amount New amount of items in this stack
+      */
+     public void setAmount(int amount) {
+-        this.amount = amount;
++        this.craftDelegate.setAmount(amount); // Paper - delegate
+     }
+ 
+     /**
+@@ -247,11 +227,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @Deprecated
+     public void setDurability(final short durability) {
+-        ItemMeta meta = getItemMeta();
+-        if (meta != null) {
+-            ((Damageable) meta).setDamage(durability);
+-            setItemMeta(meta);
+-        }
++        this.craftDelegate.setDurability(durability); // Paper - delegate
+     }
+ 
+     /**
+@@ -262,8 +238,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @Deprecated
+     public short getDurability() {
+-        ItemMeta meta = getItemMeta();
+-        return (meta == null) ? 0 : (short) ((Damageable) meta).getDamage();
++        return this.craftDelegate.getDurability(); // Paper - delegate
+     }
+ 
+     /**
+@@ -277,15 +252,11 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @Utility
+     public int getMaxStackSize() {
+-        if (meta != null && meta.hasMaxStackSize()) {
+-            return meta.getMaxStackSize();
+-        }
+-
+-        return getType().getMaxStackSize();
++        return this.craftDelegate.getMaxStackSize(); // Paper - delegate
+     }
+ 
+     private void createData(final byte data) {
+-        this.data = type.getNewData(data);
++        this.data = this.craftDelegate.getType().getNewData(data); // Paper
+     }
+ 
+     @Override
+@@ -321,34 +292,13 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @Utility
+     public boolean isSimilar(@Nullable ItemStack stack) {
+-        if (stack == null) {
+-            return false;
+-        }
+-        if (stack == this) {
+-            return true;
+-        }
+-        Material comparisonType = (this.type.isLegacy()) ? Bukkit.getUnsafe().fromLegacy(this.getData(), true) : this.type; // This may be called from legacy item stacks, try to get the right material
+-        return comparisonType == stack.getType() && /* getDurability() == stack.getDurability() && */hasItemMeta() == stack.hasItemMeta() && (hasItemMeta() ? Bukkit.getItemFactory().equals(getItemMeta(), stack.getItemMeta()) : true); // Paper - remove redundant item durability check
++        return this.craftDelegate.isSimilar(stack); // Paper - delegate
+     }
+ 
+     @NotNull
+     @Override
+     public ItemStack clone() {
+-        try {
+-            ItemStack itemStack = (ItemStack) super.clone();
+-
+-            if (this.meta != null) {
+-                itemStack.meta = this.meta.clone();
+-            }
+-
+-            if (this.data != null) {
+-                itemStack.data = this.data.clone();
+-            }
+-
+-            return itemStack;
+-        } catch (CloneNotSupportedException e) {
+-            throw new Error(e);
+-        }
++        return new ItemStack(this); // Paper - delegate
+     }
+ 
+     @Override
+@@ -359,7 +309,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+         hash = hash * 31 + getType().hashCode();
+         hash = hash * 31 + getAmount();
+         hash = hash * 31 + (getDurability() & 0xffff);
+-        hash = hash * 31 + (hasItemMeta() ? (meta == null ? getItemMeta().hashCode() : meta.hashCode()) : 0);
++        hash = hash * 31 + (hasItemMeta() ? (getItemMeta().hashCode()) : 0); // Paper
+ 
+         return hash;
+     }
+@@ -371,7 +321,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @return True if this has the given enchantment
+      */
+     public boolean containsEnchantment(@NotNull Enchantment ench) {
+-        return meta == null ? false : meta.hasEnchant(ench);
++        return this.craftDelegate.containsEnchantment(ench); // Paper - delegate
+     }
+ 
+     /**
+@@ -381,7 +331,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @return Level of the enchantment, or 0
+      */
+     public int getEnchantmentLevel(@NotNull Enchantment ench) {
+-        return meta == null ? 0 : meta.getEnchantLevel(ench);
++        return this.craftDelegate.getEnchantmentLevel(ench); // Paper - delegate
+     }
+ 
+     /**
+@@ -391,7 +341,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @NotNull
+     public Map<Enchantment, Integer> getEnchantments() {
+-        return meta == null ? ImmutableMap.<Enchantment, Integer>of() : meta.getEnchants();
++        return this.craftDelegate.getEnchantments(); // Paper - delegate
+     }
+ 
+     /**
+@@ -467,10 +417,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @param level Level of the enchantment
+      */
+     public void addUnsafeEnchantment(@NotNull Enchantment ench, int level) {
+-        ItemMeta itemMeta = (meta == null ? meta = Bukkit.getItemFactory().getItemMeta(type) : meta);
+-        if (itemMeta != null) {
+-            itemMeta.addEnchant(ench, level, true);
+-        }
++        this.craftDelegate.addUnsafeEnchantment(ench, level); // Paper - delegate
+     }
+ 
+     /**
+@@ -481,23 +428,14 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @return Previous level, or 0
+      */
+     public int removeEnchantment(@NotNull Enchantment ench) {
+-        int level = getEnchantmentLevel(ench);
+-        if (level == 0 || meta == null) {
+-            return level;
+-        }
+-        meta.removeEnchant(ench);
+-        return level;
++        return this.craftDelegate.removeEnchantment(ench); // Paper - delegate
+     }
+ 
+     /**
+      * Removes all enchantments on this ItemStack.
+      */
+     public void removeEnchantments() {
+-        if (meta == null) {
+-            return;
+-        }
+-
+-        meta.removeEnchantments();
++        this.craftDelegate.removeEnchantments(); // Paper - delegate
+     }
+ 
+     @Override
+@@ -653,7 +591,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      */
+     @UndefinedNullability // Paper
+     public ItemMeta getItemMeta() {
+-        return this.meta == null ? Bukkit.getItemFactory().getItemMeta(this.type) : this.meta.clone();
++        return this.craftDelegate.getItemMeta(); // Paper - delegate
+     }
+ 
+     /**
+@@ -662,7 +600,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * @return Returns true if some meta data has been set for this item
+      */
+     public boolean hasItemMeta() {
+-        return !Bukkit.getItemFactory().equals(meta, null);
++        return this.craftDelegate.hasItemMeta(); // Paper - delegate
+     }
+ 
+     /**
+@@ -675,33 +613,10 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      *     the {@link ItemFactory}
+      */
+     public boolean setItemMeta(@Nullable ItemMeta itemMeta) {
+-        return setItemMeta0(itemMeta, type);
++        return this.craftDelegate.setItemMeta(itemMeta); // Paper - delegate
+     }
+ 
+-    /*
+-     * Cannot be overridden, so it's safe for constructor call
+-     */
+-    private boolean setItemMeta0(@Nullable ItemMeta itemMeta, @NotNull Material material) {
+-        if (itemMeta == null) {
+-            this.meta = null;
+-            return true;
+-        }
+-        if (!Bukkit.getItemFactory().isApplicable(itemMeta, material)) {
+-            return false;
+-        }
+-        this.meta = Bukkit.getItemFactory().asMetaFor(itemMeta, material);
+-
+-        Material newType = Bukkit.getItemFactory().updateMaterial(meta, material);
+-        if (this.type != newType) {
+-            this.type = newType;
+-        }
+-
+-        if (this.meta == itemMeta) {
+-            this.meta = itemMeta.clone();
+-        }
+-
+-        return true;
+-    }
++    // Paper - delegate
+ 
+     @Override
+     @NotNull
+@@ -797,11 +712,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+     }
+ 
+     public int getMaxItemUseDuration() {
+-        if (type == null || type == Material.AIR || !type.isItem()) {
+-            return 0;
+-        }
+-        // Requires access to NMS
+-        return ensureServerConversions().getMaxItemUseDuration();
++        return this.craftDelegate.getMaxItemUseDuration(); // Paper - delegate
+     }
+ 
+     /**
+@@ -1059,7 +970,7 @@ public class ItemStack implements Cloneable, ConfigurationSerializable, Translat
+      * it is either air or the stack has a size of 0.
+      */
+     public boolean isEmpty() {
+-        return type.isAir() || amount <= 0;
++        return this.craftDelegate.isEmpty(); // Paper - delegate
+     }
+     // Paper end
+     // Paper start - expose itemstack tooltip lines
+diff --git a/src/test/java/org/bukkit/configuration/ConfigurationSectionTest.java b/src/test/java/org/bukkit/configuration/ConfigurationSectionTest.java
+index ee5bc86f47cf5599e4c5c34e3a9084f86d74bdb7..c6b49c7e0a3357566fc859d4f0c76e77fefbd371 100644
+--- a/src/test/java/org/bukkit/configuration/ConfigurationSectionTest.java
++++ b/src/test/java/org/bukkit/configuration/ConfigurationSectionTest.java
+@@ -547,6 +547,7 @@ public abstract class ConfigurationSectionTest {
+     }
+ 
+     @Test
++    @org.junit.jupiter.api.Disabled("ItemStack can't exist without the Server, test moved to server")
+     public void testGetItemStack_String() {
+         ConfigurationSection section = getConfigurationSection();
+         String key = "exists";
+@@ -559,6 +560,7 @@ public abstract class ConfigurationSectionTest {
+     }
+ 
+     @Test
++    @org.junit.jupiter.api.Disabled("ItemStack can't exist without the Server, test moved to server")
+     public void testGetItemStack_String_ItemStack() {
+         ConfigurationSection section = getConfigurationSection();
+         String key = "exists";
+@@ -572,6 +574,7 @@ public abstract class ConfigurationSectionTest {
+     }
+ 
+     @Test
++    @org.junit.jupiter.api.Disabled("ItemStack can't exist without the Server, test moved to server")
+     public void testIsItemStack() {
+         ConfigurationSection section = getConfigurationSection();
+         String key = "exists";
