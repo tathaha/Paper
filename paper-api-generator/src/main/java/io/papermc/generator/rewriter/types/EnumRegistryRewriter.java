@@ -7,7 +7,7 @@ import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;

@@ -131,6 +131,15 @@ public interface Generators {
             protected String rewriteEnumValue(Holder.Reference<MapDecorationType> reference) {
                 return "%d, %s".formatted(BuiltInRegistries.MAP_DECORATION_TYPE.getId(reference.value()), super.rewriteEnumValue(reference));
             }
+
+            @Override
+            protected FeatureFlagSet getRequiredFeatures(Holder.Reference<MapDecorationType> reference) {
+                FeatureFlagSet result = super.getRequiredFeatures(reference);
+                if (result != null) {
+                    return result;
+                }
+                return ExperimentalHelper.findMapDecorationRelatedFeatureFlags(reference.key().location());
+            }
         },
         new EnumCloneRewriter<>(DisplaySlot.class, net.minecraft.world.scores.DisplaySlot.class, "DisplaySlot", false) {
             @Override

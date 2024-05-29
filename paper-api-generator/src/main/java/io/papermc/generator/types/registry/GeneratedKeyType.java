@@ -14,7 +14,7 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.TypedKey;
 import java.util.Set;

@@ -304,6 +304,8 @@ public final class MapCursor {
         BANNER_YELLOW(14, "banner_yellow"),
         BLUE_MARKER(3, "blue_marker"),
         FRAME(1, "frame"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         JUNGLE_TEMPLE(32, "jungle_temple"),
         MANSION(8, "mansion"),
         MONUMENT(9, "monument"),
@@ -312,14 +314,28 @@ public final class MapCursor {
         PLAYER_OFF_MAP(6, "player_off_map"),
         RED_MARKER(2, "red_marker"),
         RED_X(26, "red_x"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         SWAMP_HUT(33, "swamp_hut"),
         TARGET_POINT(5, "target_point"),
         TARGET_X(4, "target_x"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.UPDATE_1_21)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         TRIAL_CHAMBERS(34, "trial_chambers"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         VILLAGE_DESERT(27, "village_desert"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         VILLAGE_PLAINS(28, "village_plains"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         VILLAGE_SAVANNA(29, "village_savanna"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         VILLAGE_SNOWY(30, "village_snowy"),
+        @org.bukkit.MinecraftExperimental(org.bukkit.MinecraftExperimental.Requires.TRADE_REBALANCE)
+        @org.jetbrains.annotations.ApiStatus.Experimental
         VILLAGE_TAIGA(31, "village_taiga");
         // Paper end - Generated/MapCursorType
 

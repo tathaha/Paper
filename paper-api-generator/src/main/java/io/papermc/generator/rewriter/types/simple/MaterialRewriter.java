@@ -6,7 +6,7 @@ import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.SwitchRewriter;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.Formatting;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;

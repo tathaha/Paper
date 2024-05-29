@@ -13,7 +13,7 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import io.papermc.paper.registry.RegistryKey;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -25,7 +25,6 @@ import net.minecraft.world.flag.FeatureElement;
 import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
-import org.bukkit.MinecraftExperimental;
 import org.bukkit.NamespacedKey;
 import org.checkerframework.checker.nullness.qual.Nullable;
 

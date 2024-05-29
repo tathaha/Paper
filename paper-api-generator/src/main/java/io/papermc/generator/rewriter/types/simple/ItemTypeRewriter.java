@@ -2,7 +2,7 @@ package io.papermc.generator.rewriter.types.simple;
 
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.utils.ClassHelper;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.flag.FeatureFlagSet;

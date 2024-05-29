@@ -8,7 +8,7 @@ import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.ExperimentalHelper.FlagSets;
+import io.papermc.generator.utils.experimental.FlagSets;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
