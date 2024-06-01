@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.Stairs;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftWeatheringCopperStair extends CraftBlockData implements Stairs {
     private static final DirectionProperty FACING = WeatheringCopperStairBlock.FACING;
 

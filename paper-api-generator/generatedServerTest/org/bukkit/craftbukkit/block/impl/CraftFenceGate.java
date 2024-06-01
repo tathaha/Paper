@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Gate;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftFenceGate extends CraftBlockData implements Gate {
     private static final DirectionProperty FACING = FenceGateBlock.FACING;
 

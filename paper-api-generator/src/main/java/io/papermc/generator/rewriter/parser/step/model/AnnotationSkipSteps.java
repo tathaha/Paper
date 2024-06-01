@@ -23,7 +23,7 @@ public final class AnnotationSkipSteps implements StepHolder {
         return currentChar == '@';
     }
 
-    private final IterativeStep skipParenthesesStep = IterativeStep.createUntil(this::skipParentheses);
+    private final IterativeStep skipParenthesesStep = this.createUntil(this::skipParentheses);
 
     private @MonotonicNonNull ProtoTypeName name;
     private Closure parenthesisClosure;
@@ -59,8 +59,8 @@ public final class AnnotationSkipSteps implements StepHolder {
     static {
         Set<ClosureType> types = new HashSet<>(ClosureType.LEAFS.size());
         types.addAll(ClosureType.LEAFS);
-        types.add(ClosureType.PARENTHESIS); // skip nested annotation too
         types.remove(ClosureType.COMMENT); // comment will be skipped separately to simplify the iteration
+        types.add(ClosureType.PARENTHESIS); // skip nested annotation too
 
         IGNORE_NESTED_CLOSURES = ClosureType.prioritySort(types);
     }
@@ -128,10 +128,10 @@ public final class AnnotationSkipSteps implements StepHolder {
     @Override
     public IterativeStep[] initialSteps() {
         return new IterativeStep[] {
-            IterativeStep.create(this::skipAtSign),
-            IterativeStep.createUntil(this::skipPartName),
-            IterativeStep.create(this::checkAnnotationName),
-            IterativeStep.createUntil(this::checkOpenParenthesis),
+            this.create(this::skipAtSign),
+            this.createUntil(this::skipPartName),
+            this.create(this::checkAnnotationName),
+            this.createUntil(this::checkOpenParenthesis),
         };
     }
 }

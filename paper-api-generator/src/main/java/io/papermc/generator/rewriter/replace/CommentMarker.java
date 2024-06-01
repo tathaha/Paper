@@ -1,9 +1,12 @@
 package io.papermc.generator.rewriter.replace;
 
-public record CommentMarker(String pattern, boolean start, int indent) {
+import org.jetbrains.annotations.ApiStatus;
+
+@ApiStatus.Internal
+public record CommentMarker(SearchReplaceRewriter owner, int indent) {
 
     private CommentMarker() {
-        this("", false, 0);
+        this(null, 0);
     }
 
     public static final CommentMarker EMPTY_MARKER = new CommentMarker();

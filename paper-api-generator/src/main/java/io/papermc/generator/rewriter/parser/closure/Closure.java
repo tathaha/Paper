@@ -2,18 +2,20 @@ package io.papermc.generator.rewriter.parser.closure;
 
 import io.papermc.generator.rewriter.parser.ParserException;
 import io.papermc.generator.rewriter.parser.StringReader;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.framework.qual.DefaultQualifier;
 import java.util.function.Supplier;
 
+@DefaultQualifier(NonNull.class)
 public interface Closure {
 
     ClosureType getType();
 
-    @Nullable
-    Closure parent();
+    @Nullable Closure parent();
 
     default boolean hasUpperClosure(Closure closure) {
-        Closure parent = this;
+        @Nullable Closure parent = this;
         do {
             if (parent == closure) {
                 return true;
@@ -33,7 +35,7 @@ public interface Closure {
 
     static Closure create(ClosureType type) {
         class SpecialClosure {
-            public static final Supplier<Closure> PARAGRAPH = () -> new AbstractClosure(ClosureType.PARAGRAPH) {
+            private static final Supplier<Closure> PARAGRAPH = () -> new AbstractClosure(ClosureType.PARAGRAPH) {
 
                 @Override
                 public void onStart(StringReader line) {

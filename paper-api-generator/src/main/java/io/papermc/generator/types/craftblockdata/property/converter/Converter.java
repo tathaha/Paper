@@ -7,5 +7,4 @@ public interface Converter<T extends Comparable<T>, A> extends ConverterBase {
     Property<T> getProperty();
 
     Class<A> getApiType();
-
 }

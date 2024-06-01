@@ -13,7 +13,6 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
 import org.bukkit.util.Vector;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCeilingHangingSign extends CraftBlockData implements HangingSign {
     private static final BooleanProperty ATTACHED = CeilingHangingSignBlock.ATTACHED;
 

@@ -2,19 +2,49 @@ package io.papermc.generator.rewriter.parser.step;
 
 import io.papermc.generator.rewriter.parser.LineParser;
 import io.papermc.generator.rewriter.parser.StringReader;
-import java.util.function.BiConsumer;
-import java.util.function.BiPredicate;
 
-public interface IterativeStep {
+public sealed interface IterativeStep permits IterativeStep.Once, IterativeStep.Repeat {
 
-    void run(StringReader line, LineParser parser);
+    boolean run(StringReader line, LineParser parser); // true to repeat the step
 
-    static IterativeStep create(BiConsumer<StringReader, LineParser> runner) {
-        return new BasicIterativeStep(runner);
+    @FunctionalInterface
+    interface Runner {
+
+        void run(StringReader line, LineParser parser);
     }
 
-    static IterativeStep createUntil(BiPredicate<StringReader, LineParser> runner) {
-        return new RepeatIterativeStep(runner);
+    @FunctionalInterface
+    interface RepeatRunner {
+
+        boolean repeatUntil(StringReader line, LineParser parser);
     }
 
+    final class Once implements IterativeStep {
+
+        private final Runner runner;
+
+        public Once(Runner runner) {
+            this.runner = runner;
+        }
+
+        @Override
+        public boolean run(StringReader line, LineParser parser) {
+            this.runner.run(line, parser);
+            return false;
+        }
+    }
+
+    final class Repeat implements IterativeStep {
+
+        private final RepeatRunner runner;
+
+        public Repeat(RepeatRunner runner) {
+            this.runner = runner;
+        }
+
+        @Override
+        public boolean run(StringReader line, LineParser parser) {
+            return this.runner.repeatUntil(line, parser);
+        }
+    }
 }

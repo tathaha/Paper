@@ -13,7 +13,6 @@ import org.bukkit.block.data.type.TrapDoor;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTrapDoor extends CraftBlockData implements TrapDoor {
     private static final DirectionProperty FACING = TrapDoorBlock.FACING;
 

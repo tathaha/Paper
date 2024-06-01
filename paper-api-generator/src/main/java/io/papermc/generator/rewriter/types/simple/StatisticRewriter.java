@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
-import io.papermc.generator.rewriter.types.Types;
 import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.Formatting;
 import net.minecraft.core.Holder;
@@ -63,8 +62,8 @@ public class StatisticRewriter {
 
     public static class Custom extends EnumRegistryRewriter<ResourceLocation, Statistic> {
 
-        public Custom(final String pattern) {
-            super(Statistic.class, Registries.CUSTOM_STAT, pattern, false);
+        public Custom() {
+            super(Registries.CUSTOM_STAT, false);
         }
 
         @Override
@@ -80,8 +79,8 @@ public class StatisticRewriter {
             "SNEAK_TIME", "CROUCH_TIME"
         );
 
-        public CraftCustom(final String pattern) {
-            super(Types.CRAFT_STATISTIC, Registries.CUSTOM_STAT, pattern, true);
+        public CraftCustom() {
+            super(Registries.CUSTOM_STAT, true);
         }
 
         @Override
@@ -127,8 +126,8 @@ public class StatisticRewriter {
             FIELD_GENERIC_TYPE = Collections.unmodifiableMap(map);
         }
 
-        public Type(final String pattern) {
-            super(Statistic.class, Registries.STAT_TYPE, pattern, true);
+        public Type() {
+            super(Registries.STAT_TYPE, true);
         }
 
         @Override
@@ -155,8 +154,8 @@ public class StatisticRewriter {
 
     public static class CraftType extends EnumRegistryRewriter<StatType<?>, Statistic> {
 
-        public CraftType(final String pattern) {
-            super(Types.CRAFT_STATISTIC, Registries.STAT_TYPE, pattern, true);
+        public CraftType() {
+            super(Registries.STAT_TYPE, true);
         }
 
         @Override

@@ -2,14 +2,15 @@ package io.papermc.generator;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.mojang.logging.LogUtils;
+import io.papermc.generator.rewriter.registration.PaperPatternSourceSetRewriter;
+import io.papermc.generator.rewriter.registration.PatternSourceSetRewriter;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.types.craftblockdata.CraftBlockDataGenerators;
 import io.papermc.generator.utils.experimental.TagCollector;
-import io.papermc.generator.utils.experimental.TagResult;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import net.minecraft.SharedConstants;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.LayeredRegistryAccess;
@@ -24,6 +25,7 @@ import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.server.packs.repository.ServerPacksSource;
 import net.minecraft.server.packs.resources.MultiPackResourceManager;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.flag.FeatureFlags;
 import org.apache.commons.io.file.PathUtils;
 import org.slf4j.Logger;
@@ -32,9 +34,7 @@ public final class Main {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     public static final RegistryAccess.Frozen REGISTRY_ACCESS;
-    public static final TagResult EXPERIMENTAL_TAGS;
-    public static Path generatedPath;
-    public static Path generatedServerPath;
+    public static final Map<TagKey<?>, String> EXPERIMENTAL_TAGS;
 
     static {
         SharedConstants.tryDetectVersion();
@@ -49,6 +49,7 @@ public final class Main {
         REGISTRY_ACCESS = layers.compositeAccess().freeze();
         final ReloadableServerResources datapack = ReloadableServerResources.loadResources(resourceManager, layers, FeatureFlags.REGISTRY.allFlags(), Commands.CommandSelection.DEDICATED, 0, MoreExecutors.directExecutor(), MoreExecutors.directExecutor()).join();
         datapack.updateRegistryTags();
+
         EXPERIMENTAL_TAGS = TagCollector.grabExperimental(resourceManager);
     }
 
@@ -58,14 +59,19 @@ public final class Main {
     public static void main(final String[] args) {
         LOGGER.info("Running API generators...");
 
-        Main.generatedPath = Path.of(args[0]); // todo remove
-        Main.generatedServerPath = Path.of(args[2]); // todo remove
-        try {
-            generate(Main.generatedPath, Generators.API);
-            apply(Path.of(args[1]), Generators.API_REWRITE);
+        Path generatedPath = Path.of(args[0]); // todo remove
+        Path generatedServerPath = Path.of(args[2]); // todo remove
 
-            generateCraftBlockData(Main.generatedServerPath);
-            apply(Path.of(args[3]), Generators.SERVER_REWRITE);
+        PatternSourceSetRewriter apiSourceSet = new PaperPatternSourceSetRewriter(generatedPath);
+        PatternSourceSetRewriter serverSourceSet = new PaperPatternSourceSetRewriter(generatedServerPath);
+        Rewriters.bootstrap(apiSourceSet, serverSourceSet);
+
+        try {
+            generate(generatedPath, Generators.API);
+            apiSourceSet.apply(Path.of(args[1]));
+
+            generateCraftBlockData(generatedServerPath);
+            serverSourceSet.apply(Path.of(args[3]));
         } catch (final RuntimeException ex) {
             throw ex;
         } catch (IOException e) {
@@ -78,14 +84,10 @@ public final class Main {
             PathUtils.deleteDirectory(output);
         }
 
-        apply(output, generators);
-        LOGGER.info("Files written to {}", output.toAbsolutePath());
-    }
-
-    private static void apply(Path output, SourceWriter[] writers) throws IOException {
-        for (final SourceWriter writer : writers) {
-            writer.writeToFile(output);
+        for (final SourceGenerator generator : generators) {
+            generator.writeToFile(output);
         }
+        LOGGER.info("Files written to {}", output.toAbsolutePath());
     }
 
     private static void generateCraftBlockData(Path output) throws IOException {

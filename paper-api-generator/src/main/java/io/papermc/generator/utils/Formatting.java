@@ -1,6 +1,5 @@
 package io.papermc.generator.utils;
 
-import io.papermc.generator.rewriter.ClassNamed;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;
@@ -25,7 +24,7 @@ public final class Formatting {
             return "";
         }
         if (registryKey == Registries.GAME_EVENT) {
-            return "GAME_EVENT_"; // Paper doesn't follow the format (should be GAME_EVENTS_)
+            return "GAME_EVENT_"; // Paper doesn't follow the format (should be GAME_EVENTS_) (pre 1.21)
         }
         return name.toUpperCase(Locale.ENGLISH) + "_";
     }
@@ -49,26 +48,8 @@ public final class Formatting {
         return count;
     }
 
-    public static String incrementalIndent(String unit, ClassNamed classNamed) {
-        if (classNamed.knownClass() == null) {
-            return unit.repeat(countOccurrences(classNamed.dottedNestedName(), '.') + 1);
-        }
-
-        Class<?> parent = classNamed.knownClass().getEnclosingClass();
-        StringBuilder indentBuilder = new StringBuilder(unit);
-        while (parent != null) {
-            indentBuilder.append(unit);
-            parent = parent.getEnclosingClass();
-        }
-        return indentBuilder.toString();
-    }
-
     public static String quoted(String value) {
         return "\"" + value + "\"";
-    }
-
-    public static String floatStr(float value) {
-        return Float.toString(value) + 'F';
     }
 
     public static String stripWordOfCamelCaseName(String name, String word, boolean onlyOnce) {

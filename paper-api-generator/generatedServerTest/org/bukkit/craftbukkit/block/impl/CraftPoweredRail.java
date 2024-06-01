@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.RedstoneRail;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftPoweredRail extends CraftBlockData implements RedstoneRail {
     private static final BooleanProperty POWERED = PoweredRailBlock.POWERED;
 

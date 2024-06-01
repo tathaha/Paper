@@ -8,7 +8,6 @@ import org.bukkit.block.data.Ageable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSweetBerryBush extends CraftBlockData implements Ageable {
     private static final IntegerProperty AGE = SweetBerryBushBlock.AGE;
 

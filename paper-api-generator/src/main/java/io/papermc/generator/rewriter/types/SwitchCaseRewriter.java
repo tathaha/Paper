@@ -1,8 +1,8 @@
 package io.papermc.generator.rewriter.types;
 
+import io.papermc.generator.rewriter.SourceFile;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.ClassNamed;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import java.util.Iterator;
 
@@ -11,19 +11,15 @@ public abstract class SwitchCaseRewriter extends SearchReplaceRewriter {
     @MonotonicNonNull
     private Iterator<String> cases;
 
-    protected SwitchCaseRewriter(final Class<?> rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
-
-    protected SwitchCaseRewriter(final ClassNamed rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
-
     protected abstract Iterable<String> getCases();
 
     @Override
-    protected void beginSearch() {
-        this.cases = this.getCases().iterator();
+    public boolean registerFor(SourceFile file) {
+        boolean canRegister = super.registerFor(file);
+        if (canRegister) {
+            this.cases = this.getCases().iterator();
+        }
+        return canRegister;
     }
 
     private void appendCase(StringBuilder builder, SearchMetadata metadata) {

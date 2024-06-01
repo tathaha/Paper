@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.Comparator;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftComparator extends CraftBlockData implements Comparator {
     private static final DirectionProperty FACING = ComparatorBlock.FACING;
 

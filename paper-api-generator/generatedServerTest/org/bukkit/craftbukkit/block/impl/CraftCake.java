@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.Cake;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCake extends CraftBlockData implements Cake {
     private static final IntegerProperty BITES = CakeBlock.BITES;
 

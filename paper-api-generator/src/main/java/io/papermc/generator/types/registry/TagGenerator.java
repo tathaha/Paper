@@ -1,10 +1,7 @@
 package io.papermc.generator.types.registry;
 
 import com.destroystokyo.paper.MaterialTags;
-import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.FieldSpec;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
@@ -15,28 +12,19 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.TagRegistry;
-import io.papermc.generator.utils.experimental.ExperimentalHelper;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.paper.tag.EntityTags;
 import java.util.Collection;
 import java.util.Locale;
-import java.util.Set;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import org.bukkit.Bukkit;
-import org.bukkit.Fluid;
-import org.bukkit.GameEvent;
 import org.bukkit.Keyed;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
-import org.bukkit.entity.EntityType;
 
 import static com.squareup.javapoet.TypeSpec.interfaceBuilder;
-import static io.papermc.generator.utils.Annotations.NOT_NULL;
 import static io.papermc.generator.utils.Annotations.experimentalAnnotations;
-import static io.papermc.generator.utils.TagRegistry.registry;
-import static javax.lang.model.element.Modifier.ABSTRACT;
 import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
@@ -57,28 +45,7 @@ public class TagGenerator extends SimpleGenerator {
         @param <T> the type of things grouped by this tag
         """;
 
-    private static final String IS_TAGGED_JAVADOC = """
-        Returns whether or not this tag has an entry for the specified item.
-        
-        @param item to check
-        @return if it is tagged
-        """;
-
-    private static final String GET_VALUES_JAVADOC = """
-        Gets an immutable set of all tagged items.
-        
-        @return set of tagged items
-        """;
-
     private static final String REGISTRY_FIELD_JAVADOC = "Key for the built-in $L registry.";
-
-    private static final TagRegistry[] TAG_REGISTRIES = {
-        registry("blocks", Material.class, Registries.BLOCK),
-        registry("items", Material.class, Registries.ITEM),
-        registry("fluids", Fluid.class, Registries.FLUID),
-        registry("entity_types", EntityType.class, Registries.ENTITY_TYPE),
-        registry("game_events", GameEvent.class, Registries.GAME_EVENT)
-    };
 
     public TagGenerator(final String className, final String pkg) {
         super(className, pkg);
@@ -98,22 +65,21 @@ public class TagGenerator extends SimpleGenerator {
         final TypeSpec.Builder typeBuilder = this.tagHolderType();
         typeBuilder.addTypeVariable(typeVariable);
 
-        for (final TagRegistry tagRegistry : TAG_REGISTRIES) {
+        for (final TagRegistry tagRegistry : TagRegistry.SUPPORTED_REGISTRIES) {
             final TypeName fieldType = ParameterizedTypeName.get(Tag.class, tagRegistry.apiType());
 
             final ResourceKey<? extends Registry<?>> registryKey = tagRegistry.registryKey();
             final Registry<?> registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
-            final Collection<String> experimentalTags = Main.EXPERIMENTAL_TAGS.perRegistry().get(registryKey);
 
-            final String registryFieldName = "REGISTRY_" + tagRegistry.name().toUpperCase(Locale.ENGLISH);
+            final String registryFieldName = "REGISTRY_" + tagRegistry.folderName().toUpperCase(Locale.ENGLISH);
             final FieldSpec.Builder registryFieldBuilder = FieldSpec.builder(String.class, registryFieldName)
                 .addModifiers(PUBLIC, STATIC, FINAL)
-                .initializer("$S", tagRegistry.name())
+                .initializer("$S", tagRegistry.folderName())
                 .addJavadoc(REGISTRY_FIELD_JAVADOC, registryKey.location().getPath());
 
             typeBuilder.addField(registryFieldBuilder.build());
 
-            final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.name(), registryKey);
+            final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.folderName(), registryKey);
 
             registry.getTagNames().sorted(Formatting.alphabeticKeyOrder(tagKey -> tagKey.location().getPath())).forEach(tagKey -> {
                 final String keyPath = tagKey.location().getPath();
@@ -123,36 +89,13 @@ public class TagGenerator extends SimpleGenerator {
                     .addModifiers(PUBLIC, STATIC, FINAL)
                     .initializer("$T.getTag($L, $T.minecraft($S), $T.class)", Bukkit.class, registryFieldName, NamespacedKey.class, keyPath, tagRegistry.apiType())
                     .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), tagKey.location().toString());
-                if (experimentalTags.contains(keyPath)) {
-                    fieldBuilder.addAnnotations(experimentalAnnotations(ExperimentalHelper.getFlagFromName(Main.EXPERIMENTAL_TAGS.perFeatureFlag().get(tagKey))));
+                String featureFlagName = Main.EXPERIMENTAL_TAGS.get(tagKey);
+                if (featureFlagName != null) {
+                    fieldBuilder.addAnnotations(experimentalAnnotations(SingleFlagHolder.fromVanillaName(featureFlagName)));
                 }
                 typeBuilder.addField(fieldBuilder.build());
             });
-
         }
-
-        // deprecated tags
-        typeBuilder.addField(
-            FieldSpec.builder(ParameterizedTypeName.get(Tag.class, Material.class), "CARPETS")
-                .addModifiers(PUBLIC, STATIC, FINAL)
-                .addAnnotation(Deprecated.class)
-                .initializer("WOOL_CARPETS")
-                .addJavadoc(Javadocs.DEPRECATED_FOR, "WOOL_CARPETS").build()
-        );
-
-        // methods
-        typeBuilder.addMethod(MethodSpec.methodBuilder("isTagged")
-            .addModifiers(PUBLIC, ABSTRACT)
-            .returns(boolean.class).addParameter(ParameterSpec.builder(typeVariable, "item")
-                .addAnnotation(NOT_NULL).build())
-            .addJavadoc(IS_TAGGED_JAVADOC)
-            .build());
-
-        typeBuilder.addMethod(MethodSpec.methodBuilder("getValues")
-            .addModifiers(PUBLIC, ABSTRACT)
-            .returns(ParameterizedTypeName.get(ClassName.get(Set.class), typeVariable))
-            .addJavadoc(GET_VALUES_JAVADOC)
-            .addAnnotation(NOT_NULL).build());
 
         return typeBuilder.build();
     }

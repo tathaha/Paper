@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.RespawnAnchor;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftRespawnAnchor extends CraftBlockData implements RespawnAnchor {
     private static final IntegerProperty CHARGE = RespawnAnchorBlock.CHARGE;
 

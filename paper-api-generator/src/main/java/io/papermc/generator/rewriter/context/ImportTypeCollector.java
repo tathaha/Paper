@@ -4,7 +4,6 @@ import io.papermc.generator.rewriter.ClassNamed;
 import org.jetbrains.annotations.VisibleForTesting;
 import io.papermc.generator.rewriter.parser.StringReader;
 import io.papermc.generator.utils.Formatting;
-import it.unimi.dsi.fastutil.Pair;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -145,12 +144,12 @@ public class ImportTypeCollector implements ImportCollector {
     }
 
     @VisibleForTesting
-    public Pair<Set<String>, Set<String>> getImports() {
-        return Pair.of(this.imports, this.globalImports);
+    public ImportSet getImports() {
+        return ImportSet.from(this.imports, this.globalImports);
     }
 
     @VisibleForTesting
-    public Pair<Set<String>, Set<String>> getStaticImports() {
-        return Pair.of(this.staticImports.keySet(), this.globalStaticImports);
+    public ImportSet getStaticImports() {
+        return ImportSet.from(this.staticImports.keySet(), this.globalStaticImports);
     }
 }

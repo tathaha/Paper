@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.Jukebox;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftJukebox extends CraftBlockData implements Jukebox {
     private static final BooleanProperty HAS_RECORD = JukeboxBlock.HAS_RECORD;
 

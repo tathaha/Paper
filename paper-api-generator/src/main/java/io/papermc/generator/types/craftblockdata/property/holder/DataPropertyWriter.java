@@ -159,5 +159,4 @@ public class DataPropertyWriter<T extends Property<?>> extends DataPropertyWrite
             APPENDERS.get(this.type).addExtras(builder, field, indexParameter, childConverter, generator, naming);
         }
     }
-
 }

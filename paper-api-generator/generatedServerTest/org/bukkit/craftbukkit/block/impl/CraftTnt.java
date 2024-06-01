@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.TNT;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTnt extends CraftBlockData implements TNT {
     private static final BooleanProperty UNSTABLE = TntBlock.UNSTABLE;
 

@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.TurtleEgg;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTurtleEgg extends CraftBlockData implements TurtleEgg {
     private static final IntegerProperty EGGS = TurtleEggBlock.EGGS;
 

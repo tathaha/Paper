@@ -9,7 +9,6 @@ import org.bukkit.block.data.type.Candle;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCandle extends CraftBlockData implements Candle {
     private static final IntegerProperty CANDLES = CandleBlock.CANDLES;
 

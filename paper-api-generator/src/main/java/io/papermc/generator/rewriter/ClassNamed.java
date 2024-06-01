@@ -1,5 +1,6 @@
 package io.papermc.generator.rewriter;
 
+import com.google.common.base.Preconditions;
 import io.papermc.generator.utils.ClassHelper;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Objects;
@@ -8,6 +9,12 @@ public record ClassNamed(String packageName, String simpleName, String dottedNes
 
     public ClassNamed(Class<?> knownClass) {
         this(knownClass.getPackageName(), knownClass.getSimpleName(), ClassHelper.retrieveFullNestedName(knownClass), knownClass);
+    }
+
+    public ClassNamed {
+        if (knownClass != null) {
+            Preconditions.checkArgument(!knownClass.isAnonymousClass() && !knownClass.isSynthetic() && !knownClass.isArray(), "Invalid class, only single named class are allowed");
+        }
     }
 
     // the class name shouldn't have any '$' char in it
@@ -96,6 +103,7 @@ public record ClassNamed(String packageName, String simpleName, String dottedNes
         if (o == null || o.getClass() != this.getClass()) {
             return false;
         }
+
         ClassNamed other = (ClassNamed) o;
         if (this.knownClass != null && other.knownClass != null) {
             return this.knownClass == other.knownClass;
@@ -103,5 +111,4 @@ public record ClassNamed(String packageName, String simpleName, String dottedNes
         return this.packageName.equals(other.packageName) &&
                this.dottedNestedName.equals(other.dottedNestedName);
     }
-
 }

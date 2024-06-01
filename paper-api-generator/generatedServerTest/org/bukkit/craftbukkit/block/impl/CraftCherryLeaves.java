@@ -9,7 +9,6 @@ import org.bukkit.block.data.type.Leaves;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCherryLeaves extends CraftBlockData implements Leaves {
     private static final IntegerProperty DISTANCE = CherryLeavesBlock.DISTANCE;
 

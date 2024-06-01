@@ -11,7 +11,6 @@ import org.bukkit.block.data.type.CommandBlock;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCommandBlock extends CraftBlockData implements CommandBlock {
     private static final BooleanProperty CONDITIONAL = net.minecraft.world.level.block.CommandBlock.CONDITIONAL;
 

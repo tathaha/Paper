@@ -9,51 +9,31 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Locale;
 import io.papermc.generator.utils.TagRegistry;
-import io.papermc.generator.utils.experimental.ExperimentalHelper;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.TagKey;
 import org.bukkit.Bukkit;
-import org.bukkit.Fluid;
-import org.bukkit.GameEvent;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.EntityType;
 
 import static io.papermc.generator.utils.Formatting.quoted;
-import static io.papermc.generator.utils.TagRegistry.registry;
 
 public class TagRewriter extends SearchReplaceRewriter {
 
-    private static final TagRegistry[] TAG_REGISTRIES = {
-        registry("blocks", Material.class, Registries.BLOCK),
-        registry("items", Material.class, Registries.ITEM),
-        registry("fluids", Fluid.class, Registries.FLUID),
-        registry("entity_types", EntityType.class, Registries.ENTITY_TYPE),
-        registry("game_events", GameEvent.class, Registries.GAME_EVENT)
-    };
-
-
-    public TagRewriter(final Class<?> rewriteClass, final String pattern) {
-        super(rewriteClass, pattern, false);
-    }
-
     @Override
     protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
-        for (int i = 0, len = TAG_REGISTRIES.length; i < len; i++) {
-            final TagRegistry tagRegistry = TAG_REGISTRIES[i];
+        for (int i = 0, len = TagRegistry.SUPPORTED_REGISTRIES.length; i < len; i++) {
+            final TagRegistry tagRegistry = TagRegistry.SUPPORTED_REGISTRIES[i];
 
             final ResourceKey<? extends Registry<?>> registryKey = tagRegistry.registryKey();
             final Registry<?> registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
-            final Collection<String> experimentalTags = Main.EXPERIMENTAL_TAGS.perRegistry().get(registryKey);
 
-            final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.name(), registryKey);
-            final String registryFieldName = "REGISTRY_" + tagRegistry.name().toUpperCase(Locale.ENGLISH);
+            final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.folderName(), registryKey);
+            final String registryFieldName = "REGISTRY_" + tagRegistry.folderName().toUpperCase(Locale.ENGLISH);
 
             // registry name field
             builder.append(metadata.indent());
-            builder.append("%s %s = %s;".formatted(String.class.getSimpleName(), registryFieldName, quoted(tagRegistry.name())));
+            builder.append("%s %s = %s;".formatted(String.class.getSimpleName(), registryFieldName, quoted(tagRegistry.folderName())));
 
             builder.append('\n');
             builder.append('\n');
@@ -66,8 +46,9 @@ public class TagRewriter extends SearchReplaceRewriter {
                 final String fieldName = fieldPrefix + Formatting.formatKeyAsField(keyPath);
 
                 // tag field
-                if (experimentalTags.contains(keyPath)) {
-                    Annotations.experimentalAnnotations(builder, metadata, ExperimentalHelper.getFlagFromName(Main.EXPERIMENTAL_TAGS.perFeatureFlag().get(tagKey)));
+                String featureFlagName = Main.EXPERIMENTAL_TAGS.get(tagKey);
+                if (featureFlagName != null) {
+                    Annotations.experimentalAnnotations(builder, metadata, SingleFlagHolder.fromVanillaName(featureFlagName));
                 }
 
                 builder.append(metadata.indent());

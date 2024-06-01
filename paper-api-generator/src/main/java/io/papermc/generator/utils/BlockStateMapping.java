@@ -209,11 +209,11 @@ public final class BlockStateMapping {
             if (VIRTUAL_NODES.containsKey(specialBlock)) {
                 for (VirtualField<?> virtualField : VIRTUAL_NODES.get(specialBlock)) {
                     FieldDataHolder<?> field = new FieldDataHolder<>(null, virtualField);
-                    for (Property<?> property : virtualField.getValues()) {
+                    for (Property<?> property : virtualField.values()) {
                         if (properties.remove(property)) {
                             complexProperties.put(field, property);
                         } else {
-                            throw new IllegalStateException("Unhandled virtual node " + virtualField.getName() + " for " + property);
+                            throw new IllegalStateException("Unhandled virtual node " + virtualField.name() + " for " + property);
                         }
                     }
                 }
@@ -325,8 +325,7 @@ public final class BlockStateMapping {
     rename module
     remove scrap of old spigot tooling (archetype)
      */
-    @Nullable
-    public static Class<? extends org.bukkit.block.data.BlockData> getBestSuitedApiClass(Class<?> block) {
+    public static @Nullable Class<? extends org.bukkit.block.data.BlockData> getBestSuitedApiClass(Class<?> block) {
         if (!MAPPING.containsKey(block)) {
             return null;
         }
@@ -334,8 +333,7 @@ public final class BlockStateMapping {
         return getBestSuitedApiClass(MAPPING.get(block));
     }
 
-    @Nullable
-    public static Class<? extends org.bukkit.block.data.BlockData> getBestSuitedApiClass(BlockData data) {
+    public static @Nullable Class<? extends org.bukkit.block.data.BlockData> getBestSuitedApiClass(BlockData data) {
         if (data.api() != null) {
             return data.api();
         }
@@ -397,8 +395,7 @@ public final class BlockStateMapping {
         return apiName;
     }
 
-    @Nullable
-    private static Field fetchPipeFieldMap(Class<?> block) {
+    private static @Nullable Field fetchPipeFieldMap(Class<?> block) {
         Field field = null;
         Class<?> searchClass = block;
         do {

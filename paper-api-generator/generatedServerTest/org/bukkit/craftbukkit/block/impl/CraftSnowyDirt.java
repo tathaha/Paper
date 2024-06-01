@@ -8,7 +8,6 @@ import org.bukkit.block.data.Snowable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSnowyDirt extends CraftBlockData implements Snowable {
     private static final BooleanProperty SNOWY = SnowyDirtBlock.SNOWY;
 

@@ -11,7 +11,6 @@ import org.bukkit.block.data.type.Slab;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftWeatheringCopperSlab extends CraftBlockData implements Slab {
     private static final EnumProperty<SlabType> TYPE = WeatheringCopperSlabBlock.TYPE;
 

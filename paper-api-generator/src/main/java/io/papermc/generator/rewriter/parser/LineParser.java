@@ -5,32 +5,32 @@ import io.papermc.generator.rewriter.context.ImportCollector;
 import io.papermc.generator.rewriter.parser.closure.AbstractClosure;
 import io.papermc.generator.rewriter.parser.closure.Closure;
 import io.papermc.generator.rewriter.parser.closure.ClosureType;
-import io.papermc.generator.rewriter.parser.step.IterativeStep;
 import io.papermc.generator.rewriter.parser.step.StepManager;
 import io.papermc.generator.rewriter.parser.step.model.AnnotationSkipSteps;
 import io.papermc.generator.rewriter.parser.step.model.ImportStatementSteps;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.framework.qual.DefaultQualifier;
 import org.jetbrains.annotations.ApiStatus;
 import java.util.List;
 
 @ApiStatus.Internal
+@DefaultQualifier(NonNull.class)
 public class LineParser {
 
-    private final StepManager stepManager = new StepManager();
+    private final StepManager stepManager = new StepManager(this);
 
-    private Closure nearestClosure;
+    private @Nullable Closure nearestClosure;
 
-    @Nullable
-    public Closure getNearestClosure() {
+    public @Nullable Closure getNearestClosure() {
         return this.nearestClosure;
     }
 
     // internal use only or when nearestClosure = null
     // doesn't support leaf closure char escape
-    public boolean tryAdvanceStartClosure(@NonNull ClosureType type, @NonNull StringReader line) {
+    public boolean tryAdvanceStartClosure(ClosureType type, StringReader line) {
         if (line.trySkipString(type.start)) { // closure has been consumed
-            Closure previousNearestClosure = this.nearestClosure;
+            @Nullable Closure previousNearestClosure = this.nearestClosure;
             this.nearestClosure = Closure.create(type);
             if (previousNearestClosure != null) {
                 if (ClosureType.LEAFS.contains(previousNearestClosure.getType())) {
@@ -45,7 +45,7 @@ public class LineParser {
     }
 
     // for all closure, leaf closure type should use the other similar method after this one if possible
-    public ClosureAdvanceResult tryAdvanceEndClosure(@NonNull Closure closure, @NonNull StringReader line) {
+    public ClosureAdvanceResult tryAdvanceEndClosure(Closure closure, StringReader line) {
         Preconditions.checkState(this.nearestClosure != null && this.nearestClosure.hasUpperClosure(closure), "Need to be in an upper closure of " + closure + " to find its end identifier");
         boolean directClosureFound = this.nearestClosure == closure;
         if (!directClosureFound) {
@@ -73,7 +73,7 @@ public class LineParser {
     }
 
     // computedTypes list order matters here
-    public boolean trySkipNestedClosures(@NonNull Closure inClosure, @NonNull StringReader line, @NonNull List<ClosureType> computedTypes) {
+    public boolean trySkipNestedClosures(Closure inClosure, StringReader line, List<ClosureType> computedTypes) {
         boolean directClosureFound = this.nearestClosure == inClosure;
         boolean isLeaf = this.nearestClosure != null && ClosureType.LEAFS.contains(this.nearestClosure.getType());
         if (this.nearestClosure != null && !directClosureFound) {
@@ -98,7 +98,7 @@ public class LineParser {
         return false;
     }
 
-    public ClosureAdvanceResult tryAdvanceEndLeafClosure(@NonNull ClosureType type, @NonNull StringReader line) {
+    public ClosureAdvanceResult tryAdvanceEndLeafClosure(ClosureType type, StringReader line) {
         Preconditions.checkArgument(ClosureType.LEAFS.contains(type), "Only leaf closure can be advanced using its type only, for other types use the closure equivalent method to take in account nested closures");
         Preconditions.checkState(this.nearestClosure != null && this.nearestClosure.getType() == type, "Need a direct upper closure of " + type);
 
@@ -121,7 +121,7 @@ public class LineParser {
     }
 
     // generic usage that check other leaf closure
-    private boolean skipLeafClosure(@NonNull ClosureType type, @NonNull StringReader line) {
+    private boolean skipLeafClosure(ClosureType type, StringReader line) {
         final boolean isInClosure;
         if (this.nearestClosure != null) {
             isInClosure = this.nearestClosure.getType() == type;
@@ -148,11 +148,11 @@ public class LineParser {
         return false;
     }
 
-    public boolean skipComment(@NonNull StringReader line) {
+    public boolean skipComment(StringReader line) {
         return this.skipLeafClosure(ClosureType.COMMENT, line);
     }
 
-    public boolean skipCommentOrWhitespace(@NonNull StringReader line) {
+    public boolean skipCommentOrWhitespace(StringReader line) {
         boolean skipped = false;
         while (this.skipComment(line) || line.skipWhitespace() > 0) {
             skipped = true;
@@ -160,7 +160,7 @@ public class LineParser {
         return skipped;
     }
 
-    public boolean trySkipCommentOrWhitespaceUntil(@NonNull StringReader line, char terminator) {
+    public boolean trySkipCommentOrWhitespaceUntil(StringReader line, char terminator) {
         int previousCursor = line.getCursor();
         boolean skipped = this.skipCommentOrWhitespace(line);
         if (skipped && line.canRead() && line.peek() != terminator) {
@@ -172,19 +172,16 @@ public class LineParser {
     }
 
     // note: always check single line comment AFTER multi line comment unless exception
-    public boolean peekSingleLineComment(@NonNull StringReader line) {
+    public boolean peekSingleLineComment(StringReader line) {
         return line.canRead(2) && line.peek() == '/' && line.peek(1) == '/';
     }
 
-    public boolean consumeImports(@NonNull StringReader line, @NonNull ImportCollector collector) {
-    outerLoop:
+    public boolean consumeImports(StringReader line, ImportCollector collector) {
         while (line.canRead()) {
-            IterativeStep step;
-            while ((step = this.stepManager.getSteps().poll()) != null) {
-                step.run(line, this);
-                if (!line.canRead()) {
-                    break outerLoop;
-                }
+            this.stepManager.runSteps(line);
+
+            if (!line.canRead()) {
+                break;
             }
 
             if (this.skipCommentOrWhitespace(line)) {
@@ -213,7 +210,7 @@ public class LineParser {
         return false;
     }
 
-    public @NonNull StepManager getSteps() {
+    public StepManager getSteps() {
         return this.stepManager;
     }
 }

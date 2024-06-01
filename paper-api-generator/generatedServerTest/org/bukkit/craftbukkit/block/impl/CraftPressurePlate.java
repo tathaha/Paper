@@ -8,7 +8,6 @@ import org.bukkit.block.data.Powerable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftPressurePlate extends CraftBlockData implements Powerable {
     private static final BooleanProperty POWERED = PressurePlateBlock.POWERED;
 

@@ -127,7 +127,6 @@ public final class MemoryKey<T> implements Keyed {
     public static final MemoryKey<Integer> VISIBLE_ADULT_HOGLIN_COUNT = new MemoryKey<>(NamespacedKey.minecraft("visible_adult_hoglin_count"), Integer.class);
 
     public static final MemoryKey<Integer> VISIBLE_ADULT_PIGLIN_COUNT = new MemoryKey<>(NamespacedKey.minecraft("visible_adult_piglin_count"), Integer.class);
-
     // Paper end - Generated/MemoryKey
     /**
      * @deprecated this constant uses the wrong generic type, the sniffer now stores different positions

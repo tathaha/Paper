@@ -9,7 +9,6 @@ import org.bukkit.block.data.type.DaylightDetector;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftDaylightDetector extends CraftBlockData implements DaylightDetector {
     private static final BooleanProperty INVERTED = DaylightDetectorBlock.INVERTED;
 

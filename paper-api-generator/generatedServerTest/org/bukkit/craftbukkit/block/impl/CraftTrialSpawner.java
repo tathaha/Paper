@@ -11,7 +11,6 @@ import org.bukkit.block.data.type.TrialSpawner;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTrialSpawner extends CraftBlockData implements TrialSpawner {
     private static final BooleanProperty OMINOUS = TrialSpawnerBlock.OMINOUS;
 

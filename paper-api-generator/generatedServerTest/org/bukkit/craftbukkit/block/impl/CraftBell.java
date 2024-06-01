@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.Bell;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftBell extends CraftBlockData implements Bell {
     private static final EnumProperty<BellAttachType> ATTACHMENT = BellBlock.ATTACHMENT;
 

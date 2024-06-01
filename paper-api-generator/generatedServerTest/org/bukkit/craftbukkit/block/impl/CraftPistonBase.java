@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Piston;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftPistonBase extends CraftBlockData implements Piston {
     private static final BooleanProperty EXTENDED = PistonBaseBlock.EXTENDED;
 

@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.SkullWall;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftWallSkull extends CraftBlockData implements SkullWall {
     private static final DirectionProperty FACING = WallSkullBlock.FACING;
 

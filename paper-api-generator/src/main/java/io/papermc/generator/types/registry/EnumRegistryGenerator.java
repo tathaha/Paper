@@ -13,12 +13,12 @@ import java.util.Set;
 import java.util.function.Supplier;
 import javax.lang.model.element.Modifier;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.FlagSets;
+import io.papermc.generator.utils.experimental.FlagHolders;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
@@ -52,10 +52,10 @@ public abstract class EnumRegistryGenerator<T> extends SimpleGenerator {
             String pathKey = resourceKey.location().getPath();
 
             String fieldName = Formatting.formatKeyAsField(pathKey);
-            @Nullable FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
+            @Nullable SingleFlagHolder requiredFeature = this.getRequiredFeature(reference);
             TypeSpec.Builder builder = TypeSpec.anonymousClassBuilder("$S", pathKey);
-            if (requiredFeatures != null) {
-                builder.addAnnotations(Annotations.experimentalAnnotations(requiredFeatures));
+            if (requiredFeature != null) {
+                builder.addAnnotations(Annotations.experimentalAnnotations(requiredFeature));
             }
 
             typeBuilder.addEnumConstant(fieldName, builder.build());
@@ -82,15 +82,19 @@ public abstract class EnumRegistryGenerator<T> extends SimpleGenerator {
 
     public abstract void addExtras(TypeSpec.Builder builder, FieldSpec keyField);
 
-    @Nullable
-    public FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
-        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return element.requiredFeatures();
-        }
-        if (this.experimentalKeys.get().contains(reference.key())) {
-            return FlagSets.NEXT_UPDATE.get();
+    public @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<T> reference) {
+        if (this.isFilteredRegistry) {
+            // built-in registry
+            FeatureElement element = (FeatureElement) reference.value();
+            if (FeatureFlags.isExperimental(element.requiredFeatures())) {
+                return SingleFlagHolder.fromSet(element.requiredFeatures());
+            }
+        } else {
+            // data-driven registry
+            if (this.experimentalKeys.get().contains(reference.key())) {
+                return FlagHolders.NEXT_UPDATE;
+            }
         }
         return null;
     }
-
 }

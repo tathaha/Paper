@@ -14,7 +14,8 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.FlagSets;
+import io.papermc.generator.utils.experimental.FlagHolders;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.paper.registry.RegistryKey;
 import io.papermc.paper.registry.TypedKey;
 import java.util.Set;
@@ -24,7 +25,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -107,9 +107,9 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
                 .initializer("$N(key($S))", createMethod.build(), keyPath)
                 .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), key.location().toString());
 
-            final @Nullable FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
-            if (requiredFeatures != null) {
-                fieldBuilder.addAnnotations(experimentalAnnotations(requiredFeatures));
+            final @Nullable SingleFlagHolder requiredFeature = this.getRequiredFeature(reference);
+            if (requiredFeature != null) {
+                fieldBuilder.addAnnotations(experimentalAnnotations(requiredFeature));
             } else {
                 allExperimental = false;
             }
@@ -117,8 +117,8 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         }
 
         if (allExperimental) {
-            typeBuilder.addAnnotations(experimentalAnnotations(FlagSets.NEXT_UPDATE.get()));
-            createMethod.addAnnotations(experimentalAnnotations(FlagSets.NEXT_UPDATE.get()));
+            typeBuilder.addAnnotations(experimentalAnnotations(FlagHolders.NEXT_UPDATE));
+            createMethod.addAnnotations(experimentalAnnotations(FlagHolders.NEXT_UPDATE));
         } else {
             typeBuilder.addAnnotation(EXPERIMENTAL_API_ANNOTATION); // TODO experimental API
         }
@@ -130,13 +130,18 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         return builder.addStaticImport(Key.class, "key");
     }
 
-    @Nullable
-    public FeatureFlagSet getRequiredFeatures(final Holder.Reference<T> reference) {
-        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return element.requiredFeatures();
-        }
-        if (this.experimentalKeys.get().contains(reference.key())) {
-            return FlagSets.NEXT_UPDATE.get();
+    public @Nullable SingleFlagHolder getRequiredFeature(final Holder.Reference<T> reference) {
+        if (this.isFilteredRegistry) {
+            // built-in registry
+            FeatureElement element = (FeatureElement) reference.value();
+            if (FeatureFlags.isExperimental(element.requiredFeatures())) {
+                return SingleFlagHolder.fromSet(element.requiredFeatures());
+            }
+        } else {
+            // data-driven registry
+            if (this.experimentalKeys.get().contains(reference.key())) {
+                return FlagHolders.NEXT_UPDATE;
+            }
         }
         return null;
     }

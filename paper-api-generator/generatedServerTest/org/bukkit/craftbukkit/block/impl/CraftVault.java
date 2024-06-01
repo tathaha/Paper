@@ -15,7 +15,6 @@ import org.bukkit.block.data.type.Vault;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftVault extends CraftBlockData implements Vault {
     private static final DirectionProperty FACING = VaultBlock.FACING;
 

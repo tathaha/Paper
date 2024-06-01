@@ -154,8 +154,8 @@ public class EntityTypeRewriter extends EnumRegistryRewriter<EntityType<?>, org.
         map.put(EntityType.END_CRYSTAL, 200);
     });
 
-    public EntityTypeRewriter(final String pattern) {
-        super(org.bukkit.entity.EntityType.class, Registries.ENTITY_TYPE, pattern, true);
+    public EntityTypeRewriter() {
+        super(Registries.ENTITY_TYPE, true);
     }
 
     @Override

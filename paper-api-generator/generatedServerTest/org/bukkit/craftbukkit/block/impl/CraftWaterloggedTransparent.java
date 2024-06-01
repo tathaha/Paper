@@ -8,7 +8,6 @@ import org.bukkit.block.data.Waterlogged;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftWaterloggedTransparent extends CraftBlockData implements Waterlogged {
     private static final BooleanProperty WATERLOGGED = WaterloggedTransparentBlock.WATERLOGGED;
 

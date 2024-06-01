@@ -1,12 +1,20 @@
 package io.papermc.generator.rewriter;
 
-import io.papermc.generator.SourceWriter;
+import java.io.IOException;
+import java.nio.file.Path;
 
-public interface SourceRewriter extends SourceWriter {
+public interface SourceRewriter {
 
-    String PAPER_START_FORMAT = "Paper start";
-    String PAPER_END_FORMAT = "Paper end";
-    String SEARCH_COMMENT_MARKER_FORMAT = "// %s - Generated/%s"; // {0} = PAPER_START_FORMAT|PAPER_END_FORMAT {1} = pattern
+    default boolean registerFor(SourceFile file) {
+        return true;
+    }
 
-    void dump(StringBuilder into);
+    void dump(SourceFile file, StringBuilder into);
+
+    default void writeToFile(Path parent, SourceFile file) throws IOException {
+        writeToFile(parent, parent, file);
+    }
+
+    @Deprecated // used only for test
+    void writeToFile(Path readFolder, Path writeFolder, SourceFile file) throws IOException;
 }

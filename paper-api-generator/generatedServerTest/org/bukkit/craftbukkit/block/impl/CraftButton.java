@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.Switch;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftButton extends CraftBlockData implements Switch {
     private static final EnumProperty<AttachFace> FACE = ButtonBlock.FACE;
 

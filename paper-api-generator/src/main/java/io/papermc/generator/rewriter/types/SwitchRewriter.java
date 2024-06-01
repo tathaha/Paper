@@ -1,7 +1,6 @@
 package io.papermc.generator.rewriter.types;
 
 import com.google.common.collect.Multimap;
-import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
@@ -11,14 +10,6 @@ import java.util.Collection;
 public abstract class SwitchRewriter<T> extends SearchReplaceRewriter {
 
     protected @MonotonicNonNull Return<T> defaultValue;
-
-    protected SwitchRewriter(final Class<?> rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
-
-    protected SwitchRewriter(final ClassNamed rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
 
     protected record Return<T>(T object, String code) {}
 
@@ -37,14 +28,14 @@ public abstract class SwitchRewriter<T> extends SearchReplaceRewriter {
                 builder.append(metadata.indent()).append("case ").append(cond).append(':');
                 builder.append('\n');
             }
-            builder.append(metadata.indent()).append(INDENT_UNIT).append("return ").append(key.code()).append(';');
+            builder.append(metadata.indent()).append(metadata.source().indentUnit()).append("return ").append(key.code()).append(';');
             builder.append('\n');
         }
 
         if (this.defaultValue != null) {
             builder.append(metadata.indent()).append("default:");
             builder.append('\n');
-            builder.append(metadata.indent()).append(INDENT_UNIT).append("return ").append(this.defaultValue.code()).append(';');
+            builder.append(metadata.indent()).append(metadata.source().indentUnit()).append("return ").append(this.defaultValue.code()).append(';');
             builder.append('\n');
         }
     }

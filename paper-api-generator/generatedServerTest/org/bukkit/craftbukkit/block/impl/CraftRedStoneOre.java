@@ -8,7 +8,6 @@ import org.bukkit.block.data.Lightable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftRedStoneOre extends CraftBlockData implements Lightable {
     private static final BooleanProperty LIT = RedStoneOreBlock.LIT;
 

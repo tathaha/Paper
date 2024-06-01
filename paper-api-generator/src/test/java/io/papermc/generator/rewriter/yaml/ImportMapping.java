@@ -2,14 +2,14 @@ package io.papermc.generator.rewriter.yaml;
 
 public class ImportMapping {
 
-    public ImportSet imports;
-    public ImportSet staticImports;
+    public ImportSetBean imports;
+    public ImportSetBean staticImports;
 
-    public ImportSet getImports() {
+    public ImportSetBean getImports() {
         return this.imports;
     }
 
-    public ImportSet getStaticImports() {
+    public ImportSetBean getStaticImports() {
         return this.staticImports;
     }
 }

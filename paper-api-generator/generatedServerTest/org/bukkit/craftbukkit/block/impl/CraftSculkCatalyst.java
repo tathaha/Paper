@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.SculkCatalyst;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSculkCatalyst extends CraftBlockData implements SculkCatalyst {
     private static final BooleanProperty PULSE = SculkCatalystBlock.PULSE;
 

@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Dispenser;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftDropper extends CraftBlockData implements Dispenser {
     private static final DirectionProperty FACING = DropperBlock.FACING;
 

@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.Snow;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSnowLayer extends CraftBlockData implements Snow {
     private static final IntegerProperty LAYERS = SnowLayerBlock.LAYERS;
 

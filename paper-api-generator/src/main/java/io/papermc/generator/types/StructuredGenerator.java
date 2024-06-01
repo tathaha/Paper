@@ -31,7 +31,7 @@ public abstract class StructuredGenerator<T> extends SimpleGenerator {
             methodBuilder.addAnnotation(Annotations.OVERRIDE);
         } else {
             if (this.printWarningOnMissingOverride) {
-                LOGGER.warn("Method " + name + Arrays.toString(parameterTypes) + " didn't override a known api method!");
+                LOGGER.warn("Method {}{} didn't override a known api method!", name, Arrays.toString(parameterTypes));
             }
         }
         return methodBuilder;
@@ -45,5 +45,4 @@ public abstract class StructuredGenerator<T> extends SimpleGenerator {
             return false;
         }
     }
-
 }

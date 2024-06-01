@@ -1,30 +1,19 @@
 package io.papermc.generator.rewriter.types.simple;
 
-import com.google.common.base.Suppliers;
 import com.google.gson.internal.Primitives;
-import io.papermc.generator.rewriter.replace.SearchMetadata;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.utils.Annotations;
+import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.utils.ClassHelper;
-import io.papermc.generator.utils.Formatting;
-import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.FlagSets;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.Unit;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -32,22 +21,15 @@ import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
-import net.minecraft.world.flag.FeatureElement;
-import net.minecraft.world.flag.FeatureFlagSet;
-import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.memory.MemoryKey;
-import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 
 import static io.papermc.generator.utils.Formatting.quoted;
-import static javax.lang.model.element.Modifier.FINAL;
-import static javax.lang.model.element.Modifier.PUBLIC;
-import static javax.lang.model.element.Modifier.STATIC;
 
-public class MemoryKeyRewriter extends SearchReplaceRewriter {
+public class MemoryKeyRewriter extends RegistryFieldRewriter<MemoryModuleType<?>> {
 
     private static final Map<MemoryModuleType<?>, Class<?>> MEMORY_GENERIC_TYPES;
     static {
@@ -71,15 +53,8 @@ public class MemoryKeyRewriter extends SearchReplaceRewriter {
         MEMORY_GENERIC_TYPES = Collections.unmodifiableMap(map);
     }
 
-    private final Registry<MemoryModuleType<?>> registry;
-    private final Supplier<Set<ResourceKey<MemoryModuleType<?>>>> experimentalKeys;
-    private final boolean isFilteredRegistry;
-
-    public MemoryKeyRewriter(final String pattern) {
-        super(MemoryKey.class, pattern, false);
-        this.registry = BuiltInRegistries.MEMORY_MODULE_TYPE;
-        this.experimentalKeys = Suppliers.memoize(() -> RegistryUtils.collectExperimentalDataDrivenKeys(this.registry));
-        this.isFilteredRegistry = FeatureElement.FILTERED_REGISTRIES.contains(Registries.MEMORY_MODULE_TYPE);
+    public MemoryKeyRewriter() {
+        super(Registries.MEMORY_MODULE_TYPE, null);
     }
 
     // this api is not implemented and is not backed by a proper registry
@@ -110,64 +85,48 @@ public class MemoryKeyRewriter extends SearchReplaceRewriter {
     );
 
     @Override
-    protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
-        Iterator<Holder.Reference<MemoryModuleType<?>>> referenceIterator = this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).iterator();
-
-    outerLoop:
-        while (referenceIterator.hasNext()) {
-            Holder.Reference<MemoryModuleType<?>> reference = referenceIterator.next();
-            Class<?> memoryType = MEMORY_GENERIC_TYPES.get(reference.value());
-            if (IGNORED_TYPES.contains(memoryType)) {
-                continue;
-            }
-            for (Class<?> subType : IGNORED_SUB_TYPES) {
-                if (subType.isAssignableFrom(memoryType)) {
-                    continue outerLoop;
-                }
-            }
-
-            ResourceKey<MemoryModuleType<?>> resourceKey = reference.key();
-            String pathKey = resourceKey.location().getPath();
-
-            FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
-            if (requiredFeatures != null) {
-                Annotations.experimentalAnnotations(builder, metadata, requiredFeatures);
-            }
-
-            final Class<?> apiMemoryType;
-            if (!Primitives.isWrapperType(memoryType) && API_BRIDGE.containsKey(memoryType)) {
-                apiMemoryType = API_BRIDGE.get(memoryType);
-            } else {
-                apiMemoryType = memoryType;
-            }
-
-            builder.append(metadata.indent());
-            builder.append("%s %s %s ".formatted(PUBLIC, STATIC, FINAL));
-            builder.append("%s<%s>".formatted(this.rewriteClass.simpleName(), apiMemoryType.getSimpleName())).append(' ').append(this.rewriteFieldName(reference));
-            builder.append(" = ");
-            builder.append("new %s<>(%s.minecraft(%s), %s.class)".formatted(this.rewriteClass.simpleName(), NamespacedKey.class.getSimpleName(), quoted(pathKey), apiMemoryType.getSimpleName()));
-            builder.append(';');
-
-            builder.append('\n');
-            if (referenceIterator.hasNext()) {
-                builder.append('\n'); // this print an extra new line even at the end caused by the skipped ones
+    protected boolean printHolder(Holder.Reference<MemoryModuleType<?>> reference) {
+        Class<?> memoryType = MEMORY_GENERIC_TYPES.get(reference.value());
+        if (IGNORED_TYPES.contains(memoryType)) {
+            return false;
+        }
+        for (Class<?> subType : IGNORED_SUB_TYPES) {
+            if (subType.isAssignableFrom(memoryType)) {
+                return false;
             }
         }
+
+        return true;
     }
 
+    private @MonotonicNonNull Class<?> apiMemoryType;
+
+    @Override
+    protected String rewriteFieldType(Holder.Reference<MemoryModuleType<?>> reference) {
+        Class<?> memoryType = MEMORY_GENERIC_TYPES.get(reference.value());
+
+        if (!Primitives.isWrapperType(memoryType) && API_BRIDGE.containsKey(memoryType)) {
+            this.apiMemoryType = API_BRIDGE.get(memoryType);
+        } else {
+            this.apiMemoryType = memoryType;
+        }
+
+        return "%s<%s>".formatted(this.rewriteClass.simpleName(), this.apiMemoryType.getSimpleName());
+    }
+
+    @Override
     protected String rewriteFieldName(Holder.Reference<MemoryModuleType<?>> reference) {
-        String internalName = Formatting.formatKeyAsField(reference.key().location().getPath());
+        String internalName = super.rewriteFieldName(reference);
         return FIELD_RENAMES.getOrDefault(internalName, internalName);
     }
 
-    @Nullable
-    protected FeatureFlagSet getRequiredFeatures(Holder.Reference<MemoryModuleType<?>> reference) {
-        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return element.requiredFeatures();
-        }
-        if (this.experimentalKeys.get().contains(reference.key())) {
-            return FlagSets.NEXT_UPDATE.get();
-        }
-        return null;
+    @Override
+    protected String rewriteFieldValue(Holder.Reference<MemoryModuleType<?>> reference) {
+        return "new %s<>(%s.minecraft(%s), %s.class)".formatted(
+            this.rewriteClass.simpleName(),
+            NamespacedKey.class.getSimpleName(),
+            quoted(reference.key().location().getPath()),
+            this.apiMemoryType.getSimpleName()
+        );
     }
 }

@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.BubbleColumn;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftBubbleColumn extends CraftBlockData implements BubbleColumn {
     private static final BooleanProperty DRAG_DOWN = BubbleColumnBlock.DRAG_DOWN;
 

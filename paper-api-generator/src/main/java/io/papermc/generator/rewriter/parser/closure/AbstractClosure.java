@@ -1,9 +1,14 @@
 package io.papermc.generator.rewriter.parser.closure;
 
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
+import org.checkerframework.framework.qual.DefaultQualifier;
+
+@DefaultQualifier(NonNull.class)
 public class AbstractClosure implements Closure {
 
     private final ClosureType type;
-    private Closure parent;
+    private @Nullable Closure parent;
 
     protected AbstractClosure(ClosureType type) {
         this.type = type;
@@ -15,7 +20,7 @@ public class AbstractClosure implements Closure {
     }
 
     @Override
-    public Closure parent() {
+    public @Nullable Closure parent() {
         return this.parent;
     }
 
@@ -24,7 +29,7 @@ public class AbstractClosure implements Closure {
         return "Closure[" + this.type.name() + "](start=" + this.type.start + ", end=" + this.type.end + ")";
     }
 
-    public void setParent(Closure parent) {
+    public void setParent(@Nullable Closure parent) {
         if (this.parent != null && parent != null) {
             throw new IllegalStateException("Cannot set this parent closure since it is already in a closure: " + this.parent);
         }

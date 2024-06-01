@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Beehive;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftBeehive extends CraftBlockData implements Beehive {
     private static final DirectionProperty FACING = BeehiveBlock.FACING;
 

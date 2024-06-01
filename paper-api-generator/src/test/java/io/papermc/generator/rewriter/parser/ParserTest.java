@@ -1,7 +1,7 @@
 package io.papermc.generator.rewriter.parser;
 
 import io.papermc.generator.rewriter.context.ImportCollector;
-import org.jetbrains.annotations.Nullable;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.junit.jupiter.api.Tag;
 import java.io.BufferedReader;
 import java.io.IOException;

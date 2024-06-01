@@ -13,5 +13,4 @@ public interface DataConverter {
     void convertSetter(final ConverterBase childConverter, final MethodSpec.Builder method, final FieldSpec field, final ParameterSpec indexParameter, final ParameterSpec parameter);
 
     void convertGetter(final ConverterBase childConverter, final MethodSpec.Builder method, final FieldSpec field, final ParameterSpec indexParameter);
-
 }

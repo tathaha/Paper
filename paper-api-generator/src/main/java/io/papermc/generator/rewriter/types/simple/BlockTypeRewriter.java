@@ -12,8 +12,8 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 
 public class BlockTypeRewriter extends RegistryFieldRewriter<Block> {
 
-    public BlockTypeRewriter(final String pattern) {
-        super(BlockType.class, Registries.BLOCK, pattern, "getBlockType");
+    public BlockTypeRewriter() {
+        super(Registries.BLOCK, "getBlockType");
     }
 
     @Override

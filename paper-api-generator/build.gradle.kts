@@ -8,7 +8,7 @@ plugins {
 plugins.apply(PaperweightSourceGeneratorHelper::class)
 
 extensions.configure(PaperweightSourceGeneratorExt::class) {
-    atFile.set(projectDir.toPath().resolve("wideners.at").toFile())
+    atFile.set(file("wideners.at"))
 }
 
 val testData = sourceSets.create("testData")

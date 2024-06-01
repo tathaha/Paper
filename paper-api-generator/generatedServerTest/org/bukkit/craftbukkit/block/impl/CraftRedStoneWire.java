@@ -17,7 +17,6 @@ import org.bukkit.craftbukkit.block.CraftBlock;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftRedStoneWire extends CraftBlockData implements RedstoneWire {
     private static final IntegerProperty POWER = RedStoneWireBlock.POWER;
 

@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.BigDripleaf;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftBigDripleaf extends CraftBlockData implements BigDripleaf {
     private static final DirectionProperty FACING = BigDripleafBlock.FACING;
 

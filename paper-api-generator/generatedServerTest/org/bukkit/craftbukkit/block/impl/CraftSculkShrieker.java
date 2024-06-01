@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.SculkShrieker;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSculkShrieker extends CraftBlockData implements SculkShrieker {
     private static final BooleanProperty CAN_SUMMON = SculkShriekerBlock.CAN_SUMMON;
 

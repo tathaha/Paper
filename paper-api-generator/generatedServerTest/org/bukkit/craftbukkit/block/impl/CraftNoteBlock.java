@@ -13,7 +13,6 @@ import org.bukkit.block.data.type.NoteBlock;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftNoteBlock extends CraftBlockData implements NoteBlock {
     private static final EnumProperty<NoteBlockInstrument> INSTRUMENT = net.minecraft.world.level.block.NoteBlock.INSTRUMENT;
 

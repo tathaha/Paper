@@ -93,7 +93,6 @@ public class CraftBlockDataGenerator<T extends BlockData> extends StructuredGene
         TypeSpec.Builder typeBuilder = TypeSpec.classBuilder(this.className)
             .addModifiers(PUBLIC)
             .addAnnotation(Annotations.GENERATED_FROM)
-            .addAnnotation(Annotations.suppressWarnings("unused")) // todo remove
             .superclass(Types.CRAFT_BLOCKDATA)
             .addSuperinterface(this.baseClass);
 

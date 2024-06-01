@@ -13,7 +13,9 @@ import io.papermc.generator.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.Javadocs;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.FlagSets;
+import io.papermc.generator.utils.experimental.FlagHolders;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -22,7 +24,6 @@ import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.flag.FeatureElement;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.bukkit.Keyed;
 import org.bukkit.NamespacedKey;
@@ -68,7 +69,7 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
         final MethodSpec.Builder fetch = MethodSpec.methodBuilder("fetch")
             .addModifiers(PRIVATE, STATIC)
             .addParameter(keyParam)
-            .addCode("return $T.$L.get($T.minecraft($N));", org.bukkit.Registry.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), NamespacedKey.class, keyParam)
+            .addCode("return $T.registryAccess().getRegistry($T.$L).get($T.minecraft($N));", RegistryAccess.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), NamespacedKey.class, keyParam)
             .returns(returnType.annotated(NOT_NULL));
         return fetch;
     }
@@ -91,9 +92,9 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
     protected TypeSpec getTypeSpec() {
         TypeSpec.Builder typeBuilder = this.valueHolderType();
 
-        MethodSpec.@Nullable Builder fetchMethod = this.fetchMethod(this.apiType); // todo runtime order issue when the classes are removed with the key generator + paper-api can't compile without some api
+        MethodSpec.@Nullable Builder fetchMethod = this.fetchMethod(this.apiType);
 
-        String registryField = requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey)); // those will use the new RegistryAccess that use the registry key
+        String registryKeyField = requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey));
 
         this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).forEach(reference -> {
             ResourceLocation key = reference.key().location();
@@ -103,13 +104,13 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
             FieldSpec.Builder fieldBuilder = FieldSpec.builder(this.apiType, fieldName, PUBLIC, STATIC, FINAL)
                 .addJavadoc(Javadocs.getVersionDependentField("{@code $L}"), key.toString());
             if (this.isInterface) {
-                fieldBuilder.initializer("$T.$L.get($T.minecraft($S))", org.bukkit.Registry.class, registryField, NamespacedKey.class, pathKey);
+                fieldBuilder.initializer("$T.registryAccess().getRegistry($T.$L).get($T.minecraft($S))", RegistryAccess.class, RegistryKey.class, registryKeyField, NamespacedKey.class, pathKey);
             } else {
                 fieldBuilder.initializer("$N($S)", fetchMethod.build(), pathKey);
             }
-            @Nullable FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
-            if (requiredFeatures != null) {
-                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(requiredFeatures));
+            @Nullable SingleFlagHolder requiredFeature = this.getRequiredFeature(reference);
+            if (requiredFeature != null) {
+                fieldBuilder.addAnnotations(Annotations.experimentalAnnotations(requiredFeature));
             }
 
             typeBuilder.addField(fieldBuilder.build());
@@ -126,15 +127,19 @@ public abstract class RegistryGenerator<T, A> extends SimpleGenerator {
 
     public abstract void addExtras(TypeSpec.Builder builder);
 
-    @Nullable
-    public FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
-        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return element.requiredFeatures();
-        }
-        if (this.experimentalKeys.get().contains(reference.key())) {
-            return FlagSets.NEXT_UPDATE.get();
+    public @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<T> reference) {
+        if (this.isFilteredRegistry) {
+            // built-in registry
+            FeatureElement element = (FeatureElement) reference.value();
+            if (FeatureFlags.isExperimental(element.requiredFeatures())) {
+                return SingleFlagHolder.fromSet(element.requiredFeatures());
+            }
+        } else {
+            // data-driven registry
+            if (this.experimentalKeys.get().contains(reference.key())) {
+                return FlagHolders.NEXT_UPDATE;
+            }
         }
         return null;
     }
-
 }

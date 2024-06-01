@@ -11,6 +11,8 @@ import java.nio.file.Path;
 @DefaultQualifier(NonNull.class)
 public abstract class SimpleGenerator implements SourceGenerator {
 
+    public static final String INDENT_UNIT = "    ";
+
     protected final String className;
     protected final String packageName;
 
@@ -34,5 +36,4 @@ public abstract class SimpleGenerator implements SourceGenerator {
 
         builder.build().writeTo(parent, StandardCharsets.UTF_8);
     }
-
 }

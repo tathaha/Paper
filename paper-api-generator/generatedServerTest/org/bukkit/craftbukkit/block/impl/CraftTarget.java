@@ -8,7 +8,6 @@ import org.bukkit.block.data.AnaloguePowerable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTarget extends CraftBlockData implements AnaloguePowerable {
     private static final IntegerProperty OUTPUT_POWER = BlockStateProperties.POWER;
 

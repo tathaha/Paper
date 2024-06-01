@@ -14,7 +14,6 @@ import org.bukkit.block.data.type.PistonHead;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftPistonHead extends CraftBlockData implements PistonHead {
     private static final DirectionProperty FACING = PistonHeadBlock.FACING;
 

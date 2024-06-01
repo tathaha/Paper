@@ -35,32 +35,32 @@ public class VirtualDataPropertyWriter<T extends Property<?>> extends DataProper
     }
 
     protected void computeTypes(VirtualField<T> fieldInfo) {
-        switch (fieldInfo.getHolderType()) {
+        switch (fieldInfo.holderType()) {
             case ARRAY -> {
                 this.indexClass = Integer.TYPE;
-                this.fieldType = ArrayTypeName.of(fieldInfo.getValueType());
+                this.fieldType = ArrayTypeName.of(fieldInfo.valueType());
             }
             case LIST -> {
                 this.indexClass = Integer.TYPE;
-                this.fieldType = ParameterizedTypeName.get(List.class, fieldInfo.getValueType());
+                this.fieldType = ParameterizedTypeName.get(List.class, fieldInfo.valueType());
             }
             case MAP -> {
-                if (fieldInfo.getKeyClass() != null) {
-                    this.indexClass = fieldInfo.getKeyClass();
+                if (fieldInfo.keyClass() != null) {
+                    this.indexClass = fieldInfo.keyClass();
                 } else {
                     this.indexClass = this.properties.iterator().next().getValueClass();
                     if (this.indexClass.isEnum()) {
                         this.indexClass = BlockStateMapping.ENUM_BRIDGE.getOrDefault(this.indexClass, (Class<? extends Enum<?>>) this.indexClass);
                     }
                 }
-                this.fieldType = ParameterizedTypeName.get(Map.class, this.indexClass, fieldInfo.getValueType());
+                this.fieldType = ParameterizedTypeName.get(Map.class, this.indexClass, fieldInfo.valueType());
             }
         }
     }
 
     @Override
     public FieldSpec.Builder getOrCreateField(Map<Property<?>, Field> fields) {
-        FieldSpec.Builder fieldBuilder = FieldSpec.builder(this.fieldType, this.fieldInfo.getName(), PRIVATE, STATIC, FINAL);
+        FieldSpec.Builder fieldBuilder = FieldSpec.builder(this.fieldType, this.fieldInfo.name(), PRIVATE, STATIC, FINAL);
         if (this.getType() == DataHolderType.ARRAY || this.getType() == DataHolderType.LIST) {
             CodeBlock.Builder code = CodeBlock.builder();
             this.createSyntheticCollection(code, this.getType() == DataHolderType.ARRAY, fields);
@@ -81,12 +81,12 @@ public class VirtualDataPropertyWriter<T extends Property<?>> extends DataProper
 
     @Override
     public DataHolderType getType() {
-        return this.fieldInfo.getHolderType();
+        return this.fieldInfo.holderType();
     }
 
     @Override
     public String getBaseName() {
-        return this.fieldInfo.getBaseName();
+        return this.fieldInfo.baseName();
     }
 
     @Override

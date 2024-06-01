@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.PinkPetals;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftPinkPetals extends CraftBlockData implements PinkPetals {
     private static final DirectionProperty FACING = PinkPetalsBlock.FACING;
 

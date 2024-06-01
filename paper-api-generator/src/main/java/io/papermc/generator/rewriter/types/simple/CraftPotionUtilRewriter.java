@@ -2,7 +2,6 @@ package io.papermc.generator.rewriter.types.simple;
 
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.types.Types;
 import io.papermc.generator.utils.Formatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -14,8 +13,7 @@ public class CraftPotionUtilRewriter extends SearchReplaceRewriter {
 
     private final String statePrefix;
 
-    public CraftPotionUtilRewriter(final String pattern, String statePrefix) {
-        super(Types.CRAFT_POTION_UTIL, pattern, false);
+    public CraftPotionUtilRewriter(String statePrefix) {
         this.statePrefix = statePrefix;
     }
 

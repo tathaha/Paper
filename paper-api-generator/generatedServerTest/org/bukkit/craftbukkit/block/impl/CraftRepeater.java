@@ -13,7 +13,6 @@ import org.bukkit.block.data.type.Repeater;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftRepeater extends CraftBlockData implements Repeater {
     private static final IntegerProperty DELAY = RepeaterBlock.DELAY;
 

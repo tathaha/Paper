@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.CaveVinesPlant;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCaveVinesPlant extends CraftBlockData implements CaveVinesPlant {
     private static final BooleanProperty BERRIES = CaveVinesPlantBlock.BERRIES;
 

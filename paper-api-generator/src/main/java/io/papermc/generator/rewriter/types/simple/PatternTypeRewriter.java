@@ -14,15 +14,14 @@ import java.util.Map;
 
 import static io.papermc.generator.utils.Formatting.quoted;
 
-
 public class PatternTypeRewriter extends EnumRegistryRewriter<BannerPattern, PatternType> {
 
     // DataConverter(V3818-2): legacy code -> key map is not accessible so get it from DFU
     @Deprecated
     private static final Map<String, String> KEY_TO_LEGACY_CODE = HashBiMap.create(BannerPatternFormatFix.PATTERN_ID_MAP).inverse();
 
-    public PatternTypeRewriter(final String pattern) {
-        super(PatternType.class, Registries.BANNER_PATTERN, pattern, true);
+    public PatternTypeRewriter() {
+        super(Registries.BANNER_PATTERN, true);
     }
 
     @Deprecated(forRemoval = true, since = "1.20.5")

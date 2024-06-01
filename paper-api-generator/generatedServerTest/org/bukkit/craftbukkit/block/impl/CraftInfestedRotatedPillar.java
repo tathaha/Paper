@@ -12,7 +12,6 @@ import org.bukkit.block.data.Orientable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftInfestedRotatedPillar extends CraftBlockData implements Orientable {
     private static final EnumProperty<Direction.Axis> AXIS = BlockStateProperties.AXIS;
 

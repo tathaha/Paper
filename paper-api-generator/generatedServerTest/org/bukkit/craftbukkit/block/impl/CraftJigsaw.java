@@ -10,7 +10,6 @@ import org.bukkit.block.data.type.Jigsaw;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftJigsaw extends CraftBlockData implements Jigsaw {
     private static final EnumProperty<FrontAndTop> ORIENTATION = JigsawBlock.ORIENTATION;
 

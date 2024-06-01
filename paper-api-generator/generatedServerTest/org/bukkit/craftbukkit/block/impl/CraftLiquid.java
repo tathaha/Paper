@@ -8,7 +8,6 @@ import org.bukkit.block.data.Levelled;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftLiquid extends CraftBlockData implements Levelled {
     private static final IntegerProperty LEVEL = LiquidBlock.LEVEL;
 

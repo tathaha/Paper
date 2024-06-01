@@ -8,7 +8,6 @@ import org.bukkit.block.data.Hatchable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSnifferEgg extends CraftBlockData implements Hatchable {
     private static final IntegerProperty HATCH = SnifferEggBlock.HATCH;
 

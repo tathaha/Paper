@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Hopper;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftHopper extends CraftBlockData implements Hopper {
     private static final BooleanProperty ENABLED = HopperBlock.ENABLED;
 

@@ -6,16 +6,16 @@ import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.SwitchRewriter;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.Formatting;
-import io.papermc.generator.utils.experimental.FlagSets;
+import io.papermc.generator.utils.experimental.FlagHolders;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.item.BundleItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -33,8 +33,8 @@ public class MaterialRewriter {
 
     public static class Blocks extends EnumRegistryRewriter<Block, Material> {
 
-        public Blocks(final String pattern) {
-            super(Material.class, Registries.BLOCK, pattern, true);
+        public Blocks() {
+            super(Registries.BLOCK, true);
         }
 
         @Override
@@ -73,8 +73,8 @@ public class MaterialRewriter {
     /* todo test is broken
     public static class IsTransparent extends SwitchCaseRewriter {
 
-        public IsTransparent(final String pattern) {
-            super(Material.class, pattern, false);
+        public IsTransparent() {
+            super(false);
         }
 
         @Override
@@ -88,8 +88,8 @@ public class MaterialRewriter {
 
     public static class Items extends EnumRegistryRewriter<Item, Material> {
 
-        public Items(final String pattern) {
-            super(Material.class, Registries.ITEM, pattern, true);
+        public Items() {
+            super(Registries.ITEM, true);
         }
 
         @Override
@@ -119,19 +119,18 @@ public class MaterialRewriter {
         }
 
         @Override
-        protected @Nullable FeatureFlagSet getRequiredFeatures(Holder.Reference<Item> reference) {
+        protected @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<Item> reference) {
             if (reference.value() instanceof BundleItem) {
-                return FlagSets.BUNDLE.get(); // special case since the item is not locked itself just in the creative menu
+                return FlagHolders.BUNDLE; // special case since the item is not locked itself just in the creative menu
             } else {
-                return super.getRequiredFeatures(reference);
+                return super.getRequiredFeature(reference);
             }
         }
     }
 
     public static class GetEquipmentSlot extends SwitchRewriter<EquipmentSlot> {
 
-        public GetEquipmentSlot(final String pattern) {
-            super(Material.class, pattern, false);
+        public GetEquipmentSlot() {
             this.defaultValue = returnOf(EquipmentSlot.HAND, "%s.%s".formatted(EquipmentSlot.class.getSimpleName(), EquipmentSlot.HAND.name()));
         }
 

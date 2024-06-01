@@ -15,7 +15,6 @@ import org.bukkit.block.data.type.Tripwire;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTripWire extends CraftBlockData implements Tripwire {
     private static final BooleanProperty ATTACHED = TripWireBlock.ATTACHED;
 

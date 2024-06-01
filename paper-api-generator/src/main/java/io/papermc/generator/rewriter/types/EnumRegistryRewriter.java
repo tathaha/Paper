@@ -4,15 +4,14 @@ import com.google.common.base.Suppliers;
 import io.papermc.generator.Main;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.utils.Annotations;
-import io.papermc.generator.rewriter.ClassNamed;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
-import io.papermc.generator.utils.experimental.FlagSets;
+import io.papermc.generator.utils.experimental.FlagHolders;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
-import net.minecraft.world.flag.FeatureFlagSet;
 import net.minecraft.world.flag.FeatureFlags;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Set;
@@ -27,12 +26,7 @@ public class EnumRegistryRewriter<T, A extends Enum<A>> extends EnumRewriter<Hol
     private final boolean isFilteredRegistry;
     private final boolean hasParams;
 
-    public EnumRegistryRewriter(final Class<A> rewriteClass, final ResourceKey<? extends Registry<T>> registryKey, final String pattern, final boolean hasParams) {
-        this(new ClassNamed(rewriteClass), registryKey, pattern, hasParams);
-    }
-
-    public EnumRegistryRewriter(final ClassNamed rewriteClass, final ResourceKey<? extends Registry<T>> registryKey, final String pattern, final boolean hasParams) {
-        super(rewriteClass, pattern, false);
+    public EnumRegistryRewriter(final ResourceKey<? extends Registry<T>> registryKey, final boolean hasParams) {
         this.registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
         this.experimentalKeys = Suppliers.memoize(() -> RegistryUtils.collectExperimentalDataDrivenKeys(this.registry));
         this.isFilteredRegistry = FeatureElement.FILTERED_REGISTRIES.contains(registryKey);
@@ -50,7 +44,7 @@ public class EnumRegistryRewriter<T, A extends Enum<A>> extends EnumRewriter<Hol
     }
 
     @Override
-    protected String rewriteEnumValue(Holder.Reference<T> reference) {
+    protected @Nullable String rewriteEnumValue(Holder.Reference<T> reference) {
         if (this.hasParams) {
             return quoted(reference.key().location().getPath());
         }
@@ -59,18 +53,24 @@ public class EnumRegistryRewriter<T, A extends Enum<A>> extends EnumRewriter<Hol
 
     @Override
     protected void rewriteAnnotation(Holder.Reference<T> reference, StringBuilder builder, SearchMetadata metadata) {
-        FeatureFlagSet requiredFeatures = this.getRequiredFeatures(reference);
-        if (requiredFeatures != null) {
-            Annotations.experimentalAnnotations(builder, metadata, requiredFeatures);
+        @Nullable SingleFlagHolder requiredFeature = this.getRequiredFeature(reference);
+        if (requiredFeature != null) {
+            Annotations.experimentalAnnotations(builder, metadata, requiredFeature);
         }
     }
 
-    protected @Nullable FeatureFlagSet getRequiredFeatures(Holder.Reference<T> reference) {
-        if (this.isFilteredRegistry && reference.value() instanceof FeatureElement element && FeatureFlags.isExperimental(element.requiredFeatures())) {
-            return element.requiredFeatures();
-        }
-        if (this.experimentalKeys.get().contains(reference.key())) {
-            return FlagSets.NEXT_UPDATE.get();
+    protected @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<T> reference) {
+        if (this.isFilteredRegistry) {
+            // built-in registry
+            FeatureElement element = (FeatureElement) reference.value();
+            if (FeatureFlags.isExperimental(element.requiredFeatures())) {
+                return SingleFlagHolder.fromSet(element.requiredFeatures());
+            }
+        } else {
+            // data-driven registry
+            if (this.experimentalKeys.get().contains(reference.key())) {
+                return FlagHolders.NEXT_UPDATE;
+            }
         }
         return null;
     }

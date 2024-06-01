@@ -8,7 +8,6 @@ import org.bukkit.block.data.type.Lantern;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftLantern extends CraftBlockData implements Lantern {
     private static final BooleanProperty HANGING = LanternBlock.HANGING;
 

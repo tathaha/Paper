@@ -1,6 +1,9 @@
 package io.papermc.generator.types;
 
-import io.papermc.generator.SourceWriter;
+import java.io.IOException;
+import java.nio.file.Path;
 
-public interface SourceGenerator extends SourceWriter {
+public interface SourceGenerator {
+
+    void writeToFile(Path parent) throws IOException;
 }

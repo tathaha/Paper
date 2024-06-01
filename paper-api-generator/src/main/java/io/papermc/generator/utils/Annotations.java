@@ -2,11 +2,9 @@ package io.papermc.generator.utils;
 
 import com.squareup.javapoet.AnnotationSpec;
 import java.util.List;
-import io.papermc.generator.utils.experimental.ExperimentalHelper;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.paper.generated.GeneratedFrom;
 import net.minecraft.SharedConstants;
-import net.minecraft.world.flag.FeatureFlag;
-import net.minecraft.world.flag.FeatureFlagSet;
 import org.bukkit.MinecraftExperimental;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.ApiStatus;
@@ -14,13 +12,9 @@ import org.jetbrains.annotations.NotNull;
 
 public final class Annotations {
 
-    public static List<AnnotationSpec> experimentalAnnotations(final FeatureFlagSet requiredFeatures) {
-        return experimentalAnnotations(ExperimentalHelper.onlyOneFlag(requiredFeatures));
-    }
-
-    public static List<AnnotationSpec> experimentalAnnotations(final FeatureFlag requiredFeature) {
+    public static List<AnnotationSpec> experimentalAnnotations(final SingleFlagHolder requiredFeature) {
         AnnotationSpec.Builder builder = AnnotationSpec.builder(MinecraftExperimental.class);
-        builder.addMember("value", "$T.$L", MinecraftExperimental.Requires.class, ExperimentalHelper.toBukkitAnnotationMember(requiredFeature).name());
+        builder.addMember("value", "$T.$L", MinecraftExperimental.Requires.class, requiredFeature.asAnnotationMember().name());
 
         return List.of(
             AnnotationSpec.builder(ApiStatus.Experimental.class).build(),

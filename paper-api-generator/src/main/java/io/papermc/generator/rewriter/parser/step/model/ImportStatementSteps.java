@@ -21,8 +21,8 @@ public final class ImportStatementSteps implements StepHolder {
     private static final char IMPORT_ON_DEMAND_IDENTIFIER = '*';
     private static final char STATEMENT_TERMINATOR = ';';
 
-    private final IterativeStep enforceSpaceStep = IterativeStep.create(this::enforceSpace);
-    private final IterativeStep skipUntilSemicolonAfterStarStep = IterativeStep.createUntil(this::skipUntilSemicolonAfterStar);
+    private final IterativeStep enforceSpaceStep = this.create(this::enforceSpace);
+    private final IterativeStep skipUntilSemicolonAfterStarStep = this.createUntil(this::skipUntilSemicolonAfterStar);
 
     private final ImportCollector collector;
     private boolean isStatic;
@@ -134,9 +134,9 @@ public final class ImportStatementSteps implements StepHolder {
     public IterativeStep[] initialSteps() {
         return new IterativeStep[] {
             this.enforceSpaceStep,
-            IterativeStep.createUntil(this::checkStatic),
-            IterativeStep.createUntil(this::getPartName),
-            IterativeStep.create(this::collectImport)
+            this.createUntil(this::checkStatic),
+            this.createUntil(this::getPartName),
+            this.create(this::collectImport)
         };
     }
 }

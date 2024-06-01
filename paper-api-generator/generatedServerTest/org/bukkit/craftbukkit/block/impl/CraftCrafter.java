@@ -12,7 +12,6 @@ import org.bukkit.block.data.type.Crafter;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCrafter extends CraftBlockData implements Crafter {
     private static final BooleanProperty CRAFTING = CrafterBlock.CRAFTING;
 

@@ -13,7 +13,6 @@ import org.bukkit.craftbukkit.block.data.CraftBlockData;
 import org.bukkit.util.Vector;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftStandingSign extends CraftBlockData implements Sign {
     private static final IntegerProperty ROTATION = StandingSignBlock.ROTATION;
 

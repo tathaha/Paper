@@ -10,7 +10,6 @@ import org.bukkit.block.data.Bisected;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftTallFlower extends CraftBlockData implements Bisected {
     private static final EnumProperty<DoubleBlockHalf> HALF = TallFlowerBlock.HALF;
 

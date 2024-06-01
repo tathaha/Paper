@@ -13,7 +13,6 @@ import org.bukkit.block.data.type.Grindstone;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftGrindstone extends CraftBlockData implements Grindstone {
     private static final EnumProperty<AttachFace> FACE = GrindstoneBlock.FACE;
 

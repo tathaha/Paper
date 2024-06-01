@@ -1,35 +1,31 @@
 package io.papermc.generator.rewriter.replace;
 
 import com.google.common.base.Preconditions;
-import io.papermc.generator.rewriter.ClassNamed;
+import io.papermc.generator.rewriter.SourceFile;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.framework.qual.DefaultQualifier;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+/**
+ * A composite rewriter used to tie multiple rewriters (of type {@link SearchReplaceRewriter})
+ * together for a single java source file.
+ */
+@DefaultQualifier(NonNull.class)
 public class CompositeRewriter extends SearchReplaceRewriter {
 
-    private final Map<String, SearchReplaceRewriter> rewriterByPattern;
+    private final Set<SearchReplaceRewriter> rewriters;
 
-    private CompositeRewriter(ClassNamed rewriteClass, List<SearchReplaceRewriter> rewriters) {
-        super(rewriteClass, null, false);
-        this.rewriterByPattern = rewriters.stream().collect(Collectors.toMap(rewriter -> rewriter.pattern, rewriter -> rewriter));
+    private CompositeRewriter(Set<SearchReplaceRewriter> rewriters) {
+        this.rewriters = rewriters;
     }
 
     @Override
-    protected void beginSearch() {
-        for (SearchReplaceRewriter rewriter : this.getRewriters()) {
-            rewriter.beginSearch();
-        }
-    }
-
-    @Override
-    public boolean isVersionDependant() {
-        for (SearchReplaceRewriter rewriter : this.getRewriters()) {
-            if (rewriter.isVersionDependant()) {
+    public boolean hasGeneratedComment() {
+        for (SearchReplaceRewriter rewriter : this.rewriters) {
+            if (rewriter.hasGeneratedComment()) {
                 return true;
             }
         }
@@ -37,42 +33,41 @@ public class CompositeRewriter extends SearchReplaceRewriter {
     }
 
     @Override
-    public void dump(StringBuilder content) {
-        for (SearchReplaceRewriter rewriter : this.getRewriters()) {
-            rewriter.dump(content);
+    public boolean registerFor(SourceFile file) {
+        boolean result = true;
+        for (SearchReplaceRewriter rewriter : this.rewriters) {
+            if (!rewriter.registerFor(file)) {
+                result = false; // continue to iterate to show next errors (if any)
+            }
         }
+        return result;
     }
 
     @Override
-    protected SearchReplaceRewriter getRewriterFor(String pattern) {
-        return this.rewriterByPattern.get(pattern);
-    }
-
-    @Override
-    public Set<String> getPatterns() {
-        return Collections.unmodifiableSet(this.rewriterByPattern.keySet());
-    }
-
-    public Collection<SearchReplaceRewriter> getRewriters() {
-        return Collections.unmodifiableCollection(this.rewriterByPattern.values());
+    public Set<SearchReplaceRewriter> getRewriters() {
+        return this.rewriters;
     }
 
     public static CompositeRewriter bind(SearchReplaceRewriter... rewriters) {
         return bind(Arrays.asList(rewriters));
     }
 
-    public static CompositeRewriter bind(List<SearchReplaceRewriter> rewriters) {
+    public static CompositeRewriter bind(Collection<SearchReplaceRewriter> rewriters) {
         Preconditions.checkArgument(!rewriters.isEmpty(), "Rewriter list cannot be empty!");
-        ClassNamed rewriteClass = rewriters.get(0).rewriteClass;
-        String rootClassName = rewriteClass.root().simpleName();
+
+        Set<String> startCommentMarkers = new HashSet<>(rewriters.size());
+        Set<String> endCommentMarkers = new HashSet<>(rewriters.size());
 
         for (SearchReplaceRewriter rewriter : rewriters) {
             Preconditions.checkState(!(rewriter instanceof CompositeRewriter), "Nested composite rewriters are not allowed!");
-            Preconditions.checkArgument(rewriter.pattern != null, "Rewriter pattern cannot be null!");
-            Preconditions.checkState(rewriteClass.packageName().equals(rewriter.rewriteClass.packageName()) &&
-                rootClassName.equals(rewriter.rewriteClass.root().simpleName()), "Composite rewriter only works for one file!");
+            Preconditions.checkArgument(rewriter.options != null, "Replace options are not defined!");
+
+            String startCommentMarker = rewriter.options.startCommentMarker();
+            String endCommentMarker = rewriter.options.endCommentMarker();
+            Preconditions.checkArgument(startCommentMarkers.add(startCommentMarker), "Duplicate start comment marker are not allowed, conflict on %s", startCommentMarker);
+            Preconditions.checkArgument(endCommentMarkers.add(endCommentMarker), "Duplicate end comment marker are not allowed, conflict on %s", endCommentMarker);
         }
 
-        return new CompositeRewriter(rewriteClass, rewriters);
+        return new CompositeRewriter(Set.copyOf(rewriters));
     }
 }

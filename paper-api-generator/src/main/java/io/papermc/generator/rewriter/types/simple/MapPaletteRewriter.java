@@ -3,19 +3,15 @@ package io.papermc.generator.rewriter.types.simple;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
 import net.minecraft.world.level.material.MapColor;
-import org.bukkit.map.MapPalette;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.awt.Color;
 
 public class MapPaletteRewriter extends SearchReplaceRewriter {
 
-    public MapPaletteRewriter(final String pattern) {
-        super(MapPalette.class, pattern, false);
-    }
-
     @Override
     protected void insert(final SearchMetadata metadata, final StringBuilder builder) {
-        for (final MapColor mapColor : MapColor.MATERIAL_COLORS) {
+        for (final @Nullable MapColor mapColor : MapColor.MATERIAL_COLORS) {
             if (mapColor == null) {
                 continue;
             }

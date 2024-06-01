@@ -8,7 +8,6 @@ import org.bukkit.block.data.Brushable;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftBrushable extends CraftBlockData implements Brushable {
     private static final IntegerProperty DUSTED = BlockStateProperties.DUSTED;
 

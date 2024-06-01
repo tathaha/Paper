@@ -9,7 +9,6 @@ import org.bukkit.block.data.type.SeaPickle;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftSeaPickle extends CraftBlockData implements SeaPickle {
     private static final IntegerProperty PICKLES = SeaPickleBlock.PICKLES;
 

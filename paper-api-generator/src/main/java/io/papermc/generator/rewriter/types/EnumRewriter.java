@@ -1,8 +1,8 @@
 package io.papermc.generator.rewriter.types;
 
+import io.papermc.generator.rewriter.SourceFile;
 import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.ClassNamed;
 import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Iterator;
@@ -12,20 +12,11 @@ public abstract class EnumRewriter<T, A extends Enum<A>> extends SearchReplaceRe
     @MonotonicNonNull
     private Iterator<T> values;
 
-    protected EnumRewriter(final Class<A> rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
-
-    protected EnumRewriter(final ClassNamed rewriteClass, final String pattern, final boolean exactReplacement) {
-        super(rewriteClass, pattern, exactReplacement);
-    }
-
     protected abstract Iterable<T> getValues();
 
     protected abstract String rewriteEnumName(T item);
 
-    @Nullable
-    protected String rewriteEnumValue(T item) {
+    protected @Nullable String rewriteEnumValue(T item) {
         return null;
     }
 
@@ -37,7 +28,7 @@ public abstract class EnumRewriter<T, A extends Enum<A>> extends SearchReplaceRe
         this.rewriteAnnotation(item, builder, metadata);
 
         builder.append(metadata.indent()).append(this.rewriteEnumName(item));
-        String value = this.rewriteEnumValue(item);
+        @Nullable String value = this.rewriteEnumValue(item);
         if (value != null) {
             builder.append('(').append(value).append(')');
         }
@@ -50,8 +41,12 @@ public abstract class EnumRewriter<T, A extends Enum<A>> extends SearchReplaceRe
     }
 
     @Override
-    protected void beginSearch() {
-        this.values = this.getValues().iterator();
+    public boolean registerFor(SourceFile file) {
+        boolean canRegister = super.registerFor(file);
+        if (canRegister) {
+            this.values = this.getValues().iterator();
+        }
+        return canRegister;
     }
 
     @Override

@@ -18,5 +18,4 @@ public final class CraftBlockDataGenerators {
             new CraftBlockDataGenerator<>(entry.getKey(), entry.getValue(), api).writeToFile(container);
         }
     }
-
 }

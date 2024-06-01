@@ -7,5 +7,4 @@ public interface PropertyAppender<T extends Comparable<T>, A> extends AppenderBa
     Property<T> getProperty();
 
     Class<A> getApiType();
-
 }

@@ -9,7 +9,6 @@ import org.bukkit.block.data.type.CaveVines;
 import org.bukkit.craftbukkit.block.data.CraftBlockData;
 
 @GeneratedFrom("1.20.6")
-@SuppressWarnings("unused")
 public class CraftCaveVines extends CraftBlockData implements CaveVines {
     private static final IntegerProperty AGE = CaveVinesBlock.AGE;
 
