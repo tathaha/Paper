@@ -1,7 +1,6 @@
 package io.papermc.generator;
 
 import io.papermc.generator.rewriter.registration.PatternSourceSetRewriter;
-import io.papermc.generator.rewriter.types.EnumCloneRewriter;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
 import io.papermc.generator.rewriter.types.TagRewriter;
@@ -20,6 +19,7 @@ import io.papermc.generator.rewriter.types.simple.StatisticRewriter;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.experimental.ExperimentalHelper;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.preset.EnumCloneRewriter;
 import java.util.Locale;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.core.Holder;
@@ -72,7 +72,7 @@ import org.checkerframework.framework.qual.DefaultQualifier;
 
 import static io.papermc.generator.rewriter.registration.PaperPatternSourceSetRewriter.composite;
 import static io.papermc.generator.rewriter.registration.RewriterHolder.holder;
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 @DefaultQualifier(NonNull.class)
 public final class Rewriters {

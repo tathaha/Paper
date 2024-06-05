@@ -1,9 +1,9 @@
 package io.papermc.generator.rewriter.types.simple;
 
 import io.papermc.generator.rewriter.types.RegistryFieldRewriter;
-import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.experimental.FlagHolders;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.utils.ClassHelper;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BundleItem;

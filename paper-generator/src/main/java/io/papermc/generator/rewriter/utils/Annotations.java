@@ -1,9 +1,9 @@
 package io.papermc.generator.rewriter.utils;
 
-import io.papermc.generator.rewriter.replace.SearchMetadata;
-import io.papermc.generator.rewriter.context.ImportCollector;
-import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.context.ImportCollector;
+import io.papermc.typewriter.replace.SearchMetadata;
+import io.papermc.typewriter.utils.ClassHelper;
 import org.bukkit.MinecraftExperimental;
 import org.jetbrains.annotations.ApiStatus;
 import java.lang.annotation.Annotation;

@@ -1,21 +1,21 @@
 package io.papermc.generator.rewriter.types;
 
 import io.papermc.generator.Main;
-import io.papermc.generator.rewriter.replace.SearchMetadata;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import java.util.Iterator;
 import java.util.Locale;
 import io.papermc.generator.utils.TagRegistry;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.replace.SearchMetadata;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.TagKey;
 import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class TagRewriter extends SearchReplaceRewriter {
 

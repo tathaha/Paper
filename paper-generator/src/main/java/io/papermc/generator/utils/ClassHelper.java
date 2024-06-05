@@ -7,19 +7,6 @@ import java.util.Set;
 
 public final class ClassHelper {
 
-    public static Class<?> getRootClass(Class<?> clazz) {
-        Class<?> rootClass = clazz;
-        Class<?> upperClass = clazz;
-        while (true) {
-            upperClass = upperClass.getEnclosingClass();
-            if (upperClass == null) {
-                break;
-            }
-            rootClass = upperClass;
-        }
-        return rootClass;
-    }
-
     public static Set<Class<?>> getAllInterfaces(Class<?> clazz, Class<?> ignored, Set<Class<?>> interfaces) {
         Class<?>[] classes = clazz.getInterfaces();
         interfaces.addAll(Arrays.asList(classes));
@@ -31,11 +18,6 @@ public final class ClassHelper {
         }
         interfaces.remove(ignored);
         return interfaces;
-    }
-
-    public static String retrieveFullNestedName(Class<?> clazz) {
-        String fqn = clazz.getCanonicalName();
-        return fqn.substring(clazz.getPackageName().length() + 1);
     }
 
     public static Class<?> eraseType(Type type) {

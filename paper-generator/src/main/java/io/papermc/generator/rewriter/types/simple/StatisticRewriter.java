@@ -21,7 +21,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import org.bukkit.Statistic;
 
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 @Deprecated(forRemoval = true)
 public class StatisticRewriter {

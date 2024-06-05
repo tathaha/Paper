@@ -1,7 +1,7 @@
 package io.papermc.generator.rewriter.registration;
 
-import io.papermc.generator.rewriter.replace.ReplaceOptionsLike;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.replace.ReplaceOptionsLike;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import org.jetbrains.annotations.Contract;
 import java.util.function.Function;
 

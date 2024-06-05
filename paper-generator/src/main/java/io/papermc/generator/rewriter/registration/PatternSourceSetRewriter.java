@@ -1,8 +1,9 @@
 package io.papermc.generator.rewriter.registration;
 
-import io.papermc.generator.rewriter.ClassNamed;
-import io.papermc.generator.rewriter.replace.CompositeRewriter;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.ClassNamed;
+import io.papermc.typewriter.registration.SourceSetRewriter;
+import io.papermc.typewriter.replace.CompositeRewriter;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
 

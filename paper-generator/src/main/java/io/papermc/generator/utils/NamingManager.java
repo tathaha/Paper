@@ -3,8 +3,6 @@ package io.papermc.generator.utils;
 import com.google.common.base.CaseFormat;
 import java.util.Optional;
 import java.util.function.Predicate;
-import java.util.regex.Pattern;
-import io.papermc.generator.rewriter.parser.ProtoTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.Contract;
 import javax.lang.model.SourceVersion;
@@ -82,18 +80,6 @@ public class NamingManager {
             return "_" + name;
         }
         return name;
-    }
-
-    public static final Pattern NAME_SEPARATOR = Pattern.compile(String.valueOf(ProtoTypeName.IDENTIFIER_SEPARATOR), Pattern.LITERAL);
-
-    // check only syntax error and keywords but not if each part are valid identifier
-    public static boolean isValidName(String name) {
-        for (String part : NAME_SEPARATOR.split(name)) {
-            if (part.isEmpty() || SourceVersion.isKeyword(part)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     public static class NameWrapper {

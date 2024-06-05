@@ -11,7 +11,7 @@ import net.minecraft.world.level.block.entity.BannerPatterns;
 
 import java.util.Map;
 
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class PatternTypeRewriter extends EnumRegistryRewriter<BannerPattern> {
 

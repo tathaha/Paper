@@ -1,6 +1,6 @@
 package io.papermc.generator.rewriter.types;
 
-import io.papermc.generator.rewriter.ClassNamed;
+import io.papermc.typewriter.ClassNamed;
 
 public final class Types {
 

@@ -1,8 +1,8 @@
 package io.papermc.generator.rewriter.types.simple;
 
-import io.papermc.generator.rewriter.replace.SearchMetadata;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
 import io.papermc.generator.utils.Formatting;
+import io.papermc.typewriter.replace.SearchMetadata;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import org.bukkit.potion.PotionType;

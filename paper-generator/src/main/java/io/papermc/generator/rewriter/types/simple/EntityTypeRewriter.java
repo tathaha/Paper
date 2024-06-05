@@ -20,7 +20,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class EntityTypeRewriter extends EnumRegistryRewriter<EntityType<?>> {
 

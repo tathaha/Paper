@@ -38,20 +38,6 @@ public final class Formatting {
         return Optional.of(resourcePath.substring(tagsIndex + tagDir.length() + 1, dotIndex)); // namespace/tags/registry_key/[tag_key].json
     }
 
-    public static int countOccurrences(String value, char match) {
-        int count = 0;
-        for (int i = 0, len = value.length(); i < len; i++) {
-            if (value.charAt(i) == match) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    public static String quoted(String value) {
-        return "\"" + value + "\"";
-    }
-
     public static String stripWordOfCamelCaseName(String name, String word, boolean onlyOnce) {
         String newName = name;
         int startIndex = 0;

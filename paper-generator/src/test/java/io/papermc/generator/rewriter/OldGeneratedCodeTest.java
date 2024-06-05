@@ -1,11 +1,7 @@
 package io.papermc.generator.rewriter;
 
 import io.papermc.generator.Rewriters;
-import io.papermc.generator.rewriter.parser.StringReader;
 import io.papermc.generator.rewriter.registration.PaperPatternSourceSetRewriter;
-import io.papermc.generator.rewriter.replace.CommentMarker;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriterBase;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.paper.generated.GeneratedFrom;
 import java.io.BufferedReader;
@@ -16,9 +12,15 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import io.papermc.typewriter.SourceFile;
+import io.papermc.typewriter.SourceRewriter;
+import io.papermc.typewriter.parser.StringReader;
+import io.papermc.typewriter.replace.CommentMarker;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.replace.SearchReplaceRewriterBase;
 import net.minecraft.SharedConstants;
 
-import static io.papermc.generator.rewriter.replace.CommentMarker.EMPTY_MARKER;
+import static io.papermc.typewriter.replace.CommentMarker.EMPTY_MARKER;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class OldGeneratedCodeTest {

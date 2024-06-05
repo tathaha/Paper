@@ -1,7 +1,7 @@
 package io.papermc.generator.rewriter.types.simple;
 
-import io.papermc.generator.rewriter.replace.SearchMetadata;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.replace.SearchMetadata;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import net.minecraft.world.level.material.MapColor;
 import org.checkerframework.checker.nullness.qual.Nullable;
 

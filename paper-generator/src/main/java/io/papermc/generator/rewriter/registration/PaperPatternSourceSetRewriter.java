@@ -1,13 +1,14 @@
 package io.papermc.generator.rewriter.registration;
 
-import io.papermc.generator.rewriter.ClassNamed;
-import io.papermc.generator.rewriter.SourceFile;
-import io.papermc.generator.rewriter.SourceRewriter;
-import io.papermc.generator.rewriter.replace.CompositeRewriter;
-import io.papermc.generator.rewriter.IndentUnit;
-import io.papermc.generator.rewriter.replace.ReplaceOptions;
-import io.papermc.generator.rewriter.replace.ReplaceOptionsLike;
-import io.papermc.generator.rewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.ClassNamed;
+import io.papermc.typewriter.SourceFile;
+import io.papermc.typewriter.SourceRewriter;
+import io.papermc.typewriter.registration.SourceSetRewriterImpl;
+import io.papermc.typewriter.replace.CompositeRewriter;
+import io.papermc.typewriter.IndentUnit;
+import io.papermc.typewriter.replace.ReplaceOptions;
+import io.papermc.typewriter.replace.ReplaceOptionsLike;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.types.SimpleGenerator;
 import io.papermc.paper.generated.GeneratedFrom;

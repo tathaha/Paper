@@ -2,12 +2,13 @@ package io.papermc.generator.rewriter.types;
 
 import com.google.common.base.Suppliers;
 import io.papermc.generator.Main;
-import io.papermc.generator.rewriter.replace.SearchMetadata;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.RegistryUtils;
 import io.papermc.generator.utils.experimental.FlagHolders;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.preset.EnumRewriter;
+import io.papermc.typewriter.replace.SearchMetadata;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
@@ -17,7 +18,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import static io.papermc.generator.utils.Formatting.quoted;
+import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class EnumRegistryRewriter<T> extends EnumRewriter<Holder.Reference<T>> {
 

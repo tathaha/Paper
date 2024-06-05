@@ -11,6 +11,10 @@ extensions.configure(PaperweightSourceGeneratorExt::class) {
     atFile.set(file("wideners.at"))
 }
 
+repositories {
+    mavenLocal() // todo publish typewriter somewhere
+}
+
 val testData = sourceSets.create("testData")
 
 dependencies {
@@ -18,6 +22,9 @@ dependencies {
     implementation(project(":paper-api"))
     implementation("io.github.classgraph:classgraph:4.8.47")
     implementation("org.jetbrains:annotations:24.0.1")
+    implementation("io.papermc.typewriter:typewriter:1.0-SNAPSHOT") {
+        isTransitive = false // paper-api already have everything
+    }
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation(testData.output)
