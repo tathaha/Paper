@@ -15,8 +15,6 @@ repositories {
     mavenLocal() // todo publish typewriter somewhere
 }
 
-val testData = sourceSets.create("testData")
-
 dependencies {
     implementation("com.squareup:javapoet:1.13.0")
     implementation(project(":paper-api"))
@@ -27,7 +25,6 @@ dependencies {
     }
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation(testData.output)
 }
 
 val generatedApiPath = file("generatedApi")
@@ -50,22 +47,8 @@ tasks.register<JavaExec>("scanOldGeneratedSourceCode") {
         generatedServerPath.toString())
 }
 
-tasks {
-    test {
-        useJUnitPlatform {
-            if (false && System.getenv()["CI"]?.toBoolean() == true) {
-                // the CI shouldn't run the test since it's not included by default but just in case this is moved to its own repo
-                excludeTags("parser")
-            } else {
-                // excludeTags("parser") // comment this line while working on parser related things
-            }
-        }
-        inputs.files(testData.output.files)
-    }
-
-    compileTestJava {
-        options.compilerArgs.add("-parameters")
-    }
+tasks.test {
+    useJUnitPlatform()
 }
 
 group = "io.papermc.paper"
