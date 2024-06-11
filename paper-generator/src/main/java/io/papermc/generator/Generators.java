@@ -5,6 +5,9 @@ import io.papermc.generator.types.craftblockdata.CraftBlockDataGenerators;
 import io.papermc.generator.types.goal.MobGoalGenerator;
 import io.papermc.generator.types.registry.GeneratedKeyType;
 import io.papermc.paper.registry.RegistryKey;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import net.minecraft.Util;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -22,9 +25,6 @@ import org.bukkit.inventory.meta.trim.TrimPattern;
 import org.bukkit.potion.PotionEffectType;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 @DefaultQualifier(NonNull.class)
 public interface Generators {

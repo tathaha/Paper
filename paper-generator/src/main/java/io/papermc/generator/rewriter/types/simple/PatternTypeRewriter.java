@@ -2,14 +2,14 @@ package io.papermc.generator.rewriter.types.simple;
 
 import com.google.common.collect.HashBiMap;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
+import java.util.Map;
+import io.papermc.typewriter.preset.model.EnumValue;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.util.datafix.fixes.BannerPatternFormatFix;
 import net.minecraft.world.level.block.entity.BannerPattern;
 import net.minecraft.world.level.block.entity.BannerPatterns;
-
-import java.util.Map;
 
 import static io.papermc.typewriter.utils.Formatting.quoted;
 
@@ -20,7 +20,8 @@ public class PatternTypeRewriter extends EnumRegistryRewriter<BannerPattern> {
     private static final Map<String, String> KEY_TO_LEGACY_CODE = HashBiMap.create(BannerPatternFormatFix.PATTERN_ID_MAP).inverse();
 
     public PatternTypeRewriter() {
-        super(Registries.BANNER_PATTERN, true);
+        super(Registries.BANNER_PATTERN);
+        this.hasKeyArgument = false;
     }
 
     @Deprecated(forRemoval = true, since = "1.20.5")
@@ -44,10 +45,10 @@ public class PatternTypeRewriter extends EnumRegistryRewriter<BannerPattern> {
     }
 
     @Override
-    protected String rewriteEnumValue(Holder.Reference<BannerPattern> reference) {
-        return "%s, %s".formatted(
+    protected EnumValue.Builder rewriteEnumValue(Holder.Reference<BannerPattern> reference) {
+        return super.rewriteEnumValue(reference).arguments(
             quoted(this.getLegacyCode(reference.key())),
-            super.rewriteEnumValue(reference)
+            quoted(reference.key().location().getPath())
         );
     }
 }

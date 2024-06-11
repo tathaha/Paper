@@ -1,25 +1,25 @@
 package io.papermc.generator.rewriter.registration;
 
+import io.papermc.generator.rewriter.utils.Annotations;
+import io.papermc.generator.types.SimpleGenerator;
+import io.papermc.paper.generated.GeneratedFrom;
 import io.papermc.typewriter.ClassNamed;
+import io.papermc.typewriter.IndentUnit;
 import io.papermc.typewriter.SourceFile;
 import io.papermc.typewriter.SourceRewriter;
 import io.papermc.typewriter.registration.SourceSetRewriterImpl;
 import io.papermc.typewriter.replace.CompositeRewriter;
-import io.papermc.typewriter.IndentUnit;
 import io.papermc.typewriter.replace.ReplaceOptions;
 import io.papermc.typewriter.replace.ReplaceOptionsLike;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
-import io.papermc.generator.rewriter.utils.Annotations;
-import io.papermc.generator.types.SimpleGenerator;
-import io.papermc.paper.generated.GeneratedFrom;
-import net.minecraft.SharedConstants;
-import org.checkerframework.checker.nullness.qual.NonNull;
-import org.checkerframework.framework.qual.DefaultQualifier;
-import org.jetbrains.annotations.Contract;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
+import net.minecraft.SharedConstants;
+import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.framework.qual.DefaultQualifier;
+import org.jetbrains.annotations.Contract;
 
 @DefaultQualifier(NonNull.class)
 public class PaperPatternSourceSetRewriter extends SourceSetRewriterImpl<PatternSourceSetRewriter> implements PatternSourceSetRewriter {

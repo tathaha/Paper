@@ -3,10 +3,10 @@ package io.papermc.generator.rewriter.types.simple;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.typewriter.replace.SearchMetadata;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import java.util.Locale;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import org.bukkit.potion.PotionType;
-import java.util.Locale;
 
 @Deprecated(forRemoval = true)
 public class CraftPotionUtilRewriter extends SearchReplaceRewriter {

@@ -1,16 +1,20 @@
 package io.papermc.generator.rewriter.types.simple;
 
-import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.generator.utils.experimental.FlagHolders;
+import io.papermc.generator.utils.experimental.SingleFlagHolder;
+import io.papermc.typewriter.preset.SwitchRewriter;
+import io.papermc.typewriter.preset.model.CodeBlock;
+import io.papermc.typewriter.preset.model.EnumValue;
+import io.papermc.typewriter.preset.model.SwitchCases;
+import io.papermc.typewriter.preset.model.SwitchContent;
 import java.util.Comparator;
 import java.util.Locale;
 import java.util.Optional;
-import io.papermc.generator.utils.experimental.SingleFlagHolder;
-import io.papermc.typewriter.preset.SwitchRewriter;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -33,17 +37,19 @@ public class MaterialRewriter {
     public static class Blocks extends EnumRegistryRewriter<Block> {
 
         public Blocks() {
-            super(Registries.BLOCK, true);
+            super(Registries.BLOCK);
+            this.hasKeyArgument = false;
         }
 
         @Override
         protected Iterable<Holder.Reference<Block>> getValues() {
             return BuiltInRegistries.BLOCK.holders().filter(reference -> !reference.value().equals(net.minecraft.world.level.block.Blocks.AIR))
-                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
+                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
         }
 
         @Override
-        protected String rewriteEnumValue(Holder.Reference<Block> reference) {
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<Block> reference) {
+            EnumValue.Builder value = super.rewriteEnumValue(reference);
             Block block = reference.value();
             if (BlockStateMapping.MAPPING.containsKey(block.getClass())) {
                 // some block can also be represented as item in that enum
@@ -61,11 +67,11 @@ public class MaterialRewriter {
                     blockData = BlockData.class;
                 }
                 if (equivalentItem.isPresent() && equivalentItem.get().getDefaultMaxStackSize() != Item.DEFAULT_MAX_STACK_SIZE) {
-                    return "%d, %d, %s.class".formatted(-1, equivalentItem.get().getDefaultMaxStackSize(), blockData.getSimpleName());
+                    return value.args(-1, equivalentItem.get().getDefaultMaxStackSize(), blockData.getSimpleName().concat(".class"));
                 }
-                return "%d, %s.class".formatted(-1, blockData.getSimpleName());
+                return value.args(-1, blockData.getSimpleName().concat(".class"));
             }
-            return String.valueOf(-1); // id not needed for non legacy material
+            return value.arg(-1); // id not needed for non legacy material
         }
     }
 
@@ -79,7 +85,7 @@ public class MaterialRewriter {
         @Override
         protected Iterable<String> getCases() {
             return BuiltInRegistries.BLOCK.holders().filter(reference -> reference.value().defaultBlockState().useShapeForLightOcclusion())
-            .map(reference -> reference.key().location().getPath().toUpperCase(Locale.ENGLISH)).sorted(Formatting.ALPHABETIC_KEY_ORDER).toList();
+            .map(reference -> reference.key().location().getPath().toUpperCase(Locale.ENGLISH)).sorted(Formatting.ALPHABETIC_KEY_ORDER)::iterator;
         }
     }*/
 
@@ -88,20 +94,22 @@ public class MaterialRewriter {
     public static class Items extends EnumRegistryRewriter<Item> {
 
         public Items() {
-            super(Registries.ITEM, true);
+            super(Registries.ITEM);
+            this.hasKeyArgument = false;
         }
 
         @Override
         protected Iterable<Holder.Reference<Item>> getValues() {
             return BuiltInRegistries.ITEM.holders().filter(reference -> BuiltInRegistries.BLOCK.getOptional(reference.key().location()).isEmpty() || reference.value().equals(net.minecraft.world.item.Items.AIR))
-                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
+                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
         }
 
         @Override
-        protected String rewriteEnumValue(Holder.Reference<Item> reference) {
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<Item> reference) {
+            EnumValue.Builder value = super.rewriteEnumValue(reference);
             Item item = reference.value();
             if (item.equals(net.minecraft.world.item.Items.AIR)) {
-                return "%d, %d".formatted(-1, 0); // item+block
+                return value.args(-1, 0); // item+block
             }
 
             int maxStackSize = item.getDefaultMaxStackSize();
@@ -109,12 +117,14 @@ public class MaterialRewriter {
 
             if (maxStackSize != Item.DEFAULT_MAX_STACK_SIZE) {
                 if (maxDamage != 0) {
-                    return "%d, %d, %d".formatted(-1, maxStackSize, maxDamage);
+                    value.args(-1, maxStackSize, maxDamage);
+                } else {
+                    value.args(-1, maxStackSize);
                 }
-                return "%d, %d".formatted(-1, maxStackSize);
+                return value;
             }
 
-            return String.valueOf(-1); // id not needed for non legacy material
+            return value.arg(-1); // id not needed for non legacy material
         }
 
         @Override
@@ -127,25 +137,29 @@ public class MaterialRewriter {
         }
     }
 
-    public static class GetEquipmentSlot extends SwitchRewriter<EquipmentSlot> {
-
-        public GetEquipmentSlot() {
-            this.defaultValue = returnOf(EquipmentSlot.HAND, "%s.%s".formatted(EquipmentSlot.class.getSimpleName(), EquipmentSlot.HAND.name()));
-        }
+    public static class GetEquipmentSlot extends SwitchRewriter {
 
         @Override
-        protected Multimap<Return<EquipmentSlot>, String> getContent() {
-            Multimap<Return<EquipmentSlot>, String> map = MultimapBuilder.treeKeys(Comparator.<Return<EquipmentSlot>>comparingInt(key -> key.object().ordinal()).reversed())
-                .treeSetValues(Formatting.ALPHABETIC_KEY_ORDER).build();
+        protected SwitchContent getContent() {
+            SortedMap<net.minecraft.world.entity.EquipmentSlot, SwitchCases.SwitchCasesChain> cases = new TreeMap<>(
+                Comparator.comparing(Enum::ordinal, (i1, i2) -> Integer.compare(i2, i1)) // reversed (BODY -> HAND)
+            );
+
+            net.minecraft.world.entity.EquipmentSlot defaultValue = net.minecraft.world.entity.EquipmentSlot.MAINHAND;
+            CodeBlock defaultBlock = CodeBlock.returns(EquipmentSlot.HAND);
+
             BuiltInRegistries.ITEM.holders().forEach(reference -> {
                 net.minecraft.world.entity.EquipmentSlot slot = Mob.getEquipmentSlotForItem(new ItemStack(reference.value()));
-                EquipmentSlot apiSlot = EquipmentSlot.values()[slot.ordinal()];
-                if (apiSlot != this.defaultValue.object()) {
-                    String formattedSlot = "%s.%s".formatted(EquipmentSlot.class.getSimpleName(), EquipmentSlot.values()[slot.ordinal()].name()); // name doesn't match
-                    map.put(returnOf(apiSlot, formattedSlot), reference.key().location().getPath().toUpperCase(Locale.ENGLISH));
+                if (slot != defaultValue) {
+                    cases.computeIfAbsent(slot, key -> {
+                        return SwitchCases.chain()
+                            .sortValues(Formatting.ALPHABETIC_KEY_ORDER)
+                            .enclosingContent(CodeBlock.returns(EquipmentSlot.values()[slot.ordinal()]));
+                    }).add(reference.key().location().getPath().toUpperCase(Locale.ENGLISH));
                 }
             });
-            return map;
+
+            return SwitchContent.of(cases.values().stream().map(SwitchCases.SwitchCasesChain::build).toList()).withDefault(defaultBlock);
         }
     }
 }

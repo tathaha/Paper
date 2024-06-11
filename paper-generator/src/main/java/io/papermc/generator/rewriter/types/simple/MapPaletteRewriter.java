@@ -2,10 +2,9 @@ package io.papermc.generator.rewriter.types.simple;
 
 import io.papermc.typewriter.replace.SearchMetadata;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import java.awt.*;
 import net.minecraft.world.level.material.MapColor;
 import org.checkerframework.checker.nullness.qual.Nullable;
-
-import java.awt.Color;
 
 public class MapPaletteRewriter extends SearchReplaceRewriter {
 

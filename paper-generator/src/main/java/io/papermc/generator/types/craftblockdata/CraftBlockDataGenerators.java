@@ -3,10 +3,10 @@ package io.papermc.generator.types.craftblockdata;
 import com.google.common.base.Preconditions;
 import io.papermc.generator.types.SourceGenerator;
 import io.papermc.generator.utils.BlockStateMapping;
-import net.minecraft.world.level.block.Block;
-import org.bukkit.block.data.BlockData;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.world.level.block.Block;
+import org.bukkit.block.data.BlockData;
 
 public final class CraftBlockDataGenerators {
 

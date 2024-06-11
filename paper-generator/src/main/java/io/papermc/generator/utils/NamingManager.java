@@ -3,9 +3,9 @@ package io.papermc.generator.utils;
 import com.google.common.base.CaseFormat;
 import java.util.Optional;
 import java.util.function.Predicate;
+import javax.lang.model.SourceVersion;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.Contract;
-import javax.lang.model.SourceVersion;
 
 public class NamingManager {
 

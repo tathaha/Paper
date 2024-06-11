@@ -3,11 +3,11 @@ package io.papermc.generator;
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ScanResult;
 import io.papermc.generator.types.goal.MobGoalNames;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import org.junit.jupiter.api.Test;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;

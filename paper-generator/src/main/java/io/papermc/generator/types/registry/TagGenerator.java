@@ -40,7 +40,7 @@ public class TagGenerator extends SimpleGenerator {
         Custom tags defined by Paper are not present (as constants) in this class.
         To access them please refer to {@link $T}
         and {@link $T}.
-    
+        
         @param <T> the type of things grouped by this tag
         """;
 

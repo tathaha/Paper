@@ -40,13 +40,6 @@ import static javax.lang.model.element.Modifier.STATIC;
 
 public class GeneratedKeyType<T, A> extends SimpleGenerator {
 
-    private static final String CREATE_JAVADOC = """
-        Creates a key for {@link $T} in a registry.
-        
-        @param key the value's key in the registry
-        @return a new typed key
-        """;
-
     private final Class<A> apiType;
     private final Registry<T> registry;
     private final RegistryKey<A> apiRegistryKey;
@@ -71,11 +64,11 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
         final MethodSpec.Builder create = MethodSpec.methodBuilder("create")
             .addModifiers(this.publicCreateKeyMethod ? PUBLIC : PRIVATE, STATIC)
             .addParameter(keyParam)
-            .addCode("return $T.create($T.$L, $N);", TypedKey.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), keyParam)
+            .addCode("return $T.create($T.$L, $N);", TypedKey.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey)), keyParam)
             .returns(returnType.annotated(NOT_NULL));
         if (this.publicCreateKeyMethod) {
             create.addAnnotation(EXPERIMENTAL_API_ANNOTATION); // TODO remove once not experimental
-            create.addJavadoc(CREATE_JAVADOC, this.apiType);
+            create.addJavadoc(Javadocs.CREATE_TYPED_KEY_JAVADOC, this.apiType);
         }
         return create;
     }
@@ -83,7 +76,7 @@ public class GeneratedKeyType<T, A> extends SimpleGenerator {
     private TypeSpec.Builder keyHolderType() {
         return classBuilder(this.className)
             .addModifiers(PUBLIC, FINAL)
-            .addJavadoc(Javadocs.getVersionDependentClassHeader("{@link $T#$L}"), RegistryKey.class, RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey))
+            .addJavadoc(Javadocs.getVersionDependentClassHeader("{@link $T#$L}"), RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey)))
             .addAnnotations(Annotations.CLASS_HEADER)
             .addMethod(MethodSpec.constructorBuilder()
                 .addModifiers(PRIVATE)

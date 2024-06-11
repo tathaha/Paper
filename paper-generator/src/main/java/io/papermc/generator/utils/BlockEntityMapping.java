@@ -1,10 +1,10 @@
 package io.papermc.generator.utils;
 
+import com.google.common.base.CaseFormat;
+import com.google.common.collect.ImmutableMap;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import com.google.common.base.CaseFormat;
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -20,6 +20,7 @@ public final class BlockEntityMapping {
         .build();
 
     public static final Map<ResourceKey<BlockEntityType<?>>, String> MAPPING;
+
     static {
         Map<ResourceKey<BlockEntityType<?>>, String> map = new IdentityHashMap<>();
         BuiltInRegistries.BLOCK_ENTITY_TYPE.registryKeySet().forEach(key -> {
@@ -31,5 +32,4 @@ public final class BlockEntityMapping {
 
         MAPPING = Collections.unmodifiableMap(map);
     }
-
 }

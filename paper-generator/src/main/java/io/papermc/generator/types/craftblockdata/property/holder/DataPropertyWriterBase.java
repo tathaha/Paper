@@ -4,13 +4,13 @@ import com.squareup.javapoet.CodeBlock;
 import io.papermc.generator.types.craftblockdata.property.PropertyWriter;
 import io.papermc.generator.utils.Formatting;
 import it.unimi.dsi.fastutil.Pair;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.properties.Property;
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.properties.Property;
 
 public abstract class DataPropertyWriterBase implements DataPropertyMaker {
 

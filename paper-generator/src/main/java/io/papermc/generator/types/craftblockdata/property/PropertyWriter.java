@@ -7,22 +7,22 @@ import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import io.papermc.generator.types.StructuredGenerator;
+import io.papermc.generator.types.craftblockdata.property.appender.AppenderBase;
 import io.papermc.generator.types.craftblockdata.property.appender.EnumValuesAppender;
 import io.papermc.generator.types.craftblockdata.property.appender.PropertyAppender;
-import io.papermc.generator.types.craftblockdata.property.appender.AppenderBase;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.NamingManager;
 import it.unimi.dsi.fastutil.Pair;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.Map;
+import java.util.function.Supplier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Property;
 import org.bukkit.Axis;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Rail;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.Map;
-import java.util.function.Supplier;
 
 public class PropertyWriter<T extends Comparable<T>> implements PropertyMaker {
 

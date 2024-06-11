@@ -1,15 +1,16 @@
 package io.papermc.generator.rewriter.types.simple;
 
 import com.google.common.collect.ImmutableMap;
+import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
+import io.papermc.generator.utils.ClassHelper;
+import io.papermc.generator.utils.Formatting;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
-import io.papermc.generator.utils.ClassHelper;
-import io.papermc.generator.utils.Formatting;
+import io.papermc.typewriter.preset.model.EnumValue;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -63,13 +64,13 @@ public class StatisticRewriter {
     public static class Custom extends EnumRegistryRewriter<ResourceLocation> {
 
         public Custom() {
-            super(Registries.CUSTOM_STAT, false);
+            super(Registries.CUSTOM_STAT);
+            this.hasKeyArgument = false;
         }
 
         @Override
-        protected String rewriteEnumName(Holder.Reference<ResourceLocation> reference) {
-            String internalName = super.rewriteEnumName(reference);
-            return FIELD_RENAMES.getOrDefault(internalName, internalName);
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<ResourceLocation> reference) {
+            return super.rewriteEnumValue(reference).rename(name -> FIELD_RENAMES.getOrDefault(name, name));
         }
     }
 
@@ -80,19 +81,17 @@ public class StatisticRewriter {
         );
 
         public CraftCustom() {
-            super(Registries.CUSTOM_STAT, true);
+            super(Registries.CUSTOM_STAT);
+            this.hasKeyArgument = false;
         }
 
         @Override
-        protected String rewriteEnumName(Holder.Reference<ResourceLocation> reference) {
-            String internalName = super.rewriteEnumName(reference);
-            return FIELD_RENAMES.getOrDefault(internalName, internalName);
-        }
-
-        @Override
-        protected String rewriteEnumValue(Holder.Reference<ResourceLocation> reference) {
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<ResourceLocation> reference) {
             String internalName = Formatting.formatKeyAsField(reference.key().location().getPath());
-            return "%s.%s".formatted(Stats.class.getSimpleName(), INTERNAL_FIELD_RENAMES.getOrDefault(internalName, internalName));
+
+            return super.rewriteEnumValue(reference)
+                .rename(name -> FIELD_RENAMES.getOrDefault(name, name))
+                .argument("%s.%s".formatted(Stats.class.getSimpleName(), INTERNAL_FIELD_RENAMES.getOrDefault(internalName, internalName)));
         }
     }
 
@@ -105,6 +104,7 @@ public class StatisticRewriter {
         );
 
         private static final Map<StatType<?>, Class<?>> FIELD_GENERIC_TYPE;
+
         static {
             final Map<StatType<?>, Class<?>> map = new IdentityHashMap<>();
 
@@ -127,52 +127,48 @@ public class StatisticRewriter {
         }
 
         public Type() {
-            super(Registries.STAT_TYPE, true);
+            super(Registries.STAT_TYPE);
+            this.hasKeyArgument = false;
         }
 
         @Override
         protected Iterable<Holder.Reference<StatType<?>>> getValues() {
             return BuiltInRegistries.STAT_TYPE.holders().filter(reference -> reference.value() != Stats.CUSTOM)
-                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
+                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
         }
 
         @Override
-        protected String rewriteEnumName(Holder.Reference<StatType<?>> reference) {
-            String internalName = super.rewriteEnumName(reference);
-            return FIELD_RENAMES.getOrDefault(internalName, internalName);
-        }
-
-        @Override
-        protected String rewriteEnumValue(Holder.Reference<StatType<?>> reference) {
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<StatType<?>> reference) {
             Class<?> genericType = FIELD_GENERIC_TYPE.get(reference.value());
             if (!TYPE_MAPPING.containsKey(genericType)) {
                 throw new IllegalStateException("Unable to translate stat type generic " + genericType.getCanonicalName() + " into the api!");
             }
-            return "%s.%s".formatted(Statistic.Type.class.getSimpleName(), TYPE_MAPPING.get(genericType)); // find a more direct way?
+
+            return super.rewriteEnumValue(reference)
+                .rename(name -> FIELD_RENAMES.getOrDefault(name, name))
+                .argument("%s.%s".formatted(Statistic.Type.class.getSimpleName(), TYPE_MAPPING.get(genericType))); // find a more direct way?
+
         }
     }
 
     public static class CraftType extends EnumRegistryRewriter<StatType<?>> {
 
         public CraftType() {
-            super(Registries.STAT_TYPE, true);
+            super(Registries.STAT_TYPE);
+            this.hasKeyArgument = false;
         }
 
         @Override
         protected Iterable<Holder.Reference<StatType<?>>> getValues() {
             return BuiltInRegistries.STAT_TYPE.holders().filter(reference -> reference.value() != Stats.CUSTOM)
-                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
+                .sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
         }
 
         @Override
-        protected String rewriteEnumName(Holder.Reference<StatType<?>> reference) {
-            String internalName = super.rewriteEnumName(reference);
-            return FIELD_RENAMES.getOrDefault(internalName, internalName);
-        }
-
-        @Override
-        protected String rewriteEnumValue(Holder.Reference<StatType<?>> reference) {
-            return "new %s(%s)".formatted(ResourceLocation.class.getSimpleName(), quoted(reference.key().location().getPath()));
+        protected EnumValue.Builder rewriteEnumValue(Holder.Reference<StatType<?>> reference) {
+            return super.rewriteEnumValue(reference)
+                .rename(name -> FIELD_RENAMES.getOrDefault(name, name))
+                .argument("new %s(%s)".formatted(ResourceLocation.class.getSimpleName(), quoted(reference.key().location().getPath())));
         }
     }
 }

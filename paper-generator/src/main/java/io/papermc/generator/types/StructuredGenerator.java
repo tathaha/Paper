@@ -3,11 +3,10 @@ package io.papermc.generator.types;
 import com.mojang.logging.LogUtils;
 import com.squareup.javapoet.MethodSpec;
 import io.papermc.generator.utils.Annotations;
+import java.util.Arrays;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
 import org.slf4j.Logger;
-
-import java.util.Arrays;
 
 import static javax.lang.model.element.Modifier.PUBLIC;
 

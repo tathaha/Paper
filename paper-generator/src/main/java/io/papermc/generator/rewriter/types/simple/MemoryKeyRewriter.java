@@ -32,6 +32,7 @@ import static io.papermc.typewriter.utils.Formatting.quoted;
 public class MemoryKeyRewriter extends RegistryFieldRewriter<MemoryModuleType<?>> {
 
     private static final Map<MemoryModuleType<?>, Class<?>> MEMORY_GENERIC_TYPES;
+
     static {
         final Map<MemoryModuleType<?>, Class<?>> map = new IdentityHashMap<>();
         try {

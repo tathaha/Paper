@@ -4,6 +4,12 @@ import io.papermc.generator.Rewriters;
 import io.papermc.generator.rewriter.registration.PaperPatternSourceSetRewriter;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.paper.generated.GeneratedFrom;
+import io.papermc.typewriter.SourceFile;
+import io.papermc.typewriter.SourceRewriter;
+import io.papermc.typewriter.parser.StringReader;
+import io.papermc.typewriter.replace.CommentMarker;
+import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import io.papermc.typewriter.replace.SearchReplaceRewriterBase;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,12 +18,6 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import io.papermc.typewriter.SourceFile;
-import io.papermc.typewriter.SourceRewriter;
-import io.papermc.typewriter.parser.StringReader;
-import io.papermc.typewriter.replace.CommentMarker;
-import io.papermc.typewriter.replace.SearchReplaceRewriter;
-import io.papermc.typewriter.replace.SearchReplaceRewriterBase;
 import net.minecraft.SharedConstants;
 
 import static io.papermc.typewriter.replace.CommentMarker.EMPTY_MARKER;
@@ -44,7 +44,8 @@ public class OldGeneratedCodeTest {
     private static void checkOutdated(PaperPatternSourceSetRewriter sourceSetRewriter) throws IOException {
         for (Map.Entry<SourceFile, SourceRewriter> entry : sourceSetRewriter.getRewriters().entrySet()) {
             SourceRewriter rewriter = entry.getValue();
-            if (!(rewriter instanceof SearchReplaceRewriterBase srt) || !srt.hasGeneratedComment()) {
+            if (!(rewriter instanceof SearchReplaceRewriterBase srt) ||
+                srt.getRewriters().stream().noneMatch(SearchReplaceRewriter::hasGeneratedComment)) {
                 continue;
             }
 
@@ -70,7 +71,7 @@ public class OldGeneratedCodeTest {
                     StringReader lineIterator = new StringReader(line);
                     CommentMarker marker = srt.searchMarker(lineIterator, null, file.indentUnit(), rewriters, true);
                     if (marker != EMPTY_MARKER) {
-                        int startIndentSize = marker.indent();
+                        int startIndentSize = marker.indentSize();
                         if (startIndentSize % file.indentUnit().size() != 0) {
                             continue;
                         }

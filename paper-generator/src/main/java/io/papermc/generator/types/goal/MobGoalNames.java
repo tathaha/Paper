@@ -5,6 +5,9 @@ import com.destroystokyo.paper.entity.ai.GoalKey;
 import com.google.common.base.CaseFormat;
 import io.papermc.generator.utils.Formatting;
 import io.papermc.paper.entity.SchoolableFish;
+import java.lang.reflect.Constructor;
+import java.util.HashMap;
+import java.util.Map;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.RangedAttackMob;
 import org.apache.commons.lang3.math.NumberUtils;
@@ -12,10 +15,6 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.*;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.framework.qual.DefaultQualifier;
-
-import java.lang.reflect.Constructor;
-import java.util.HashMap;
-import java.util.Map;
 
 @DefaultQualifier(NonNull.class)
 public final class MobGoalNames { // todo sync with MobGoalHelper ideally this should not be duplicated

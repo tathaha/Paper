@@ -1,9 +1,9 @@
 package io.papermc.generator.utils;
 
 import com.squareup.javapoet.AnnotationSpec;
-import java.util.List;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.paper.generated.GeneratedFrom;
+import java.util.List;
 import net.minecraft.SharedConstants;
 import org.bukkit.MinecraftExperimental;
 import org.checkerframework.checker.nullness.qual.Nullable;

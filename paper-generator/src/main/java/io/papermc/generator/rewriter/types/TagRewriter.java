@@ -3,12 +3,12 @@ package io.papermc.generator.rewriter.types;
 import io.papermc.generator.Main;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
-import java.util.Iterator;
-import java.util.Locale;
 import io.papermc.generator.utils.TagRegistry;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.typewriter.replace.SearchMetadata;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import java.util.Iterator;
+import java.util.Locale;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.tags.TagKey;
@@ -29,6 +29,10 @@ public class TagRewriter extends SearchReplaceRewriter {
 
             final String fieldPrefix = Formatting.formatTagFieldPrefix(tagRegistry.folderName(), registryKey);
             final String registryFieldName = "REGISTRY_" + tagRegistry.folderName().toUpperCase(Locale.ENGLISH);
+
+            if (i != 0) {
+                builder.append('\n'); // extra line before the registry field
+            }
 
             // registry name field
             builder.append(metadata.indent());
@@ -60,10 +64,6 @@ public class TagRewriter extends SearchReplaceRewriter {
                 if (keyIterator.hasNext()) {
                     builder.append('\n');
                 }
-            }
-
-            if (i != len - 1) {
-                builder.append('\n'); // extra line before the registry field
             }
         }
     }

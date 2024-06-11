@@ -8,13 +8,13 @@ import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterSpec;
 import com.squareup.javapoet.TypeSpec;
-import io.papermc.generator.types.Types;
 import io.papermc.generator.types.StructuredGenerator;
-import io.papermc.generator.types.craftblockdata.property.PropertyWriter;
-import io.papermc.generator.types.craftblockdata.property.holder.DataPropertyMaker;
+import io.papermc.generator.types.Types;
 import io.papermc.generator.types.craftblockdata.property.PropertyMaker;
+import io.papermc.generator.types.craftblockdata.property.PropertyWriter;
 import io.papermc.generator.types.craftblockdata.property.converter.ConverterBase;
 import io.papermc.generator.types.craftblockdata.property.converter.Converters;
+import io.papermc.generator.types.craftblockdata.property.holder.DataPropertyMaker;
 import io.papermc.generator.types.craftblockdata.property.holder.VirtualField;
 import io.papermc.generator.types.craftblockdata.property.holder.converter.DataConverter;
 import io.papermc.generator.types.craftblockdata.property.holder.converter.DataConverters;
@@ -23,6 +23,10 @@ import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.CommonVariable;
 import io.papermc.generator.utils.NamingManager;
 import it.unimi.dsi.fastutil.Pair;
+import java.lang.reflect.Field;
+import java.util.Collection;
+import java.util.Map;
+import java.util.function.BiConsumer;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ChiseledBookShelfBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,11 +39,6 @@ import org.bukkit.block.data.Rail;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.framework.qual.DefaultQualifier;
-
-import java.lang.reflect.Field;
-import java.util.Collection;
-import java.util.Map;
-import java.util.function.BiConsumer;
 
 import static io.papermc.generator.utils.NamingManager.keywordGet;
 import static io.papermc.generator.utils.NamingManager.keywordGetSet;
@@ -55,7 +54,7 @@ public class CraftBlockDataGenerator<T extends BlockData> extends StructuredGene
     private final BlockStateMapping.BlockData blockData;
 
     protected CraftBlockDataGenerator(final Class<? extends Block> blockClass, final BlockStateMapping.BlockData blockData, final Class<T> baseClass) {
-        super(baseClass, blockData.impl(), Types.BASE_PACKAGE + ".block.impl");
+        super(baseClass, blockData.implName(), Types.BASE_PACKAGE + ".block.impl");
         this.blockClass = blockClass;
         this.blockData = blockData;
         this.printWarningOnMissingOverride = true;
@@ -177,7 +176,7 @@ public class CraftBlockDataGenerator<T extends BlockData> extends StructuredGene
             propertyMaker.addExtras(typeBuilder, field, this, naming);
         }
 
-        for (Map.Entry<Either<Field, VirtualField>, Collection<Property<?>>> complexFields : this.blockData.complexProperyFields().asMap().entrySet()) {
+        for (Map.Entry<Either<Field, VirtualField>, Collection<Property<?>>> complexFields : this.blockData.complexPropertyFields().asMap().entrySet()) {
             Either<Field, VirtualField> fieldData = complexFields.getKey();
             Collection<Property<?>> properties = complexFields.getValue();
             Property<?> firstProperty = properties.iterator().next();

@@ -5,26 +5,31 @@ import com.google.common.collect.ImmutableMap;
 import io.papermc.generator.rewriter.types.EnumRegistryRewriter;
 import io.papermc.generator.types.goal.MobGoalNames;
 import io.papermc.generator.utils.ClassHelper;
+import io.papermc.typewriter.preset.model.EnumValue;
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.Util;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Map;
 
 import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class EntityTypeRewriter extends EnumRegistryRewriter<EntityType<?>> {
 
     private static final Map<EntityType<?>, Class<? extends Entity>> ENTITY_GENERIC_TYPES;
+
     static {
         final Map<EntityType<?>, Class<? extends Entity>> map = new IdentityHashMap<>();
         try {
@@ -155,20 +160,22 @@ public class EntityTypeRewriter extends EnumRegistryRewriter<EntityType<?>> {
     });
 
     public EntityTypeRewriter() {
-        super(Registries.ENTITY_TYPE, true);
+        super(Registries.ENTITY_TYPE);
+        this.hasKeyArgument = false;
     }
 
     @Override
-    protected String rewriteEnumValue(Holder.Reference<EntityType<?>> reference) {
+    protected EnumValue.Builder rewriteEnumValue(Holder.Reference<EntityType<?>> reference) {
         String path = reference.key().location().getPath();
-        final String value;
+        List<Object> arguments = new ArrayList<>(Arrays.asList(
+            quoted(path),
+            toBukkitClass(reference).concat(".class"),
+            LEGACY_ID.getOrDefault(reference.value(), -1)
+        ));
         if (!reference.value().canSummon()) {
-            value = "%s, %s.class, %d, false";
-        } else {
-            value = "%s, %s.class, %d";
+            arguments.add(false);
         }
-
-        return value.formatted(quoted(path), toBukkitClass(reference), LEGACY_ID.getOrDefault(reference.value(), -1));
+        return super.rewriteEnumValue(reference).args(arguments);
     }
 
     private String toBukkitClass(Holder.Reference<EntityType<?>> reference) {

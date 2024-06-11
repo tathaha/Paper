@@ -3,6 +3,14 @@ package io.papermc.generator.utils.experimental;
 import com.google.common.base.Suppliers;
 import io.papermc.generator.Main;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -15,14 +23,6 @@ import net.minecraft.world.flag.FeatureElement;
 import net.minecraft.world.flag.FeatureFlags;
 import net.minecraft.world.item.BundleItem;
 import net.minecraft.world.level.saveddata.maps.MapDecorationType;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public final class ExperimentalHelper {
 
@@ -82,6 +82,7 @@ public final class ExperimentalHelper {
 
 
     private static final Set<VillagerTrades.TreasureMapForEmeralds> EXPERIMENTAL_TRADES;
+
     static {
         Set<VillagerTrades.TreasureMapForEmeralds> experimentalTrades = new HashSet<>();
 

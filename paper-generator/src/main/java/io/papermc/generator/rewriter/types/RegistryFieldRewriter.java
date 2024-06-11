@@ -2,6 +2,7 @@ package io.papermc.generator.rewriter.types;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Suppliers;
+import com.mojang.logging.LogUtils;
 import io.papermc.generator.Main;
 import io.papermc.generator.rewriter.utils.Annotations;
 import io.papermc.generator.utils.Formatting;
@@ -12,6 +13,9 @@ import io.papermc.typewriter.ClassNamed;
 import io.papermc.typewriter.SourceFile;
 import io.papermc.typewriter.replace.SearchMetadata;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.function.Supplier;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
@@ -21,10 +25,6 @@ import org.checkerframework.checker.nullness.qual.MonotonicNonNull;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.jetbrains.annotations.Contract;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.function.Supplier;
 
 import static io.papermc.typewriter.utils.Formatting.quoted;
 import static javax.lang.model.element.Modifier.FINAL;
@@ -33,14 +33,14 @@ import static javax.lang.model.element.Modifier.STATIC;
 
 public class RegistryFieldRewriter<T> extends SearchReplaceRewriter {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RegistryFieldRewriter.class);
-
-    protected @MonotonicNonNull ClassNamed fieldClass;
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private final Registry<T> registry;
     private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
     private final boolean isFilteredRegistry;
     private final @Nullable String fetchMethod;
+
+    protected @MonotonicNonNull ClassNamed fieldClass;
 
     public RegistryFieldRewriter(final ResourceKey<? extends Registry<T>> registryKey, final @Nullable String fetchMethod) {
         this.registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
@@ -76,7 +76,7 @@ public class RegistryFieldRewriter<T> extends SearchReplaceRewriter {
             try {
                 this.fieldClass.knownClass().getDeclaredMethod(this.fetchMethod, String.class);
             } catch (NoSuchMethodException e) {
-                LOGGER.error("Fetch method is not found, skipping the rewriter for registry fields of {}", this.registry.key(), e);
+                LOGGER.error("Fetch method not found, skipping the rewriter for registry fields of {}", this.registry.key(), e);
                 return false;
             }
         }

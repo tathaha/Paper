@@ -21,6 +21,7 @@ import io.papermc.generator.utils.experimental.ExperimentalHelper;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.typewriter.preset.EnumCloneRewriter;
 import java.util.Locale;
+import io.papermc.typewriter.preset.model.EnumValue;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -79,8 +80,8 @@ public final class Rewriters {
 
     public static void bootstrap(PatternSourceSetRewriter apiSourceSet, PatternSourceSetRewriter serverSourceSet) {
         apiSourceSet
-            .register("Fluid", Fluid.class, new EnumRegistryRewriter<>(Registries.FLUID, false))
-            .register("Sound", Sound.class, new EnumRegistryRewriter<>(Registries.SOUND_EVENT, true) {
+            .register("Fluid", Fluid.class, new EnumRegistryRewriter<>(Registries.FLUID).nameAsKey())
+            .register("Sound", Sound.class, new EnumRegistryRewriter<>(Registries.SOUND_EVENT) {
                 @Override
                 protected @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<SoundEvent> reference) {
                     @Nullable SingleFlagHolder result = super.getRequiredFeature(reference);
@@ -90,19 +91,20 @@ public final class Rewriters {
                     return ExperimentalHelper.findSoundRelatedFeatureFlag(reference.key());
                 }
             })
-            .register("Biome", Biome.class, new EnumRegistryRewriter<>(Registries.BIOME, false))
-            .register("FrogVariant", Frog.class, new EnumRegistryRewriter<>(Registries.FROG_VARIANT, false))
-            .register("VillagerType", Villager.class, new EnumRegistryRewriter<>(Registries.VILLAGER_TYPE, false))
-            .register("Attribute", Attribute.class, new EnumRegistryRewriter<>(Registries.ATTRIBUTE, true))
-            .register("CatType", Cat.class, new EnumRegistryRewriter<>(Registries.CAT_VARIANT, true))
-            .register("PotionType", PotionType.class, new EnumRegistryRewriter<>(Registries.POTION, true))
-            .register("Art", Art.class, new EnumRegistryRewriter<>(Registries.PAINTING_VARIANT, true) {
+            .register("Biome", Biome.class, new EnumRegistryRewriter<>(Registries.BIOME).nameAsKey())
+            .register("FrogVariant", Frog.class, new EnumRegistryRewriter<>(Registries.FROG_VARIANT).nameAsKey())
+            .register("VillagerType", Villager.class, new EnumRegistryRewriter<>(Registries.VILLAGER_TYPE).nameAsKey())
+            .register("Attribute", Attribute.class, new EnumRegistryRewriter<>(Registries.ATTRIBUTE))
+            .register("CatType", Cat.class, new EnumRegistryRewriter<>(Registries.CAT_VARIANT))
+            .register("PotionType", PotionType.class, new EnumRegistryRewriter<>(Registries.POTION))
+            .register("Art", Art.class, new EnumRegistryRewriter<>(Registries.PAINTING_VARIANT) {
 
                 private static final int PIXELS_PER_BLOCK = 16;
+
                 @Override
-                protected String rewriteEnumValue(Holder.Reference<PaintingVariant> reference) {
+                protected EnumValue.Builder rewriteEnumValue(Holder.Reference<PaintingVariant> reference) {
                     PaintingVariant variant = reference.value();
-                    return "%d, %d, %d".formatted(
+                    return super.rewriteEnumValue(reference).args(
                         BuiltInRegistries.PAINTING_VARIANT.getId(variant),
                         Mth.positiveCeilDiv(variant.getWidth(), PIXELS_PER_BLOCK),
                         Mth.positiveCeilDiv(variant.getHeight(), PIXELS_PER_BLOCK)
@@ -111,10 +113,13 @@ public final class Rewriters {
             })
             .register("EntityType", EntityType.class, new EntityTypeRewriter())
             .register("PatternType", PatternType.class, new PatternTypeRewriter())
-            .register("MapCursorType", MapCursor.class, new EnumRegistryRewriter<>(Registries.MAP_DECORATION_TYPE, true) {
+            .register("MapCursorType", MapCursor.class, new EnumRegistryRewriter<>(Registries.MAP_DECORATION_TYPE) {
                 @Override
-                protected String rewriteEnumValue(Holder.Reference<MapDecorationType> reference) {
-                    return "%d, %s".formatted(BuiltInRegistries.MAP_DECORATION_TYPE.getId(reference.value()), super.rewriteEnumValue(reference));
+                protected EnumValue.Builder rewriteEnumValue(Holder.Reference<MapDecorationType> reference) {
+                    return super.rewriteEnumValue(reference).args(
+                        BuiltInRegistries.MAP_DECORATION_TYPE.getId(reference.value()),
+                        quoted(reference.key().location().getPath())
+                    );
                 }
 
                 @Override
@@ -128,24 +133,22 @@ public final class Rewriters {
             })
             .register("DisplaySlot", DisplaySlot.class, new EnumCloneRewriter<>(net.minecraft.world.scores.DisplaySlot.class) {
                 @Override
-                protected String rewriteEnumName(net.minecraft.world.scores.DisplaySlot slot) {
+                protected EnumValue.Builder rewriteEnumValue(net.minecraft.world.scores.DisplaySlot slot) {
+                    final String name;
                     if (slot == net.minecraft.world.scores.DisplaySlot.LIST) {
-                        return "PLAYER_LIST";
+                        name = "PLAYER_LIST";
+                    } else {
+                        name = Formatting.formatKeyAsField(slot.getSerializedName());
                     }
 
-                    return Formatting.formatKeyAsField(slot.getSerializedName());
-                }
-
-                @Override
-                protected String rewriteEnumValue(net.minecraft.world.scores.DisplaySlot slot) {
-                    return quoted(slot.getSerializedName());
+                    return EnumValue.builder(name).argument(quoted(slot.getSerializedName()));
                 }
             })
             .register("SnifferState", Sniffer.class, new EnumCloneRewriter<>(net.minecraft.world.entity.animal.sniffer.Sniffer.State.class))
             .register("PandaGene", Panda.class, new EnumCloneRewriter<>(net.minecraft.world.entity.animal.Panda.Gene.class) {
                 @Override
-                protected String rewriteEnumValue(net.minecraft.world.entity.animal.Panda.Gene gene) {
-                    return String.valueOf(gene.isRecessive());
+                protected EnumValue.Builder rewriteEnumValue(net.minecraft.world.entity.animal.Panda.Gene gene) {
+                    return super.rewriteEnumValue(gene).arg(gene.isRecessive());
                 }
             })
             .register("CookingBookCategory", CookingBookCategory.class, new EnumCloneRewriter<>(net.minecraft.world.item.crafting.CookingBookCategory.class))
@@ -154,15 +157,19 @@ public final class Rewriters {
             .register("FoxType", Fox.class, new EnumCloneRewriter<>(net.minecraft.world.entity.animal.Fox.Type.class))
             .register("ItemRarity", ItemRarity.class, new EnumCloneRewriter<>(Rarity.class) {
                 @Override
-                protected String rewriteEnumValue(final Rarity rarity) {
-                    return "%s.%s".formatted(NamedTextColor.class.getCanonicalName(), rarity.color().name());
+                protected EnumValue.Builder rewriteEnumValue(final Rarity rarity) {
+                    return super.rewriteEnumValue(rarity).argument(
+                        "%s.%s".formatted(NamedTextColor.class.getCanonicalName(), rarity.color().name())
+                    );
                 }
             })
             .register(Boat.class, composite(
                 holder("BoatType", new EnumCloneRewriter<>(net.minecraft.world.entity.vehicle.Boat.Type.class) {
                     @Override
-                    protected String rewriteEnumValue(net.minecraft.world.entity.vehicle.Boat.Type type) {
-                        return "%s.%s".formatted(Material.class.getSimpleName(), BuiltInRegistries.BLOCK.getKey(type.getPlanks()).getPath().toUpperCase(Locale.ENGLISH));
+                    protected EnumValue.Builder rewriteEnumValue(net.minecraft.world.entity.vehicle.Boat.Type type) {
+                        return super.rewriteEnumValue(type).argument(
+                            "%s.%s".formatted(Material.class.getSimpleName(), BuiltInRegistries.BLOCK.getKey(type.getPlanks()).getPath().toUpperCase(Locale.ENGLISH))
+                        );
                     }
                 }),
                 holder("BoatStatus", new EnumCloneRewriter<>(net.minecraft.world.entity.vehicle.Boat.Status.class))

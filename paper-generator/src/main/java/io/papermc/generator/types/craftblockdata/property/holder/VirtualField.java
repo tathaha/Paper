@@ -2,11 +2,11 @@ package io.papermc.generator.types.craftblockdata.property.holder;
 
 import com.google.common.base.Preconditions;
 import com.google.common.reflect.TypeToken;
-import net.minecraft.world.level.block.state.properties.Property;
-import org.jetbrains.annotations.Contract;
 import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.List;
+import net.minecraft.world.level.block.state.properties.Property;
+import org.jetbrains.annotations.Contract;
 
 public record VirtualField(
     String name,
@@ -17,14 +17,22 @@ public record VirtualField(
     Collection<? extends Property<?>> values
 ) {
 
-    public static <T extends Property<? extends Comparable<?>>> VirtualField.FieldValue<T>  createCollection(String name, TypeToken<T> valueType, boolean isArray, String baseName) {
+    @Contract(value = "_, _, _, _ -> new", pure = true)
+    public static <T extends Property<? extends Comparable<?>>> VirtualField.FieldValue<T> createCollection(String name, TypeToken<T> valueType, boolean isArray, String baseName) {
         return new VirtualField.FieldValue<>(name, valueType, isArray ? DataHolderType.ARRAY : DataHolderType.LIST, baseName, null);
     }
 
+    @Contract(value = "_, _, _, _ -> new", pure = true)
+    public static <T extends Property<? extends Comparable<?>>> VirtualField.FieldValue<T> createCollection(String name, Class<T> valueType, boolean isArray, String baseName) {
+        return createCollection(name, TypeToken.of(valueType), isArray, baseName);
+    }
+
+    @Contract(value = "_, _, _, _ -> new", pure = true)
     public static <T extends Property<? extends Comparable<?>>> VirtualField.FieldValue<T> createMap(String name, Class<?> keyClass, TypeToken<T> valueType, String baseName) {
         return new VirtualField.FieldValue<>(name, valueType, DataHolderType.MAP, baseName, keyClass);
     }
 
+    @Contract(value = "_, _, _, _ -> new", pure = true)
     public static <T extends Property<? extends Comparable<?>>> VirtualField.FieldValue<T> createMap(String name, Class<?> keyClass, Class<T> valueType, String baseName) {
         return createMap(name, keyClass, TypeToken.of(valueType), baseName);
     }

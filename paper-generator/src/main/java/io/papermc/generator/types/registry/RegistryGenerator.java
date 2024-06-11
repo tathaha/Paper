@@ -43,7 +43,7 @@ public abstract class RegistryGenerator<T> extends SimpleGenerator {
 
     private final ClassName apiType;
     private final Registry<T> registry;
-    protected final RegistryKey<?> apiRegistryKey;
+    private final RegistryKey<?> apiRegistryKey;
     private final boolean isInterface;
     private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
     private final boolean isFilteredRegistry;
@@ -69,7 +69,7 @@ public abstract class RegistryGenerator<T> extends SimpleGenerator {
         final MethodSpec.Builder fetch = MethodSpec.methodBuilder("fetch")
             .addModifiers(PRIVATE, STATIC)
             .addParameter(keyParam)
-            .addCode("return $T.registryAccess().getRegistry($T.$L).get($T.minecraft($N));", RegistryAccess.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey), "Missing field for " + this.apiRegistryKey), NamespacedKey.class, keyParam)
+            .addCode("return $T.registryAccess().getRegistry($T.$L).get($T.minecraft($N));", RegistryAccess.class, RegistryKey.class, requireNonNull(RegistryUtils.REGISTRY_KEY_FIELD_NAMES.get(this.apiRegistryKey)), NamespacedKey.class, keyParam)
             .returns(returnType.annotated(NOT_NULL));
         return fetch;
     }

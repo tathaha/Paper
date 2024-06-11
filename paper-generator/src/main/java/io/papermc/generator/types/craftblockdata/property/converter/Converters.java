@@ -1,8 +1,8 @@
 package io.papermc.generator.types.craftblockdata.property.converter;
 
 import com.google.common.collect.ImmutableMap;
-import java.util.Map;
 import io.papermc.generator.types.craftblockdata.property.PropertyMaker;
+import java.util.Map;
 import net.minecraft.world.level.block.state.properties.Property;
 
 public final class Converters {

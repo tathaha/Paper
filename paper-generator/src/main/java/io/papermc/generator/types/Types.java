@@ -12,5 +12,4 @@ public final class Types {
     public static final ClassName CRAFT_BLOCK_DATA = ClassName.get(BASE_PACKAGE + ".block.data", "CraftBlockData");
 
     public static final ClassName CRAFT_BLOCK = ClassName.get(BASE_PACKAGE + ".block", "CraftBlock");
-
 }

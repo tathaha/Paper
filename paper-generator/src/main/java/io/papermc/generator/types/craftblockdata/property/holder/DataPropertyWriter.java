@@ -11,27 +11,26 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import io.papermc.generator.types.StructuredGenerator;
 import io.papermc.generator.types.Types;
+import io.papermc.generator.types.craftblockdata.property.converter.ConverterBase;
 import io.papermc.generator.types.craftblockdata.property.holder.appender.ArrayAppender;
 import io.papermc.generator.types.craftblockdata.property.holder.appender.DataAppender;
 import io.papermc.generator.types.craftblockdata.property.holder.appender.ListAppender;
 import io.papermc.generator.types.craftblockdata.property.holder.appender.MapAppender;
-import io.papermc.generator.types.craftblockdata.property.converter.ConverterBase;
 import io.papermc.generator.utils.BlockStateMapping;
 import io.papermc.generator.utils.ClassHelper;
 import io.papermc.generator.utils.CommonVariable;
 import io.papermc.generator.utils.NamingManager;
-import net.minecraft.core.Direction;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.properties.Property;
-import org.bukkit.block.BlockFace;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.properties.Property;
+import org.bukkit.block.BlockFace;
 
 import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PRIVATE;
@@ -128,7 +127,7 @@ public class DataPropertyWriter extends DataPropertyWriterBase {
         return stripFieldAccessKeyword(constantName);
     }
 
-    private static final Set<String> CUSTOM_KEYWORD = Set.of("HAS", "IS", "CAN");
+    private static final List<String> CUSTOM_KEYWORD = List.of("HAS", "IS", "CAN");
 
     private String stripFieldAccessKeyword(String name) {
         for (String keyword : CUSTOM_KEYWORD) {

@@ -3,12 +3,11 @@ package io.papermc.generator.types.craftblockdata.property.holder;
 import com.mojang.datafixers.util.Either;
 import com.squareup.javapoet.FieldSpec;
 import io.papermc.generator.types.craftblockdata.property.holder.appender.DataAppender;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.properties.Property;
-
 import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Map;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.properties.Property;
 
 public interface DataPropertyMaker extends DataAppender {
 

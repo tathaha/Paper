@@ -8,56 +8,63 @@ import io.papermc.generator.utils.RegistryUtils;
 import io.papermc.generator.utils.experimental.FlagHolders;
 import io.papermc.generator.utils.experimental.SingleFlagHolder;
 import io.papermc.typewriter.preset.EnumRewriter;
+import io.papermc.typewriter.preset.model.EnumValue;
 import io.papermc.typewriter.replace.SearchMetadata;
+import java.util.Set;
+import java.util.function.Supplier;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.flag.FeatureElement;
 import net.minecraft.world.flag.FeatureFlags;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import java.util.Set;
-import java.util.function.Supplier;
+import org.jetbrains.annotations.Contract;
 
 import static io.papermc.typewriter.utils.Formatting.quoted;
 
 public class EnumRegistryRewriter<T> extends EnumRewriter<Holder.Reference<T>> {
 
-    private final net.minecraft.core.Registry<T> registry;
+    private final Registry<T> registry;
     private final Supplier<Set<ResourceKey<T>>> experimentalKeys;
     private final boolean isFilteredRegistry;
-    private final boolean hasParams;
+    protected boolean hasKeyArgument = true;
 
-    public EnumRegistryRewriter(final ResourceKey<? extends Registry<T>> registryKey, final boolean hasParams) {
+    public EnumRegistryRewriter(final ResourceKey<? extends Registry<T>> registryKey) {
         this.registry = Main.REGISTRY_ACCESS.registryOrThrow(registryKey);
         this.experimentalKeys = Suppliers.memoize(() -> RegistryUtils.collectExperimentalDataDrivenKeys(this.registry));
         this.isFilteredRegistry = FeatureElement.FILTERED_REGISTRIES.contains(registryKey);
-        this.hasParams = hasParams;
+    }
+
+    @Deprecated
+    @Contract(value = "-> this", mutates = "this")
+    public EnumRegistryRewriter<T> nameAsKey() {
+        this.hasKeyArgument = false;
+        return this;
     }
 
     @Override
     protected Iterable<Holder.Reference<T>> getValues() {
-        return this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath())).toList();
+        return this.registry.holders().sorted(Formatting.alphabeticKeyOrder(reference -> reference.key().location().getPath()))::iterator;
     }
 
     @Override
-    protected String rewriteEnumName(Holder.Reference<T> reference) {
-        return Formatting.formatKeyAsField(reference.key().location().getPath());
-    }
-
-    @Override
-    protected @Nullable String rewriteEnumValue(Holder.Reference<T> reference) {
-        if (this.hasParams) {
-            return quoted(reference.key().location().getPath());
+    protected EnumValue.Builder rewriteEnumValue(Holder.Reference<T> reference) {
+        EnumValue.Builder value = EnumValue.builder(Formatting.formatKeyAsField(reference.key().location().getPath()));
+        if (this.hasKeyArgument) {
+            value.argument(quoted(reference.key().location().getPath()));
         }
-        return null;
+        return value;
     }
 
     @Override
-    protected void rewriteAnnotation(Holder.Reference<T> reference, StringBuilder builder, SearchMetadata metadata) {
+    protected void appendEnumValue(Holder.Reference<T> reference, StringBuilder builder, SearchMetadata metadata, boolean reachEnd) {
+        // experimental annotation
         @Nullable SingleFlagHolder requiredFeature = this.getRequiredFeature(reference);
         if (requiredFeature != null) {
             Annotations.experimentalAnnotations(builder, metadata, requiredFeature);
         }
+
+        super.appendEnumValue(reference, builder, metadata, reachEnd);
     }
 
     protected @Nullable SingleFlagHolder getRequiredFeature(Holder.Reference<T> reference) {

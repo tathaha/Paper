@@ -1,17 +1,19 @@
 package io.papermc.generator.utils;
 
-import com.mojang.datafixers.util.Either;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.level.block.Block;
-import java.util.Collections;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.reflect.TypeToken;
+import com.mojang.datafixers.util.Either;
+import io.papermc.generator.types.craftblockdata.property.holder.VirtualField;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -20,15 +22,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Multimap;
-import com.google.common.reflect.TypeToken;
-import io.papermc.generator.types.craftblockdata.property.holder.VirtualField;
 import net.minecraft.core.Direction;
 import net.minecraft.core.FrontAndTop;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.level.block.AbstractFurnaceBlock;
 import net.minecraft.world.level.block.BigDripleafStemBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.CommandBlock;
 import net.minecraft.world.level.block.IronBarsBlock;
 import net.minecraft.world.level.block.NoteBlock;
@@ -110,7 +110,9 @@ public final class BlockStateMapping {
 
     public static final String PIPE_FIELD_NAME = "PROPERTY_BY_DIRECTION";
 
-    public record BlockData(String impl, @Nullable Class<? extends org.bukkit.block.data.BlockData> api, Collection<? extends Property<?>> properties, Map<Property<?>, Field> propertyFields, Multimap<Either<Field, VirtualField>, Property<?>> complexProperyFields) {
+    public record BlockData(String implName, @Nullable Class<? extends org.bukkit.block.data.BlockData> api,
+                            Collection<? extends Property<?>> properties, Map<Property<?>, Field> propertyFields,
+                            Multimap<Either<Field, VirtualField>, Property<?>> complexPropertyFields) {
     }
 
     private static final Map<String, String> API_RENAMES = ImmutableMap.<String, String>builder()
@@ -148,6 +150,7 @@ public final class BlockStateMapping {
         .build();
 
     public static final Map<Property<?>, Field> FALLBACK_GENERIC_FIELDS;
+
     static {
         Map<Property<?>, Field> fallbackGenericFields = new HashMap<>();
         fetchProperties(BlockStateProperties.class, (field, property) -> fallbackGenericFields.put(property, field), null);
@@ -155,6 +158,7 @@ public final class BlockStateMapping {
     }
 
     public static final Map<Class<? extends Block>, BlockData> MAPPING;
+
     static {
         Map<Class<? extends Block>, Collection<Property<?>>> specialBlocks = new IdentityHashMap<>();
         for (Block block : BuiltInRegistries.BLOCK) {
@@ -170,7 +174,7 @@ public final class BlockStateMapping {
             Collection<Property<?>> properties = new ArrayList<>(entry.getValue());
 
             Map<Property<?>, Field> propertyFields = new HashMap<>(properties.size());
-            Multimap<Either<Field, VirtualField>, Property<?>> complexProperties = ArrayListMultimap.create();
+            Multimap<Either<Field, VirtualField>, Property<?>> complexPropertyFields = ArrayListMultimap.create();
 
             fetchProperties(specialBlock, (field, property) -> {
                 if (properties.contains(property)) {
@@ -184,7 +188,7 @@ public final class BlockStateMapping {
                 }
 
                 if (properties.remove(property)) { // handle those separately and only count if the property was in the state definition
-                    complexProperties.put(Either.left(field), property);
+                    complexPropertyFields.put(Either.left(field), property);
                 }
             });
 
@@ -195,7 +199,7 @@ public final class BlockStateMapping {
                 Field field = fetchPipeFieldMap(specialBlock);
                 if (field != null) {
                     properties.removeAll(commonPipeProperties);
-                    complexProperties.putAll(Either.left(field), commonPipeProperties);
+                    complexPropertyFields.putAll(Either.left(field), commonPipeProperties);
                 }
             }
 
@@ -204,7 +208,7 @@ public final class BlockStateMapping {
                 for (VirtualField virtualField : VIRTUAL_NODES.get(specialBlock)) {
                     for (Property<?> property : virtualField.values()) {
                         if (properties.remove(property)) {
-                            complexProperties.put(Either.right(virtualField), property);
+                            complexPropertyFields.put(Either.right(virtualField), property);
                         } else {
                             throw new IllegalStateException("Unhandled virtual node " + virtualField.name() + " for " + property);
                         }
@@ -242,7 +246,7 @@ public final class BlockStateMapping {
                 }
             }
 
-            map.put(specialBlock, new BlockData(implName, api, properties, propertyFields, complexProperties));
+            map.put(specialBlock, new BlockData(implName, api, properties, propertyFields, complexPropertyFields));
         }
         MAPPING = Collections.unmodifiableMap(map);
     }
@@ -363,7 +367,7 @@ public final class BlockStateMapping {
             return extensions.iterator().next();
         }
 
-        for (Property<?> property : data.complexProperyFields().values()) {
+        for (Property<?> property : data.complexPropertyFields().values()) {
             if (PipeBlock.PROPERTY_BY_DIRECTION.containsValue(property)) {
                 pipeProps++;
             }

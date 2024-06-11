@@ -2,8 +2,8 @@ package io.papermc.generator.rewriter.registration;
 
 import io.papermc.typewriter.replace.ReplaceOptionsLike;
 import io.papermc.typewriter.replace.SearchReplaceRewriter;
-import org.jetbrains.annotations.Contract;
 import java.util.function.Function;
+import org.jetbrains.annotations.Contract;
 
 public record RewriterHolder(String pattern, SearchReplaceRewriter rewriter) {
 

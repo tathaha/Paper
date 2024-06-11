@@ -22,6 +22,13 @@ public final class Javadocs {
         """.formatted(headerIdentifier);
     }
 
+    public static final String CREATE_TYPED_KEY_JAVADOC = """
+        Creates a key for {@link $T} in a registry.
+        
+        @param key the value's key in the registry
+        @return a new typed key
+        """;
+
     private Javadocs() {
     }
 }

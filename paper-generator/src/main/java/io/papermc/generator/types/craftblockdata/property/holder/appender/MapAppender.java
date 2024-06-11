@@ -12,10 +12,10 @@ import io.papermc.generator.types.craftblockdata.property.converter.ConverterBas
 import io.papermc.generator.types.craftblockdata.property.holder.DataHolderType;
 import io.papermc.generator.utils.CommonVariable;
 import io.papermc.generator.utils.NamingManager;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 
 public class MapAppender implements DataAppender {
 
